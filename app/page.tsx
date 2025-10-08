@@ -50,7 +50,7 @@ export default function Home() {
             <div className="xxl:col-span-4 xl:col-span-4 lg:col-span-4 md:col-span-6 sm:col-span-8 col-span-12">
               <div className="box !p-[3rem]">
                 <div className="box-body" role="tabpanel" id="pills-with-brand-color-01" aria-labelledby="pills-with-brand-color-item-1">
-                  <img src="assets/images/company-logos/logo.jpeg" alt="Logo" className="mb-4" />
+                  <img src="/assets/images/company-logos/logo.jpeg" alt="Logo" className="mb-4" />
                   <p className="h5 font-semibold mb-2 text-center">Sign In</p>
                   {error && 
                     <div className="p-4 mb-4 bg-danger/40 text-sm  border-t-4 border-danger text-danger/60 rounded-lg bg-red-50 dark:bg-gray-800 dark:text-red-400" role="alert">

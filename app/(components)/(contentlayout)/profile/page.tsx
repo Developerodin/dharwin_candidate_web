@@ -287,7 +287,7 @@ const profile = () => {
                             <div className="sm:flex items-start p-6      main-profile-cover">
                                 <div>
                                     <span className="avatar avatar-xxl avatar-rounded online me-4">
-                                        <img src="../../assets/images/faces/9.jpg" alt="" />
+                                        <img src="/assets/images/faces/9.jpg" alt="" />
                                     </span>
                                 </div>
                                 <div className="flex-grow main-profile-info">
@@ -541,7 +541,7 @@ const profile = () => {
                                                                             </p>
                                                                             {e?.description && (
                                                                                 <button type="button" className="mt-1 -ms-1 p-1 relative z-10 inline-flex items-center gap-x-2 text-xs rounded-lg border border-transparent text-gray-500 hover:bg-white hover:shadow-sm disabled:opacity-50 disabled:pointer-events-none dark:text-white/70 dark:hover:bg-bodybg dark:focus:outline-none dark:focus:ring-1 dark:focus:ring-white/10">
-                                                                                    <img className="flex-shrink-0 size-4 rounded-full" src="../../assets/images/faces/1.jpg" alt="Image Description"/>
+                                                                                    <img className="flex-shrink-0 size-4 rounded-full" src="/assets/images/faces/1.jpg" alt="Image Description"/>
                                                                                     {e.description}
                                                                                 </button>
                                                                             )}

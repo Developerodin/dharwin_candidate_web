@@ -375,7 +375,7 @@ const Header = ({ local_varaiable, ThemeChanger }:any) => {
               <div className="header-element">
                 <div className="horizontal-logo">
                   <Link href="/candidates" className="header-logo">
-                    <img src='assets/images/company-logos/logo.jpeg' alt="logo" className="desktop-logo" />
+                    <img src='/assets/images/company-logos/logo.jpeg' alt="logo" className="desktop-logo" />
                   </Link>
                 </div>
               </div>
@@ -485,7 +485,7 @@ const Header = ({ local_varaiable, ThemeChanger }:any) => {
 
                 <button id="dropdown-profile" type="button"
                   className="hs-dropdown-toggle ti-dropdown-toggle !gap-2 !p-0 flex-shrink-0 sm:me-2 me-0 !rounded-full !shadow-none text-xs align-middle !border-0 !shadow-transparent ">
-                  <img className="inline-block rounded-full " src={`${process.env.NODE_ENV === "production" ? basePath : ""}/assets/images/faces/9.jpg`} width="32" height="32" alt="Image Description" />
+                  <img className="inline-block rounded-full " src="/assets/images/faces/9.jpg" width="32" height="32" alt="Image Description" />
                 </button>
                 <div className="md:block hidden dropdown-profile">
                   <p className="font-semibold mb-0 leading-none text-[#536485] text-[0.813rem] ">Json Taylor</p>
