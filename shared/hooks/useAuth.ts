@@ -1,4 +1,5 @@
-import { useState } from 'react';
+"use client";
+import { useState, useEffect } from 'react';
 import { loginUser, logoutUser, registerUser } from '../lib/auth';
 import { useRouter } from 'next/navigation';
 
@@ -8,15 +9,27 @@ interface User {
 }
 
 export function useAuth() {
-  const [user, setUser] = useState(() => {
-    const savedUser = localStorage.getItem('user');
-    return savedUser ? JSON.parse(savedUser) : null;
-  });
+  const [user, setUser] = useState(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const router = useRouter();
+
+  // Load user from localStorage on client side
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const savedUser = localStorage.getItem('user');
+        if (savedUser) {
+          setUser(JSON.parse(savedUser));
+        }
+      } catch (error) {
+        console.warn('Error parsing user data from localStorage:', error);
+        setUser(null);
+      }
+    }
+  }, []);
 
   const login = async (credentials: { email: string; password: string }) => {
     setLoading(true);

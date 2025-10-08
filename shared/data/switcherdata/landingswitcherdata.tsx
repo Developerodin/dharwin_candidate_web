@@ -1,3 +1,4 @@
+"use client";
 
 import store from "@/shared/redux/store";
 import {useState } from "react";

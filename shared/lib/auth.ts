@@ -1,3 +1,4 @@
+"use client";
 import api from './api';
 import { Login_User_API, Logout_User_API, Register_User_API } from './constants';
 
