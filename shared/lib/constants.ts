@@ -1,0 +1,11 @@
+const BASE_API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000/v1";
+const AUTH_URL = `${BASE_API_URL}/auth`;
+const CANDIDATES_URL = `${BASE_API_URL}/candidates`;
+
+// Auth API
+export const Login_User_API = `${AUTH_URL}/login`;
+export const Logout_User_API = `${AUTH_URL}/logout`;
+export const Register_User_API = `${AUTH_URL}/register`;
+
+// Candidate API
+export const Candidates_API = `${CANDIDATES_URL}`;

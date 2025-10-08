@@ -1,0 +1,45 @@
+import api from './api';
+import { Candidates_API, Register_User_API } from './constants';
+
+// Fetch all leads
+export const fetchAllCandidates = async () => {
+  const response = await api.get(Candidates_API);
+  return response.data;
+};
+
+export const fetchCandidateById = async (id: string) => {
+  const response = await api.get(`${Candidates_API}/${id}`);
+  return response.data;
+};
+
+// Create a new lead
+export const addCandidate = async (candidateData: any) => {
+  const response = await api.post(Candidates_API, candidateData);
+  return response.data;
+};
+
+// Update a lead (send id as URL param)
+export const updateCandidate = async (candidateData: any) => {
+  const { id, ...rest } = candidateData;
+  const response = await api.patch(`${Candidates_API}/${id}`, rest);
+  return response.data;
+};
+
+// Delete a lead (send id as URL param)
+export const deleteCandidate = async (leadId: string) => {
+  const response = await api.delete(`${Candidates_API}/${leadId}`);
+  return response.data;
+};
+
+// Register a new candidate using the auth register API
+export const registerCandidate = async (candidateData: {
+  name: string;
+  email: string;
+  password: string;
+  role: string;
+  phoneNumber: string;
+  adminId: string;
+}) => {
+  const response = await api.post(Register_User_API, candidateData);
+  return response.data;
+};
