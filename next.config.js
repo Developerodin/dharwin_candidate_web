@@ -6,8 +6,8 @@ const nextConfig = {
   reactStrictMode: true,
   trailingSlash: true,
   swcMinify: true,
-  basePath: isProd ? "/tailwind/app/ynex-ts/preview" : undefined,
-	assetPrefix : isProd ? "/tailwind/app/ynex-ts/preview" : undefined,
+  // basePath: isProd ? "/tailwind/app/ynex-ts/preview" : undefined,
+	// assetPrefix : isProd ? "/tailwind/app/ynex-ts/preview" : undefined,
   images: {
     loader: "imgix",
     path: "/",
