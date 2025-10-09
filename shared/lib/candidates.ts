@@ -1,5 +1,5 @@
 import api from './api';
-import { Candidates_API, Register_User_API } from './constants';
+import { Candidates_API, Onboard_Candidate_API, Register_User_API } from './constants';
 
 // Fetch all leads
 export const fetchAllCandidates = async () => {
@@ -41,5 +41,14 @@ export const registerCandidate = async (candidateData: {
   adminId: string;
 }) => {
   const response = await api.post(Register_User_API, candidateData);
+  return response.data;
+};
+
+// Onboard a candidate using the auth onboard-candidate API
+export const onboardCandidate = async (candidateData: {
+  email: string;
+  onboardUrl: string;
+}) => {
+  const response = await api.post(Onboard_Candidate_API, candidateData);
   return response.data;
 };

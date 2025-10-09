@@ -1,6 +1,7 @@
 "use client"
 import React, { useState } from 'react';
 import Swal from 'sweetalert2';
+import { onboardCandidate } from '@/shared/lib/candidates';
 
 const ShareCandidateForm = () => {
   const [candidateEmail, setCandidateEmail] = useState('');
@@ -76,9 +77,6 @@ const ShareCandidateForm = () => {
     setIsLoading(true);
 
     try {
-      // Simulate API call to send onboarding form link via email
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
       // Encrypt the admin ID and email for secure URL
       const encryptedAdminId = encryptData(userId);
       const encryptedEmail = encryptData(candidateEmail);
@@ -87,60 +85,76 @@ const ShareCandidateForm = () => {
       const baseUrl = window.location.origin;
       const onboardingUrl = `${baseUrl}/candidate-onboard?token=${secureToken}&adminId=${encryptedAdminId}&email=${encryptedEmail}&expires=${Date.now() + (24 * 60 * 60 * 1000)}`;
       
-      await Swal.fire({
-        icon: 'success',
-        title: 'Onboarding Link Generated!',
-        html: `
-          <div style="text-align: left; line-height: 1.6;">
-            <p style="margin-bottom: 15px; font-size: 16px;">
-              The candidate onboarding form link has been generated and sent to:
-            </p>
-            <p style="margin-bottom: 20px; font-size: 14px; font-weight: 600; color: #7c3aed;">
-              ${candidateEmail}
-            </p>
-            <div style="background: #f8fafc; padding: 15px; border-radius: 8px; border-left: 4px solid #7c3aed;">
-              <p style="margin: 0 0 10px 0; font-size: 14px; color: #374151; font-weight: 600;">
-                Generated Onboarding URL:
-              </p>
-              <div style="background: #ffffff; padding: 10px; border-radius: 6px; border: 1px solid #e5e7eb; word-break: break-all; font-size: 12px; color: #6b7280; margin-bottom: 10px;">
-                ${onboardingUrl}
-              </div>
-              <button 
-                onclick="navigator.clipboard.writeText('${onboardingUrl}'); this.textContent='Copied!'; setTimeout(() => this.textContent='Copy URL', 2000);"
-                style="background: #7c3aed; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-size: 12px; cursor: pointer;"
-              >
-                Copy URL
-              </button>
-            </div>
-            <div style="background: #fef3c7; padding: 10px; border-radius: 6px; border-left: 4px solid #f59e0b; margin-top: 15px;">
-              <p style="margin: 0; font-size: 12px; color: #92400e; font-weight: 600;">
-                🔒 Security Features:
-              </p>
-              <ul style="margin: 5px 0 0 0; padding-left: 15px; font-size: 11px; color: #92400e;">
-                <li>Secure token-based authentication</li>
-                <li>24-hour expiration time</li>
-                <li>Email-specific access</li>
-                <li>One-time use protection</li>
-              </ul>
-            </div>
-            <p style="margin-top: 15px; font-size: 13px; color: #6b7280;">
-              The candidate can use this secure link to access the onboarding form. The link expires in 24 hours.
-            </p>
-          </div>
-        `,
-        confirmButtonText: 'Got it!',
-        confirmButtonColor: '#7c3aed',
-        width: '600px',
-        padding: '2rem'
+      // Call onboardCandidate API using lib function
+      const apiResponse = await onboardCandidate({
+        email: candidateEmail,
+        onboardUrl: onboardingUrl
       });
+      
+      if (apiResponse.message && apiResponse.message.includes('successfully')) {
+        await Swal.fire({
+          icon: 'success',
+          title: 'Success!',
+          html: `
+            <div style="text-align: left; line-height: 1.6;">
+              <p style="margin-bottom: 15px; font-size: 16px;">
+                ${apiResponse.message}
+              </p>
+              <p style="margin-bottom: 20px; font-size: 14px; font-weight: 600; color: #7c3aed;">
+                ${apiResponse.email || candidateEmail}
+              </p>
+              <div style="background: #f8fafc; padding: 15px; border-radius: 8px; border-left: 4px solid #7c3aed;">
+                <p style="margin: 0 0 10px 0; font-size: 14px; color: #374151; font-weight: 600;">
+                  Generated Onboarding URL:
+                </p>
+                <div style="background: #ffffff; padding: 10px; border-radius: 6px; border: 1px solid #e5e7eb; word-break: break-all; font-size: 12px; color: #6b7280; margin-bottom: 10px;">
+                  ${onboardingUrl}
+                </div>
+                <button 
+                  onclick="navigator.clipboard.writeText('${onboardingUrl}'); this.textContent='Copied!'; setTimeout(() => this.textContent='Copy URL', 2000);"
+                  style="background: #7c3aed; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-size: 12px; cursor: pointer;"
+                >
+                  Copy URL
+                </button>
+              </div>
+              <div style="background: #fef3c7; padding: 10px; border-radius: 6px; border-left: 4px solid #f59e0b; margin-top: 15px;">
+                <p style="margin: 0; font-size: 12px; color: #92400e; font-weight: 600;">
+                  🔒 Security Features:
+                </p>
+                <ul style="margin: 5px 0 0 0; padding-left: 15px; font-size: 11px; color: #92400e;">
+                  <li>Secure token-based authentication</li>
+                  <li>24-hour expiration time</li>
+                  <li>Email-specific access</li>
+                  <li>One-time use protection</li>
+                </ul>
+              </div>
+              <p style="margin-top: 15px; font-size: 13px; color: #6b7280;">
+                The candidate can use this secure link to access the onboarding form. The link expires in 24 hours.
+              </p>
+            </div>
+          `,
+          confirmButtonText: 'Got it!',
+          confirmButtonColor: '#7c3aed',
+          width: '600px',
+          padding: '2rem'
+        });
 
-      // Reset form
-      setCandidateEmail('');
-    } catch (error) {
+        // Reset form
+        setCandidateEmail('');
+      } else {
+        await Swal.fire({
+          icon: 'error',
+          title: 'Send Failed',
+          text: apiResponse.message || 'Failed to send onboarding email. Please try again.',
+          confirmButtonColor: '#dc3545'
+        });
+      }
+    } catch (error: any) {
+      console.error('Error calling onboardCandidate API:', error);
       await Swal.fire({
         icon: 'error',
         title: 'Send Failed',
-        text: 'An error occurred while sending the onboarding link. Please try again.',
+        text: error?.message || 'An error occurred while sending the onboarding link. Please try again.',
         confirmButtonColor: '#dc3545'
       });
     } finally {

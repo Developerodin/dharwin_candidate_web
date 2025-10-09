@@ -5,11 +5,26 @@ import { ThemeChanger } from "../../redux/action";
 import { connect } from 'react-redux';
 import store from '@/shared/redux/store';
 import Modalsearch from '../modal-search/modalsearch';
-import { basePath } from '@/next.config';
 import { useAuth } from '@/shared/hooks/useAuth';
 
 const Header = ({ local_varaiable, ThemeChanger }:any) => {
   const { logout } = useAuth();
+  const [userData, setUserData] = useState<any>(null);
+
+  // Load user data from localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const savedUser = localStorage.getItem('user');
+        if (savedUser) {
+          setUserData(JSON.parse(savedUser));
+        }
+      } catch (error) {
+        console.warn('Error parsing user data from localStorage:', error);
+        setUserData(null);
+      }
+    }
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -485,11 +500,17 @@ const Header = ({ local_varaiable, ThemeChanger }:any) => {
 
                 <button id="dropdown-profile" type="button"
                   className="hs-dropdown-toggle ti-dropdown-toggle !gap-2 !p-0 flex-shrink-0 sm:me-2 me-0 !rounded-full !shadow-none text-xs align-middle !border-0 !shadow-transparent ">
-                  <img className="inline-block rounded-full " src="/assets/images/faces/9.jpg" width="32" height="32" alt="Image Description" />
+                  <div className="inline-block rounded-full w-8 h-8 bg-primary flex items-center justify-center">
+                    <i className="ri-user-line text-white text-sm"></i>
+                  </div>
                 </button>
                 <div className="md:block hidden dropdown-profile">
-                  <p className="font-semibold mb-0 leading-none text-[#536485] text-[0.813rem] ">Json Taylor</p>
-                  <span className="opacity-[0.7] font-normal text-[#536485] block text-[0.6875rem] ">Web Designer</span>
+                  <p className="font-semibold mb-0 leading-none text-[#536485] text-[0.813rem] ">
+                    {userData?.fullName || userData?.name || userData?.firstName || 'User'}
+                  </p>
+                  <span className="opacity-[0.7] font-normal text-[#536485] block text-[0.6875rem] ">
+                    {userData?.role === 'admin' ? 'Administrator' : userData?.role === 'user' ? 'Candidate' : 'User'}
+                  </span>
                 </div>
                 <div
                   className="hs-dropdown-menu ti-dropdown-menu !-mt-3 border-0 w-[11rem] !p-0 border-defaultborder hidden main-header-dropdown  pt-0 overflow-hidden header-profile-dropdown dropdown-menu-end"

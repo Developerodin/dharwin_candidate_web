@@ -197,7 +197,7 @@ export default function CandidateOnboardLayout() {
           html: `
             <div style="text-align: left; line-height: 1.6;">
               <p style="margin-bottom: 15px; font-size: 16px;">
-                Welcome to Circle, <strong>${formData.firstName} ${formData.lastName}</strong>!
+                Welcome to Dharwin, <strong>${formData.firstName} ${formData.lastName}</strong>!
               </p>
               <p style="margin-bottom: 15px; font-size: 14px; color: #666;">
                 Your account has been created successfully. ${result.message || 'We\'ve sent a verification email to:'}
@@ -247,16 +247,61 @@ export default function CandidateOnboardLayout() {
           confirmPassword: ''
         });
         
-      } catch (error) {
-        // Handle error case with specific error message
-        const errorMessage = error instanceof Error ? error.message : 'Something went wrong. Please try again.';
-        await Swal.fire({
-          title: 'Registration Failed',
-          text: errorMessage,
-          icon: 'error',
-          confirmButtonText: 'Try Again',
-          confirmButtonColor: '#ef4444'
-        });
+      } catch (error: any) {
+        // Handle specific error cases
+        if (error?.response?.data?.code === 400 && error?.response?.data?.message === "Email already taken") {
+          // Show special message for existing users
+          await Swal.fire({
+            title: 'Account Already Exists',
+            html: `
+              <div style="text-align: left; line-height: 1.6;">
+                <p style="margin-bottom: 15px; font-size: 16px;">
+                  Welcome back! It looks like you already have an account with us.
+                </p>
+                <p style="margin-bottom: 20px; font-size: 14px; color: #7c3aed; font-weight: 600;">
+                  ${formData.email}
+                </p>
+                <div style="background: #f8fafc; padding: 15px; border-radius: 8px; border-left: 4px solid #7c3aed;">
+                  <p style="margin: 0 0 10px 0; font-size: 14px; color: #374151; font-weight: 600;">
+                    Ready to continue your journey?
+                  </p>
+                  <p style="margin: 0; font-size: 13px; color: #6b7280;">
+                    Click the button below to login and access your account.
+                  </p>
+                </div>
+              </div>
+            `,
+            icon: 'info',
+            iconColor: '#7c3aed',
+            confirmButtonText: 'Go to Login',
+            confirmButtonColor: '#7c3aed',
+            showCancelButton: true,
+            cancelButtonText: 'Stay Here',
+            cancelButtonColor: '#6b7280',
+            width: '500px',
+            padding: '2rem',
+            customClass: {
+              popup: 'swal2-popup-custom',
+              title: 'swal2-title-custom',
+              confirmButton: 'swal2-confirm-custom'
+            }
+          }).then((result) => {
+            if (result.isConfirmed) {
+              // Redirect to login page
+              window.location.href = '/';
+            }
+          });
+        } else {
+          // Handle other error cases
+          const errorMessage = error?.response?.data?.message || error?.message || 'Something went wrong. Please try again.';
+          await Swal.fire({
+            title: 'Registration Failed',
+            text: errorMessage,
+            icon: 'error',
+            confirmButtonText: 'Try Again',
+            confirmButtonColor: '#ef4444'
+          });
+        }
       } finally {
         setIsLoading(false);
       }
@@ -324,7 +369,7 @@ export default function CandidateOnboardLayout() {
           </h1>
           
           <p className="text-base sm:text-lg text-gray-600 mb-6 sm:mb-8 leading-relaxed">
-            Circle is where top talent gathers. Powered by AI and skill intelligence, we connect you to the right opportunities—accurately, privately, and without the noise.
+            Dharwin is where top talent gathers. Powered by AI and skill intelligence, we connect you to the right opportunities—accurately, privately, and without the noise.
           </p>
 
           {/* Registration Form */}
@@ -514,7 +559,7 @@ export default function CandidateOnboardLayout() {
           
           <div className="flex justify-between items-end">
             <p className="text-sm text-gray-600">
-              2025 Circle (Kodiva.ai). All rights reserved.
+              2025 Dharwin. All rights reserved.
             </p>
             <span className="text-sm text-gray-400">v2.0</span>
           </div>
@@ -552,7 +597,7 @@ export default function CandidateOnboardLayout() {
           </h2>
           
           <p className="text-sm sm:text-base lg:text-lg text-purple-100 mb-6 sm:mb-8 leading-relaxed">
-            Circle uses AI and skill intelligence to cut through the noise. Apply once → get matched to roles that fit your skills. Stay visible to verified employers only. Move faster with no ghosting, no wasted time.
+            Dharwin uses AI and skill intelligence to cut through the noise. Apply once → get matched to roles that fit your skills. Stay visible to verified employers only. Move faster with no ghosting, no wasted time.
           </p>
           
           <p className="text-sm sm:text-base lg:text-lg text-white font-medium mb-6 sm:mb-8">
@@ -579,7 +624,7 @@ export default function CandidateOnboardLayout() {
               </div>
               <div>
                 <p className="text-white mb-2 sm:mb-3 leading-relaxed text-sm sm:text-base">
-                  "With Circle, I stopped spraying resumes. I was matched to roles that fit my skills—and landed two offers in 3 weeks."
+                  "With Dharwin, I stopped spraying resumes. I was matched to roles that fit my skills—and landed two offers in 3 weeks."
                 </p>
                 <div>
                   <div className="text-white font-semibold text-sm sm:text-base">Rahul Sharma</div>
