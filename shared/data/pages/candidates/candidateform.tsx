@@ -846,6 +846,7 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
       }
 
       const payload = {
+        role: "user",
         fullName: formData.fullName,
         email: formData.email,
         phoneNumber: formData.phoneNumber,
