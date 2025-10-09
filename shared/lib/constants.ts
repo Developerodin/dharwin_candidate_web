@@ -1,4 +1,4 @@
-const BASE_API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000/v1";
+const BASE_API_URL = process.env.NEXT_PUBLIC_API_URL || "https://crm-apis.dharwinbusinesssolutions.com/v1";
 const AUTH_URL = `${BASE_API_URL}/auth`;
 const CANDIDATES_URL = `${BASE_API_URL}/candidates`;
 
