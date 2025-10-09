@@ -357,12 +357,22 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
       ...socialLinks,
       { id: Date.now(), platform: "", url: "" },
     ]);
+    // Clear social links error when adding a new link
+    clearFieldError('socialLinks');
   };
 
   const handleSocialLinkChange = (index: number, field: string, value: string) => {
     const newSocialLinks = [...socialLinks];
     (newSocialLinks[index] as any)[field] = value;
     setSocialLinks(newSocialLinks);
+    // Clear social links error when user starts typing
+    clearFieldError('socialLinks');
+  };
+
+  const handleRemoveSocialLink = (index: number) => {
+    setSocialLinks(socialLinks.filter((_, i) => i !== index));
+    // Clear social links error when removing a link
+    clearFieldError('socialLinks');
   };
 
   // ------------------------------- Salary Slips Handlers -------------------------------
@@ -451,68 +461,153 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
     return value.trim() !== '';
   };
 
+  const validateYearRange = (startYear: string, endYear: string): boolean => {
+    if (!startYear || !endYear) return true; // Allow empty values, they'll be caught by required validation
+    const start = parseInt(startYear);
+    const end = parseInt(endYear);
+    return start <= end;
+  };
+
+  const validateDateRange = (startDate: string, endDate: string): boolean => {
+    if (!startDate || !endDate) return true; // Allow empty values, they'll be caught by required validation
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    return start <= end;
+  };
+
+  const validateNotFutureDate = (date: string): boolean => {
+    if (!date) return true; // Allow empty values, they'll be caught by required validation
+    const inputDate = new Date(date);
+    const today = new Date();
+    today.setHours(23, 59, 59, 999); // Set to end of today to allow today's date
+    return inputDate <= today;
+  };
+
+  // Generate year options from 2000 to current year
+  const generateYearOptions = () => {
+    const currentYear = new Date().getFullYear();
+    const years = [];
+    for (let year = currentYear; year >= 2000; year--) {
+      years.push(year);
+    }
+    return years;
+  };
+
   const validateStep = (stepIndex: number): boolean => {
     const errors: string[] = [];
     const newFieldErrors: {[key: string]: string} = {};
     
     switch (stepIndex) {
       case 0: // Personal Info
-        // if (!validateRequired(formData.fullName)) {
-        //   errors.push('Full Name is required');
-        //   newFieldErrors['fullName'] = 'Full Name is required';
-        // }
-        // if (!validateRequired(formData.email)) {
-        //   errors.push('Email is required');
-        //   newFieldErrors['email'] = 'Email is required';
-        // } else if (!validateEmail(formData.email)) {
-        //   errors.push('Please enter a valid email address');
-        //   newFieldErrors['email'] = 'Please enter a valid email address';
-        // }
-        // if (!validateRequired(formData.phoneNumber)) {
-        //   errors.push('Phone Number is required');
-        //   newFieldErrors['phoneNumber'] = 'Phone Number is required';
-        // } else if (!validatePhone(formData.phoneNumber)) {
-        //   errors.push('Please enter a valid phone number');
-        //   newFieldErrors['phoneNumber'] = 'Please enter a valid phone number';
-        // }
-        // if (!initialData && !validateRequired(formData.password)) {
-        //   errors.push('Password is required');
-        //   newFieldErrors['password'] = 'Password is required';
-        // }
+        if (!validateRequired(formData.fullName)) {
+          errors.push('Full Name is required');
+          newFieldErrors['fullName'] = 'Full Name is required';
+        }
+        if (!validateRequired(formData.email)) {
+          errors.push('Email is required');
+          newFieldErrors['email'] = 'Email is required';
+        } else if (!validateEmail(formData.email)) {
+          errors.push('Please enter a valid email address');
+          newFieldErrors['email'] = 'Please enter a valid email address';
+        }
+        if (!validateRequired(formData.phoneNumber)) {
+          errors.push('Phone Number is required');
+          newFieldErrors['phoneNumber'] = 'Phone Number is required';
+        } else if (!validatePhone(formData.phoneNumber)) {
+          errors.push('Please enter a valid phone number');
+          newFieldErrors['phoneNumber'] = 'Please enter a valid phone number';
+        }
+        if (formData.supervisorContact && !validatePhone(formData.supervisorContact)) {
+          errors.push('Please enter a valid supervisor phone number');
+          newFieldErrors['supervisorContact'] = 'Please enter a valid supervisor phone number';
+        }
+        if (!initialData && !validateRequired(formData.password)) {
+          errors.push('Password is required');
+          newFieldErrors['password'] = 'Password is required';
+        }
+        // Validate social links - at least one entry is required
+        const validSocialLinks = socialLinks.filter(link => 
+          validateRequired(link.platform) && validateRequired(link.url) && validateURL(link.url)
+        );
+        if (validSocialLinks.length === 0) {
+          errors.push('At least one social link is required');
+          newFieldErrors['socialLinks'] = 'At least one social link is required';
+        }
         break;
         
       case 1: // Qualification
-      //   const validEducations = educations.filter(edu => 
-      //     validateRequired(edu.degree) && validateRequired(edu.institute) && validateRequired(edu.location) && validateRequired(edu.startYear) && validateRequired(edu.endYear)
-      //   );
-      //   if (validEducations.length === 0) {
-      //     errors.push('education required');
-      //     newFieldErrors['education'] = 'education required';
-      //   }
-      //   const validSkills = skills.filter(skill => validateRequired(skill.name));
-      //   if (validSkills.length === 0) {
-      //     errors.push('skill is required');
-      //     newFieldErrors['skills'] = 'skill is required';
-      //   }
-      //   break;
+        const validEducations = educations.filter(edu => 
+          validateRequired(edu.degree) && validateRequired(edu.institute) && validateRequired(edu.location) && validateRequired(edu.startYear) && validateRequired(edu.endYear)
+        );
+        if (validEducations.length === 0) {
+          errors.push('education required');
+          newFieldErrors['education'] = 'education required';
+        }
+        // Validate year ranges for all educations
+        const invalidYearRanges = educations.filter(edu => 
+          edu.startYear && edu.endYear && !validateYearRange(edu.startYear, edu.endYear)
+        );
+        if (invalidYearRanges.length > 0) {
+          errors.push('Start year cannot be ahead of end year');
+          newFieldErrors['education'] = 'Start year cannot be ahead of end year';
+        }
+        const validSkills = skills.filter(skill => validateRequired(skill.name));
+        if (validSkills.length === 0) {
+          errors.push('skill is required');
+          newFieldErrors['skills'] = 'skill is required';
+        }
+        break;
         
-      // case 2: // Work Experience
-      //   const validExperiences = experiences.filter(exp => 
-      //     validateRequired(exp.company) && validateRequired(exp.role) && validateRequired(exp.startDate) && validateRequired(exp.endDate)
-      //   );
-      //   if (validExperiences.length === 0) {
-      //     errors.push('work experience required');
-      //     newFieldErrors['experience'] = 'work experience required';
-      //   }
-      //   break;
+      case 2: // Work Experience
+        const validExperiences = experiences.filter(exp => 
+          validateRequired(exp.company) && validateRequired(exp.role) && validateRequired(exp.startDate) && validateRequired(exp.endDate)
+        );
+        if (validExperiences.length === 0) {
+          errors.push('work experience required');
+          newFieldErrors['experience'] = 'work experience required';
+        }
+        // Validate date ranges for all experiences
+        const invalidDateRanges = experiences.filter(exp => 
+          exp.startDate && exp.endDate && !validateDateRange(exp.startDate, exp.endDate)
+        );
+        if (invalidDateRanges.length > 0) {
+          errors.push('Start date cannot be ahead of end date');
+          newFieldErrors['experience'] = 'Start date cannot be ahead of end date';
+        }
+        // Validate that end dates are not in the future
+        const futureEndDates = experiences.filter(exp => 
+          exp.endDate && !validateNotFutureDate(exp.endDate)
+        );
+        if (futureEndDates.length > 0) {
+          errors.push('End date cannot be in the future');
+          newFieldErrors['experience'] = 'End date cannot be in the future';
+        }
+        break;
         
-      // case 3: // Documents
-      //   const hasNewDocuments = documentsList.some(doc => doc.file && doc.name);
-      //   const hasExistingDocuments = existingDocs.length > 0;
-      //   if (!hasNewDocuments && !hasExistingDocuments) {
-      //     errors.push('document is required');
-      //     newFieldErrors['documents'] = 'document is required';
-      //   }
+      case 3: // Documents
+        const hasNewDocuments = documentsList.some(doc => doc.file && doc.name);
+        const hasExistingDocuments = existingDocs.length > 0;
+        if (!hasNewDocuments && !hasExistingDocuments) {
+          errors.push('document is required');
+          newFieldErrors['documents'] = 'document is required';
+        }
+        break;
+        
+      case 4: // Salary Slips
+        const validSalarySlips = salarySlips.filter(slip => 
+          validateRequired(slip.month) && validateRequired(slip.year) && (slip.file || slip.documentUrl)
+        );
+        const hasExistingSalarySlips = existingSalarySlips.length > 0;
+        const hasDuplicates = validateSalarySlipDuplicates(salarySlips).length > 0;
+        
+        if (validSalarySlips.length === 0 && !hasExistingSalarySlips) {
+          errors.push('At least one salary slip is required');
+          newFieldErrors['salarySlips'] = 'At least one salary slip is required';
+        }
+        if (hasDuplicates) {
+          errors.push('Duplicate month/year combinations found');
+          newFieldErrors['salarySlips'] = 'Duplicate month/year combinations found';
+        }
         break;
     }
     
@@ -538,25 +633,39 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
   const isStepValid = (stepIndex: number): boolean => {
     switch (stepIndex) {
       case 0: // Personal Info
+        const validSocialLinks = socialLinks.filter(link => 
+          validateRequired(link.platform) && validateRequired(link.url) && validateURL(link.url)
+        );
         return validateRequired(formData.fullName) && 
                validateRequired(formData.email) && 
                validateEmail(formData.email) &&
                validateRequired(formData.phoneNumber) && 
                validatePhone(formData.phoneNumber) &&
-               (initialData || validateRequired(formData.password));
+               (!formData.supervisorContact || validatePhone(formData.supervisorContact)) &&
+               (initialData || validateRequired(formData.password)) &&
+               validSocialLinks.length > 0;
                
       case 1: // Qualification
         const validEducations = educations.filter(edu => 
           validateRequired(edu.degree) && validateRequired(edu.institute) && validateRequired(edu.location) && validateRequired(edu.startYear) && validateRequired(edu.endYear)
         );
         const validSkills = skills.filter(skill => validateRequired(skill.name));
-        return validEducations.length > 0 && validSkills.length > 0;
+        const invalidYearRanges = educations.filter(edu => 
+          edu.startYear && edu.endYear && !validateYearRange(edu.startYear, edu.endYear)
+        );
+        return validEducations.length > 0 && validSkills.length > 0 && invalidYearRanges.length === 0;
         
       case 2: // Work Experience
         const validExperiences = experiences.filter(exp => 
           validateRequired(exp.company) && validateRequired(exp.role) && validateRequired(exp.startDate) && validateRequired(exp.endDate)
         );
-        return validExperiences.length > 0;
+        const invalidDateRanges = experiences.filter(exp => 
+          exp.startDate && exp.endDate && !validateDateRange(exp.startDate, exp.endDate)
+        );
+        const futureEndDates = experiences.filter(exp => 
+          exp.endDate && !validateNotFutureDate(exp.endDate)
+        );
+        return validExperiences.length > 0 && invalidDateRanges.length === 0 && futureEndDates.length === 0;
         
       case 3: // Documents
         const hasNewDocuments = documentsList.some(doc => doc.file && doc.name);
@@ -772,6 +881,7 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
         })),
         documents: [...existingDocs, ...uploadedDocs],
         salarySlips: [...existingSalarySlips, ...uploadedSalarySlips],
+        adminId: typeof window !== 'undefined' ? localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user') || '{}').id : null : null,
       } as any;
 
       let res: any;
@@ -862,7 +972,7 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
                 )}
             </div>
             <div className="xl:col-span-6 col-span-12">
-                <label htmlFor="phone" className="form-label">Phone number <span className="text-red-500">*</span></label>
+                <label htmlFor="phone" className="form-label">Phone Number <span className="text-red-500">*</span></label>
                 <input 
                   type="tel" 
                   name="phoneNumber" 
@@ -870,7 +980,7 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
                   onChange={handleFormChange} 
                   className={`form-control w-full !rounded-md ${fieldErrors['phoneNumber'] ? 'border-red-500' : ''}`} 
                   id="phone" 
-                  placeholder="(555)-555-1234" 
+                  placeholder="ex: 98XXX4XXX0" 
                   // required
                 />
                 {fieldErrors['phoneNumber'] && (
@@ -890,12 +1000,23 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
                 <input type="text" name="degree" value={formData.degree} onChange={handleFormChange} className="form-control w-full !rounded-md" id="degree" placeholder="Degree" />
             </div>
             <div className="xl:col-span-6 col-span-12">
-                <label htmlFor="supervisorName" className="form-label">supervisor name</label>
+                <label htmlFor="supervisorName" className="form-label">Supervisor Name</label>
                 <input type="text" name="supervisorName" value={formData.supervisorName} onChange={handleFormChange} className="form-control w-full !rounded-md" id="supervisorName" placeholder="supervisor name" />
             </div>
             <div className="xl:col-span-6 col-span-12">
-                <label htmlFor="supervisorContact" className="form-label">supervisor contact info</label>
-                <input type="text" name="supervisorContact" value={formData.supervisorContact} onChange={handleFormChange} className="form-control w-full !rounded-md" id="supervisorContact" placeholder="supervisor contact info" />
+                <label htmlFor="supervisorContact" className="form-label">Supervisor Phone No.</label>
+                <input 
+                  type="text" 
+                  name="supervisorContact" 
+                  value={formData.supervisorContact} 
+                  onChange={handleFormChange} 
+                  className={`form-control w-full !rounded-md ${fieldErrors['supervisorContact'] ? 'border-red-500' : ''}`} 
+                  id="supervisorContact" 
+                  placeholder="ex: 98XXX4XXX0" 
+                />
+                {fieldErrors['supervisorContact'] && (
+                  <div className="text-red-500 text-sm mt-1">{fieldErrors['supervisorContact']}</div>
+                )}
             </div>
                             
             <div className="xl:col-span-12 col-span-12">
@@ -906,7 +1027,7 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
             {/* Social Links Section */}
             <div className="xl:col-span-12 col-span-12">
               <div className="text-[0.9375rem] font-semibold sm:flex block items-center justify-between mb-4">
-                <div>Social Links :</div>
+                <div>Social Links <span className="text-red-500">*</span> :</div>
                 <button
                   type="button"
                   onClick={handleAddSocialLink}
@@ -915,12 +1036,17 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
                   + Add Social Link
                 </button>
               </div>
+              {fieldErrors['socialLinks'] && (
+                <div className="text-red-500 text-sm mb-3">
+                  {fieldErrors['socialLinks']}
+                </div>
+              )}
 
               {socialLinks.map((link, index) => (
                 <div key={link.id} className="relative grid grid-cols-12 gap-4 border rounded-sm p-3 mb-3">
                   <button
                     type="button"
-                    onClick={() => setSocialLinks(socialLinks.filter((_, i) => i !== index))}
+                    onClick={() => handleRemoveSocialLink(index)}
                     className="absolute top-2 right-2 border rounded-full px-1 text-red-500 hover:text-white hover:bg-red-600"
                   >
                     ✕
@@ -1044,27 +1170,36 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
                 <div className="grid grid-cols-12 gap-2">
                   <div className="col-span-6">
                     <label className="form-label">Start Year <span className="text-red-500">*</span></label>
-                    <input
-                      type="number"
+                    <select
                       className={`form-control w-full !rounded-md ${fieldErrors['education'] ? 'border-red-500' : ''}`}
-                      placeholder="Start Year"
                       value={(edu as any).startYear}
                       onChange={(e) => handleEducationChange(index, "startYear", e.target.value)}
-                      // required
-                    />
+                    >
+                      <option value="">Select Start Year</option>
+                      {generateYearOptions().map(year => (
+                        <option key={year} value={year}>{year}</option>
+                      ))}
+                    </select>
                   </div>
                   <div className="col-span-6">
                     <label className="form-label">End Year <span className="text-red-500">*</span></label>
-                    <input
-                      type="number"
+                    <select
                       className={`form-control w-full !rounded-md ${fieldErrors['education'] ? 'border-red-500' : ''}`}
-                      placeholder="End Year"
                       value={(edu as any).endYear}
                       onChange={(e) => handleEducationChange(index, "endYear", e.target.value)}
-                      // required
-                    />
+                    >
+                      <option value="">Select End Year</option>
+                      {generateYearOptions().map(year => (
+                        <option key={year} value={year}>{year}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
+                {edu.startYear && edu.endYear && !validateYearRange(edu.startYear, edu.endYear) && (
+                  <div className="text-red-500 text-sm mt-2 col-span-12">
+                    Start year cannot be ahead of end year
+                  </div>
+                )}
               </div>
               
               <div className="xl:col-span-12 col-span-12">
@@ -1205,6 +1340,16 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
                   // required
                 />
               </div>
+              {exp.startDate && exp.endDate && !validateDateRange(exp.startDate, exp.endDate) && (
+                <div className="text-red-500 text-sm mt-2 col-span-12">
+                  Start date cannot be ahead of end date
+                </div>
+              )}
+              {exp.endDate && !validateNotFutureDate(exp.endDate) && (
+                <div className="text-red-500 text-sm mt-2 col-span-12">
+                  End date cannot be in the future
+                </div>
+              )}
               <div className="xl:col-span-12 col-span-12">
                 <label className="form-label">Responsibilities / Description</label>
                 <textarea
@@ -1400,7 +1545,7 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
         <div className="p-4">
           <p className="mb-1 font-semibold text-[#8c9097] opacity-50 text-[1.25rem]">05</p>
           <div className="text-[0.9375rem] font-semibold sm:flex block items-center justify-between mb-4">
-            <div>Salary Slips :</div>
+            <div>Salary Slips <span className="text-red-500">*</span> :</div>
             <button
               type="button"
               onClick={handleAddSalarySlip}

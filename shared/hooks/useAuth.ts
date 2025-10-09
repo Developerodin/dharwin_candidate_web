@@ -76,6 +76,10 @@ export function useAuth() {
       localStorage.removeItem('user');
       setUser(null);
       setLoading(false);
+      // Dispatch custom event to notify components of user change
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('userChanged'));
+      }
       router.push('/');
     }
   };

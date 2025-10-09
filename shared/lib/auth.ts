@@ -12,6 +12,10 @@ export const loginUser = async (credentials: { email: string; password: string }
   }
   if (data?.user) {
     localStorage.setItem('user', JSON.stringify(data.user));
+    // Dispatch custom event to notify components of user change
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('userChanged'));
+    }
   }
   return data;
 };
@@ -25,5 +29,9 @@ export const registerUser = async (userData: any) => {
 // Logout user
 export const logoutUser = async () => {
   const response = await api.post(Logout_User_API);
+  // Dispatch custom event to notify components of user change
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('userChanged'));
+  }
   return response.data;
 };

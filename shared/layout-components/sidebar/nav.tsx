@@ -1,53 +1,64 @@
 "use client";
-import React from "react";
+import React, { useState, useEffect } from "react";
 
 const ProfileGroupIcon = <i className="bx bx-group side-menu__icon"></i>;
 const ProfileIcon = <i className="bx bx-user side-menu__icon"></i>;
 const ShareIcon = <i className="bx bx-share side-menu__icon"></i>;
 
-// Retrieve user role from localStorage safely
-let userRole: string | null = null;
-if (typeof window !== "undefined") {
-  const userData = localStorage.getItem("user");
-  if (userData) {
-    const user = JSON.parse(userData);
-    userRole = user.role;
-  }
-}
+// Custom hook to get dynamic menu items based on user role
+export const useMenuItems = () => {
+  const [menuItems, setMenuItems] = useState<any[]>([]);
 
-export const MenuItems: any = [
-  {
-    menutitle: "MAIN",
-  },
+  useEffect(() => {
+    const updateMenuItems = () => {
+      let userRole: string | null = null;
+      
+      if (typeof window !== "undefined") {
+        const userData = localStorage.getItem("user");
+        if (userData) {
+          try {
+            const user = JSON.parse(userData);
+            userRole = user.role;
+          } catch (error) {
+            console.warn('Error parsing user data from localStorage:', error);
+            userRole = null;
+          }
+        }
+      }
 
-  // Show only for admin
-  ...(userRole === "admin"
-    ? [
+      const items: any[] = [
         {
-          path: "/candidates",
-          title: "Candidates",
-          icon: ProfileGroupIcon,
-          type: "link",
-          active: true,
-          selected: true,
-          dirchange: false,
+          menutitle: "MAIN",
         },
-        {
-          path: "/share-candidate-form",
-          title: "Share Candidate Form",
-          icon: ShareIcon,
-          type: "link",
-          active: true,
-          selected: true,
-          dirchange: false,
-        },
-      ]
-    : []),
+      ];
 
-  // Show only for normal user
-  ...(userRole === "user"
-    ? [
-        {
+      // Show only for admin
+      if (userRole === "admin") {
+        items.push(
+          {
+            path: "/candidates",
+            title: "Candidates",
+            icon: ProfileGroupIcon,
+            type: "link",
+            active: true,
+            selected: true,
+            dirchange: false,
+          },
+          {
+            path: "/share-candidate-form",
+            title: "Share Candidate Form",
+            icon: ShareIcon,
+            type: "link",
+            active: true,
+            selected: true,
+            dirchange: false,
+          }
+        );
+      }
+
+      // Show only for normal user
+      if (userRole === "user") {
+        items.push({
           path: "/profile",
           title: "Profile",
           icon: ProfileIcon,
@@ -55,7 +66,38 @@ export const MenuItems: any = [
           active: true,
           selected: true,
           dirchange: false,
-        },
-      ]
-    : []),
-];
+        });
+      }
+
+      setMenuItems(items);
+    };
+
+    // Initial load
+    updateMenuItems();
+
+    // Listen for storage changes (when user logs in/out in another tab)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'user') {
+        updateMenuItems();
+      }
+    };
+
+    // Listen for custom events (when user logs in/out in same tab)
+    const handleUserChange = () => {
+      updateMenuItems();
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('userChanged', handleUserChange);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('userChanged', handleUserChange);
+    };
+  }, []);
+
+  return menuItems;
+};
+
+// Legacy export for backward compatibility (will be empty initially)
+export const MenuItems: any = [];

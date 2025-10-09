@@ -8,12 +8,18 @@ import store from "@/shared/redux/store";
 import SimpleBar from 'simplebar-react';
 import Menuloop from "./menuloop";
 import { usePathname, useRouter } from "next/navigation";
-import { MenuItems } from "./nav";
+import { useMenuItems } from "./nav";
 
 const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
-	const [menuitems, setMenuitems] = useState(MenuItems);
+	const menuItems = useMenuItems();
+	const [menuitems, setMenuitems] = useState(menuItems);
 
 	const path = usePathname()	
+
+	// Update menu items when the hook returns new data
+	useEffect(() => {
+		setMenuitems(menuItems);
+	}, [menuItems]);
 
 	function closeMenu() {
 		const closeMenudata = (items: any) => {
@@ -22,7 +28,7 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 				closeMenudata(item.children);
 			});
 		};
-		closeMenudata(MenuItems);
+		closeMenudata(menuItems);
 		setMenuitems((arr: any) => [...arr]);
 	}
 
@@ -426,7 +432,7 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 				setSubmenuRecursively(item.children);
 			});
 		};
-		setSubmenuRecursively(MenuItems);
+		setSubmenuRecursively(menuItems);
 	}
 	const [previousUrl, setPreviousUrl] = useState("/");
 
@@ -648,7 +654,7 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 							</svg></div>
 
 							<ul className="main-menu" onClick={() => Sideclick()}>
-								{MenuItems.map((levelone: any, index:any) => (
+								{menuItems.map((levelone: any, index:any) => (
 									<Fragment key={index}>
 										<li className={`${levelone.menutitle ? 'slide__category' : ''} ${levelone.type === 'link' ? 'slide' : ''}
                                                ${levelone.type === 'sub' ? 'slide has-sub' : ''} ${levelone?.active ? 'open' : ''} ${levelone?.selected ? 'active' : ''}`}>
