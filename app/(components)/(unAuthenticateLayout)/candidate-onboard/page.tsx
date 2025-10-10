@@ -202,7 +202,7 @@ export default function CandidateOnboardLayout() {
               <p style="margin-bottom: 15px; font-size: 14px; color: #666;">
                 Your account has been created successfully. ${result.message || 'We\'ve sent a verification email to:'}
               </p>
-              <p style="margin-bottom: 20px; font-size: 14px; font-weight: 600; color: #7c3aed;">
+              <p style="margin-bottom: 20px; font-size: 14px; font-weight: 600; color: #36af4c;">
                 ${formData.email}
               </p>
               ${result.userId ? `
@@ -212,7 +212,7 @@ export default function CandidateOnboardLayout() {
                   </p>
                 </div>
               ` : ''}
-              <div style="background: #f8fafc; padding: 15px; border-radius: 8px; border-left: 4px solid #7c3aed;">
+              <div style="background: #f8fafc; padding: 15px; border-radius: 8px; border-left: 4px solid #36af4c;">
                 <p style="margin: 0; font-size: 14px; color: #374151;">
                   <strong>Next Steps:</strong>
                 </p>
@@ -225,9 +225,9 @@ export default function CandidateOnboardLayout() {
             </div>
           `,
           icon: 'success',
-          iconColor: '#7c3aed',
+          iconColor: '#36af4c',
           confirmButtonText: 'Got it!',
-          confirmButtonColor: '#7c3aed',
+          confirmButtonColor: '#36af4c',
           width: '500px',
           padding: '2rem',
           customClass: {
@@ -258,10 +258,10 @@ export default function CandidateOnboardLayout() {
                 <p style="margin-bottom: 15px; font-size: 16px;">
                   Welcome back! It looks like you already have an account with us.
                 </p>
-                <p style="margin-bottom: 20px; font-size: 14px; color: #7c3aed; font-weight: 600;">
+                <p style="margin-bottom: 20px; font-size: 14px; color: #36af4c; font-weight: 600;">
                   ${formData.email}
                 </p>
-                <div style="background: #f8fafc; padding: 15px; border-radius: 8px; border-left: 4px solid #7c3aed;">
+                <div style="background: #f8fafc; padding: 15px; border-radius: 8px; border-left: 4px solid #36af4c;">
                   <p style="margin: 0 0 10px 0; font-size: 14px; color: #374151; font-weight: 600;">
                     Ready to continue your journey?
                   </p>
@@ -272,9 +272,9 @@ export default function CandidateOnboardLayout() {
               </div>
             `,
             icon: 'info',
-            iconColor: '#7c3aed',
+            iconColor: '#36af4c',
             confirmButtonText: 'Go to Login',
-            confirmButtonColor: '#7c3aed',
+            confirmButtonColor: '#36af4c',
             showCancelButton: true,
             cancelButtonText: 'Stay Here',
             cancelButtonColor: '#6b7280',
@@ -335,7 +335,7 @@ export default function CandidateOnboardLayout() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#36af4c] mx-auto mb-4"></div>
           <p className="text-gray-600">Validating secure access...</p>
         </div>
       </div>
@@ -385,7 +385,7 @@ export default function CandidateOnboardLayout() {
                   name="firstName"
                   value={formData.firstName}
                   onChange={handleInputChange}
-                  className={`w-full px-3 sm:px-4 py-2 sm:py-3 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-colors text-sm sm:text-base ${
+                  className={`w-full px-3 sm:px-4 py-2 sm:py-3 border rounded-lg focus:ring-2 focus:ring-[#36af4c] focus:border-transparent transition-colors text-sm sm:text-base ${
                     errors.firstName ? 'border-red-500' : 'border-gray-300'
                   }`}
                   placeholder="Enter your first name"
@@ -405,7 +405,7 @@ export default function CandidateOnboardLayout() {
                   name="lastName"
                   value={formData.lastName}
                   onChange={handleInputChange}
-                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-colors ${
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#36af4c] focus:border-transparent transition-colors ${
                     errors.lastName ? 'border-red-500' : 'border-gray-300'
                   }`}
                   placeholder="Enter your last name"
@@ -442,7 +442,7 @@ export default function CandidateOnboardLayout() {
                 name="phoneNumber"
                 value={formData.phoneNumber}
                 onChange={handleInputChange}
-                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-colors ${
+                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#36af4c] focus:border-transparent transition-colors ${
                   errors.phoneNumber ? 'border-red-500' : 'border-gray-300'
                 }`}
                 placeholder="Enter your 10-digit phone number"
@@ -464,7 +464,7 @@ export default function CandidateOnboardLayout() {
                   name="password"
                   value={formData.password}
                   onChange={handleInputChange}
-                  className={`w-full px-4 py-3 pr-12 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-colors ${
+                  className={`w-full px-4 py-3 pr-12 border rounded-lg focus:ring-2 focus:ring-[#36af4c] focus:border-transparent transition-colors ${
                     errors.password ? 'border-red-500' : 'border-gray-300'
                   }`}
                   placeholder="Create a password"
@@ -497,7 +497,7 @@ export default function CandidateOnboardLayout() {
                   name="confirmPassword"
                   value={formData.confirmPassword}
                   onChange={handleInputChange}
-                  className={`w-full px-4 py-3 pr-12 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-colors ${
+                  className={`w-full px-4 py-3 pr-12 border rounded-lg focus:ring-2 focus:ring-[#36af4c] focus:border-transparent transition-colors ${
                     errors.confirmPassword ? 'border-red-500' : 'border-gray-300'
                   }`}
                   placeholder="Confirm your password"
@@ -522,10 +522,10 @@ export default function CandidateOnboardLayout() {
             <button
               type="submit"
               disabled={isLoading}
-              className={`w-full py-3 px-6 rounded-lg font-medium focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition-colors flex items-center justify-center ${
+              className={`w-full py-3 px-6 rounded-lg font-medium focus:ring-2 focus:ring-[#36af4c] focus:ring-offset-2 transition-colors flex items-center justify-center ${
                 isLoading 
-                  ? 'bg-purple-400 text-white cursor-not-allowed' 
-                  : 'bg-purple-600 text-white hover:bg-purple-700'
+                  ? 'bg-[#36af4c]/70 text-white cursor-not-allowed' 
+                  : 'bg-[#36af4c] text-white hover:bg-[#2d8a3f]'
               }`}
             >
               {isLoading ? (
@@ -546,7 +546,7 @@ export default function CandidateOnboardLayout() {
         {/* Footer */}
         <div className="mt-8">
           <div className="flex items-center space-x-2 mb-4">
-            <div className="w-2 h-2 bg-purple-600 rounded-full"></div>
+            <div className="w-2 h-2 bg-[#36af4c] rounded-full"></div>
             <span className="text-sm font-medium text-gray-900">PROFESSIONAL PLATFORM</span>
           </div>
           
@@ -567,22 +567,22 @@ export default function CandidateOnboardLayout() {
       </div>
 
       {/* Right Column - Purple Gradient Background */}
-      <div className="flex-1 bg-gradient-to-br from-purple-600 to-purple-800 p-4 sm:p-6 lg:p-8 xl:p-12 flex flex-col justify-between">
+      <div className="flex-1 bg-gradient-to-br from-[#093464] to-[#0a4a7a] p-4 sm:p-6 lg:p-8 xl:p-12 flex flex-col justify-between">
         {/* Header Badges */}
         <div className="flex flex-wrap gap-2 sm:gap-3 mb-2">
-          <div className="bg-purple-700 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full flex items-center space-x-1 sm:space-x-2">
+          <div className="bg-[#093464]/80 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full flex items-center space-x-1 sm:space-x-2">
             <svg className="w-3 h-3 sm:w-4 sm:h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
             </svg>
             <span className="text-xs sm:text-sm font-medium text-white">ALL EXPERIENCE LEVELS</span>
           </div>
-          <div className="bg-purple-700 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full flex items-center space-x-1 sm:space-x-2">
+          <div className="bg-[#093464]/80 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full flex items-center space-x-1 sm:space-x-2">
             <svg className="w-3 h-3 sm:w-4 sm:h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
             </svg>
             <span className="text-xs sm:text-sm font-medium text-white">ALL INDUSTRIES WELCOME</span>
           </div>
-          <div className="bg-purple-700 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full flex items-center space-x-1 sm:space-x-2">
+          <div className="bg-[#093464]/80 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full flex items-center space-x-1 sm:space-x-2">
             <svg className="w-3 h-3 sm:w-4 sm:h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
             </svg>
@@ -596,7 +596,7 @@ export default function CandidateOnboardLayout() {
             Where top talent meets top opportunities.
           </h2>
           
-          <p className="text-sm sm:text-base lg:text-lg text-purple-100 mb-6 sm:mb-8 leading-relaxed">
+          <p className="text-sm sm:text-base lg:text-lg text-blue-100 mb-6 sm:mb-8 leading-relaxed">
             Dharwin uses AI and skill intelligence to cut through the noise. Apply once → get matched to roles that fit your skills. Stay visible to verified employers only. Move faster with no ghosting, no wasted time.
           </p>
           
@@ -606,20 +606,20 @@ export default function CandidateOnboardLayout() {
 
           {/* Statistics Cards */}
           <div className="grid grid-cols-2 gap-3 sm:gap-6 mb-6 sm:mb-8">
-            <div className="bg-purple-700 p-3 sm:p-6 rounded-xl">
+            <div className="bg-[#093464]/80 p-3 sm:p-6 rounded-xl">
               <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-white mb-1 sm:mb-2">10K+</div>
-              <div className="text-xs sm:text-sm text-purple-100">Candidates placed faster</div>
+              <div className="text-xs sm:text-sm text-blue-100">Candidates placed faster</div>
             </div>
-            <div className="bg-purple-700 p-3 sm:p-6 rounded-xl">
+            <div className="bg-[#093464]/80 p-3 sm:p-6 rounded-xl">
               <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-white mb-1 sm:mb-2">500+</div>
-              <div className="text-xs sm:text-sm text-purple-100">Companies hiring smarter</div>
+              <div className="text-xs sm:text-sm text-blue-100">Companies hiring smarter</div>
             </div>
           </div>
 
           {/* Testimonial Card */}
-          <div className="bg-purple-700 p-4 sm:p-6 rounded-xl mb-6 sm:mb-8">
+          <div className="bg-[#093464]/80 p-4 sm:p-6 rounded-xl mb-6 sm:mb-8">
             <div className="flex items-start space-x-3 sm:space-x-4">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-purple-500 rounded-full flex items-center justify-center">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-[#36af4c] rounded-full flex items-center justify-center">
                 <span className="text-white font-bold text-sm sm:text-base">RS</span>
               </div>
               <div>
@@ -628,7 +628,7 @@ export default function CandidateOnboardLayout() {
                 </p>
                 <div>
                   <div className="text-white font-semibold text-sm sm:text-base">Rahul Sharma</div>
-                  <div className="text-purple-200 text-xs sm:text-sm">Software Engineer</div>
+                  <div className="text-blue-200 text-xs sm:text-sm">Software Engineer</div>
                 </div>
               </div>
             </div>
@@ -639,16 +639,16 @@ export default function CandidateOnboardLayout() {
         <div>
           <p className="text-white mb-3 sm:mb-4 text-sm sm:text-base">Trusted by</p>
           <div className="flex flex-wrap gap-2 sm:gap-3">
-            <div className="bg-purple-700 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full">
+            <div className="bg-[#093464]/80 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full">
               <span className="text-xs sm:text-sm font-medium text-white">Startups</span>
             </div>
-            <div className="bg-purple-700 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full">
+            <div className="bg-[#093464]/80 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full">
               <span className="text-xs sm:text-sm font-medium text-white">Tech Giants</span>
             </div>
-            <div className="bg-purple-700 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full">
+            <div className="bg-[#093464]/80 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full">
               <span className="text-xs sm:text-sm font-medium text-white">Fortune 500</span>
             </div>
-            <div className="bg-purple-700 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full">
+            <div className="bg-[#093464]/80 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full">
               <span className="text-xs sm:text-sm font-medium text-white">SMEs</span>
             </div>
           </div>

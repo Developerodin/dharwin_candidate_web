@@ -2,7 +2,7 @@
 import React, { useState } from "react";
 import Select, { Props as SelectProps } from 'react-select';
 import { Selectoption4 } from '@/shared/data/pages/candidates/skillsdata';
-import { addCandidate, updateCandidate } from "@/shared/lib/candidates";
+import { addCandidate, updateCandidate, uploadDocuments } from "@/shared/lib/candidates";
 import Swal from "sweetalert2";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -808,45 +808,101 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
         return d.getUTCFullYear();
       };
 
-      // Upload documents to local documents folder and capture their paths
-      const uploadedDocs: { label: string; url: string }[] = [];
-      for (const doc of documentsList) {
-        if (doc.file && doc.name) {
-          const form = new FormData();
-          form.append('file', doc.file);
-          // Use custom name if "Other" is selected, otherwise use predefined name
-          const documentLabel = doc.name === "Other" ? doc.customName : doc.name;
-          form.append('label', documentLabel);
-          const res = await fetch('/api/upload', { method: 'POST', body: form });
-          if (!res.ok) throw new Error('Upload failed');
-          const data = await res.json();
-          console.log('Document public path:', data.path);
-          uploadedDocs.push({ label: documentLabel, url: data.path });
+      // Upload documents using uploadDocuments API
+      const uploadedDocs: { 
+        label: string; 
+        url: string; 
+        key: string; 
+        originalName: string; 
+        size: number; 
+        mimeType: string; 
+      }[] = [];
+      const documentsToUpload = documentsList.filter(doc => doc.file && doc.name);
+      
+      if (documentsToUpload.length > 0) {
+        const files = documentsToUpload.map(doc => doc.file!);
+        const labels = documentsToUpload.map(doc => 
+          doc.name === "Other" ? doc.customName : doc.name
+        );
+        
+        try {
+          const uploadResponse = await uploadDocuments(files, labels);
+          console.log('Documents upload response:', uploadResponse);
+          
+          // Handle the API response format: {success, message, data: [{key, url, originalName, size, mimeType}]}
+          if (uploadResponse.success && uploadResponse.data && Array.isArray(uploadResponse.data)) {
+            // Map the response data to our expected format with labels
+            uploadResponse.data.forEach((fileData: any, index: number) => {
+              uploadedDocs.push({
+                label: labels[index] || fileData.originalName,
+                url: fileData.url,
+                key: fileData.key,
+                originalName: fileData.originalName,
+                size: fileData.size,
+                mimeType: fileData.mimeType
+              });
+            });
+          } else {
+            // Fallback for unexpected response format
+            console.warn('Unexpected upload response format:', uploadResponse);
+            throw new Error('Invalid response format from upload API');
+          }
+        } catch (uploadError) {
+          console.error('Document upload failed:', uploadError);
+          throw new Error('Failed to upload documents');
         }
       }
 
-      // Upload salary slips to salarySlips folder and capture their paths
-      const uploadedSalarySlips: { month: string; year: string; documentUrl: string }[] = [];
-      for (const slip of salarySlips) {
-        if (slip.file && slip.month && slip.year) {
-          const form = new FormData();
-          form.append('file', slip.file);
-          form.append('month', slip.month);
-          form.append('year', slip.year);
-          const res = await fetch('/api/upload-salary-slip', { method: 'POST', body: form });
-          if (!res.ok) throw new Error('Salary slip upload failed');
-          const data = await res.json();
-          console.log('Salary slip public path:', data.path);
-          uploadedSalarySlips.push({ 
-            month: slip.month, 
-            year: slip.year, 
-            documentUrl: data.path 
-          });
+      // Upload salary slips using uploadDocuments API
+      const uploadedSalarySlips: { 
+        month: string; 
+        year: string; 
+        documentUrl: string;
+        key: string;
+        originalName: string;
+        size: number;
+        mimeType: string;
+      }[] = [];
+      const salarySlipsToUpload = salarySlips.filter(slip => slip.file && slip.month && slip.year);
+      
+      if (salarySlipsToUpload.length > 0) {
+        const files = salarySlipsToUpload.map(slip => slip.file!);
+        const labels = salarySlipsToUpload.map(slip => `${slip.month} ${slip.year} Salary Slip`);
+        
+        try {
+          const uploadResponse = await uploadDocuments(files, labels);
+          console.log('Salary slips upload response:', uploadResponse);
+          
+          // Handle the API response format: {success, message, data: [{key, url, originalName, size, mimeType}]}
+          if (uploadResponse.success && uploadResponse.data && Array.isArray(uploadResponse.data)) {
+            // Map the response data to our expected format with month/year info
+            uploadResponse.data.forEach((fileData: any, index: number) => {
+              const slip = salarySlipsToUpload[index];
+              uploadedSalarySlips.push({
+                month: slip.month,
+                year: slip.year,
+                documentUrl: fileData.url,
+                key: fileData.key,
+                originalName: fileData.originalName,
+                size: fileData.size,
+                mimeType: fileData.mimeType
+              });
+            });
+          } else {
+            // Fallback for unexpected response format
+            console.warn('Unexpected salary slips upload response format:', uploadResponse);
+            throw new Error('Invalid response format from salary slips upload API');
+          }
+        } catch (uploadError) {
+          console.error('Salary slips upload failed:', uploadError);
+          throw new Error('Failed to upload salary slips');
         }
       }
 
+      const isEdit = initialData?.id || initialData?._id;
+      
       const payload = {
-        role: "user",
+        ...(isEdit ? {} : { role: "user" }), // Only include role for new candidates
         fullName: formData.fullName,
         email: formData.email,
         phoneNumber: formData.phoneNumber,
@@ -882,11 +938,10 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
         })),
         documents: [...existingDocs, ...uploadedDocs],
         salarySlips: [...existingSalarySlips, ...uploadedSalarySlips],
-        adminId: typeof window !== 'undefined' ? localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user') || '{}').id : null : null,
+        ...(isEdit ? {} : { adminId: typeof window !== 'undefined' ? localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user') || '{}').id : null : null }), // Only include adminId for new candidates
       } as any;
 
       let res: any;
-      const isEdit = initialData?.id || initialData?._id;
       
       if (isEdit) {
         res = await updateCandidate({ id: String(initialData.id || initialData._id), ...payload });

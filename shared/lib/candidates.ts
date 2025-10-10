@@ -1,5 +1,5 @@
 import api from './api';
-import { Candidates_API, Onboard_Candidate_API, Register_User_API } from './constants';
+import { Candidates_API, Documents_API, Onboard_Candidate_API, Register_User_API } from './constants';
 
 // Fetch all leads
 export const fetchAllCandidates = async () => {
@@ -50,5 +50,25 @@ export const onboardCandidate = async (candidateData: {
   onboardUrl: string;
 }) => {
   const response = await api.post(Onboard_Candidate_API, candidateData);
+  return response.data;
+};
+
+// Upload documents with files and labels
+export const uploadDocuments = async (files: File[], labels: string[]) => {
+  const formData = new FormData();
+  
+  // Append files to FormData
+  files.forEach((file) => {
+    formData.append('files', file);
+  });
+  
+  // Append labels as a JSON string array
+  formData.append('labels', JSON.stringify(labels));
+  
+  const response = await api.post(Documents_API, formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
   return response.data;
 };
