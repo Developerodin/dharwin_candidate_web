@@ -6,7 +6,7 @@ const Select = dynamic(() => import("react-select"), {ssr : false});
 import dynamic from 'next/dynamic';
 import Swal from "sweetalert2";
 import { useEffect, useState } from 'react';
-import { fetchAllCandidates, deleteCandidate } from '@/shared/lib/candidates';
+import { fetchAllCandidates, deleteCandidate, addCandidateSalarySlips, uploadDocuments } from '@/shared/lib/candidates';
 
 const Candidates = () => {
     const [canData, setCanData] = useState<any[]>([]);
@@ -18,6 +18,13 @@ const Candidates = () => {
     const [selectedCandidate, setSelectedCandidate] = useState<any>(null);
     const [showModal, setShowModal] = useState<boolean>(false);
     const [activeTab, setActiveTab] = useState<string>('personal');
+    const [showSalarySlipModal, setShowSalarySlipModal] = useState<boolean>(false);
+    const [selectedCandidateForSalarySlip, setSelectedCandidateForSalarySlip] = useState<any>(null);
+    const [salarySlipFile, setSalarySlipFile] = useState<File | null>(null);
+    const [salarySlipMonth, setSalarySlipMonth] = useState<string>('');
+    const [salarySlipYear, setSalarySlipYear] = useState<string>('');
+    const [uploadingSalarySlip, setUploadingSalarySlip] = useState<boolean>(false);
+    const [userRole, setUserRole] = useState<string>('user');
 
     const getCandidates = async () => {
         try {
@@ -83,7 +90,99 @@ const Candidates = () => {
 
     useEffect(() => {
         getCandidates();
+        
+        // Get user role from localStorage
+        if (typeof window !== 'undefined') {
+            const userData = localStorage.getItem('user');
+            if (userData) {
+                try {
+                    const parsedUser = JSON.parse(userData);
+                    setUserRole(parsedUser.role || 'user');
+                } catch (error) {
+                    console.error('Error parsing user data:', error);
+                    setUserRole('user');
+                }
+            }
+        }
     }, []);
+
+    // Function to open salary slip upload modal
+    const openSalarySlipModal = (candidate: any) => {
+        setSelectedCandidateForSalarySlip(candidate);
+        setShowSalarySlipModal(true);
+        setSalarySlipFile(null);
+        setSalarySlipMonth('');
+        setSalarySlipYear('');
+    };
+
+    // Function to close salary slip modal
+    const closeSalarySlipModal = () => {
+        setShowSalarySlipModal(false);
+        setSelectedCandidateForSalarySlip(null);
+        setSalarySlipFile(null);
+        setSalarySlipMonth('');
+        setSalarySlipYear('');
+    };
+
+    // Function to handle salary slip upload
+    const handleSalarySlipUpload = async () => {
+        if (!salarySlipFile || !salarySlipMonth || !salarySlipYear) {
+            await Swal.fire({
+                icon: 'warning',
+                title: 'Missing Information',
+                text: 'Please select a file, month, and year.',
+                confirmButtonText: 'OK'
+            });
+            return;
+        }
+
+        try {
+            setUploadingSalarySlip(true);
+
+            // Upload the file first
+            const uploadResponse = await uploadDocuments([salarySlipFile], ['Salary Slip']);
+            
+            if (uploadResponse.success && uploadResponse.data && uploadResponse.data.length > 0) {
+                const fileData = uploadResponse.data[0];
+                
+                // Prepare salary slip data
+                const salarySlipData = {
+                    month: salarySlipMonth,
+                    year: parseInt(salarySlipYear),
+                    documentUrl: fileData.url,
+                    key: fileData.key,
+                    originalName: fileData.originalName,
+                    size: fileData.size,
+                    mimeType: fileData.mimeType
+                };
+
+                // Add salary slip to candidate
+                await addCandidateSalarySlips(selectedCandidateForSalarySlip.id || selectedCandidateForSalarySlip._id, salarySlipData);
+
+                await Swal.fire({
+                    icon: 'success',
+                    title: 'Salary Slip Uploaded!',
+                    text: 'Salary slip has been successfully uploaded.',
+                    confirmButtonText: 'OK'
+                });
+
+                closeSalarySlipModal();
+                getCandidates(); // Refresh the candidates list
+            } else {
+                throw new Error('File upload failed');
+            }
+        } catch (error: any) {
+            console.error('Salary slip upload error:', error);
+            await Swal.fire({
+                icon: 'error',
+                title: 'Upload Failed',
+                text: error?.message || 'Failed to upload salary slip. Please try again.',
+                confirmButtonText: 'OK'
+            });
+        } finally {
+            setUploadingSalarySlip(false);
+        }
+    };
 
     // Export candidates function
     const exportCandidates = async () => {
@@ -370,6 +469,18 @@ const Candidates = () => {
                                                             <Link aria-label="anchor" href={`/candidates/edit?id=${encodeURIComponent(String(can?.id ?? can?._id))}`} scroll={false} className="ti-btn ti-btn-icon ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-info/10 text-info hover:bg-info hover:text-white hover:border-info">
                                                                 <i className="ri-pencil-line"></i>
                                                             </Link>
+                                                            {userRole === 'admin' && (
+                                                                <button 
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        openSalarySlipModal(can);
+                                                                    }}
+                                                                    className="ti-btn ti-btn-icon ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-warning/10 text-warning hover:bg-warning hover:text-white hover:border-warning"
+                                                                    title="Upload Salary Slip"
+                                                                >
+                                                                    <i className="ri-file-add-line"></i>
+                                                                </button>
+                                                            )}
 
                                                             <button type="button"
                                                                 onClick={(e) => {
@@ -755,6 +866,137 @@ const Candidates = () => {
                                     <i className="ri-edit-line me-1"></i>
                                     Edit Profile
                                 </Link>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Salary Slip Upload Modal - Admin Only */}
+            {showSalarySlipModal && selectedCandidateForSalarySlip && userRole === 'admin' && (
+                <div className="fixed inset-0 z-50 overflow-y-auto">
+                    <div className="flex items-center justify-center min-h-screen pt-4 px-2 sm:px-4 pb-20 text-center sm:block sm:p-0">
+                        {/* Background overlay */}
+                        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={closeSalarySlipModal}></div>
+
+                        {/* Modal panel */}
+                        <div className="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all w-full max-w-md mx-auto sm:max-w-lg sm:my-8 sm:align-middle">
+                            {/* Modal header */}
+                            <div className="bg-white dark:bg-gray-800 px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                                        Upload Salary Slip
+                                    </h3>
+                                    <button
+                                        onClick={closeSalarySlipModal}
+                                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                    >
+                                        <i className="ri-close-line text-xl"></i>
+                                    </button>
+                                </div>
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                    Upload salary slip for {selectedCandidateForSalarySlip?.fullName}
+                                </p>
+                            </div>
+
+                            {/* Modal body */}
+                            <div className="bg-white dark:bg-gray-800 px-4 sm:px-6 py-4">
+                                <div className="space-y-4">
+                                    {/* Month Selection */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                            Month <span className="text-red-500">*</span>
+                                        </label>
+                                        <select
+                                            value={salarySlipMonth}
+                                            onChange={(e) => setSalarySlipMonth(e.target.value)}
+                                            className="form-control w-full"
+                                            required
+                                        >
+                                            <option value="">Select Month</option>
+                                            <option value="January">January</option>
+                                            <option value="February">February</option>
+                                            <option value="March">March</option>
+                                            <option value="April">April</option>
+                                            <option value="May">May</option>
+                                            <option value="June">June</option>
+                                            <option value="July">July</option>
+                                            <option value="August">August</option>
+                                            <option value="September">September</option>
+                                            <option value="October">October</option>
+                                            <option value="November">November</option>
+                                            <option value="December">December</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Year Selection */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                            Year <span className="text-red-500">*</span>
+                                        </label>
+                                        <select
+                                            value={salarySlipYear}
+                                            onChange={(e) => setSalarySlipYear(e.target.value)}
+                                            className="form-control w-full"
+                                            required
+                                        >
+                                            <option value="">Select Year</option>
+                                            {Array.from({ length: new Date().getFullYear() - 2000 + 1 }, (_, i) => {
+                                                const year = new Date().getFullYear() - i;
+                                                return (
+                                                    <option key={year} value={year}>
+                                                        {year}
+                                                    </option>
+                                                );
+                                            })}
+                                        </select>
+                                    </div>
+
+                                    {/* File Upload */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                            Salary Slip File <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="file"
+                                            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                                            onChange={(e) => setSalarySlipFile(e.target.files?.[0] || null)}
+                                            className="form-control w-full"
+                                            required
+                                        />
+                                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                            Supported formats: PDF, JPG, PNG, DOC, DOCX
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Modal footer */}
+                            <div className="bg-gray-50 dark:bg-gray-700 px-4 sm:px-6 py-3 flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3">
+                                <button
+                                    onClick={closeSalarySlipModal}
+                                    className="ti-btn ti-btn-light w-full sm:w-auto"
+                                    disabled={uploadingSalarySlip}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleSalarySlipUpload}
+                                    disabled={uploadingSalarySlip || !salarySlipFile || !salarySlipMonth || !salarySlipYear}
+                                    className="ti-btn ti-btn-primary w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {uploadingSalarySlip ? (
+                                        <>
+                                            <i className="ri-loader-4-line animate-spin me-1"></i>
+                                            Uploading...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <i className="ri-upload-line me-1"></i>
+                                            Upload Salary Slip
+                                        </>
+                                    )}
+                                </button>
                             </div>
                         </div>
                     </div>

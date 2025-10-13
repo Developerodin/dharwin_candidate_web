@@ -1,5 +1,5 @@
 import api from './api';
-import { Candidates_API, Documents_API, Export_Candidates_API, Onboard_Candidate_API, Register_User_API } from './constants';
+import { Candidate_SalarySlips_API, Candidates_API, Documents_API, Export_Candidates_API, Forgot_Password_API, Onboard_Candidate_API, Register_User_API } from './constants';
 
 // Fetch all leads
 export const fetchAllCandidates = async () => {
@@ -76,5 +76,31 @@ export const uploadDocuments = async (files: File[], labels: string[]) => {
 // Export candidates
 export const exportCandidates = async () => {
   const response = await api.post(Export_Candidates_API);
+  return response.data;
+};
+
+// Get candidate salary slips
+export const getCandidateSalarySlips = async (candidateId: string) => {
+  const response = await api.get(`${Candidate_SalarySlips_API}/${candidateId}`);
+  return response.data;
+};
+
+// Post candidate salary slips
+export const addCandidateSalarySlips = async (candidateId: string, salarySlipData: {
+  month: string;
+  year: number;
+  documentUrl: string;
+  key: string;
+  originalName: string;
+  size: number;
+  mimeType: string;
+}) => {
+  const response = await api.post(`${Candidate_SalarySlips_API}/${candidateId}`, salarySlipData);
+  return response.data;
+};
+
+// Forgot password
+export const forgotPassword = async (email: string) => {
+  const response = await api.post(Forgot_Password_API, { email });
   return response.data;
 };

@@ -423,9 +423,7 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
   }>({});
 
   // ------------------------------- State: Salary Slips -------------------------------
-  const [salarySlips, setSalarySlips] = useState<{id: number, month: string, year: string, file: File | null, documentUrl: string}[]>([
-    { id: 1, month: "", year: "", file: null, documentUrl: "" },
-  ]);
+  const [salarySlips, setSalarySlips] = useState<{id: number, month: string, year: string, file: File | null, documentUrl: string}[]>([]);
   const [existingSalarySlips, setExistingSalarySlips] = useState<{ month: string; year: string; documentUrl: string }[]>([]);
 
   // ------------------------------- Step Control -------------------------------
@@ -435,6 +433,13 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
 
   // ------------------------------- Excel Import State -------------------------------
   const [excelImportMode, setExcelImportMode] = useState(false);
+  
+  // Disable Excel import mode when editing existing candidates
+  useEffect(() => {
+    if (initialData) {
+      setExcelImportMode(false);
+    }
+  }, [initialData]);
   const [excelFile, setExcelFile] = useState<File | null>(null);
   const [excelData, setExcelData] = useState<any[]>([]);
   const [excelImportProgress, setExcelImportProgress] = useState<{
@@ -597,29 +602,23 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
         }
         break;
         
-      case 3: // Documents
-        const hasNewDocuments = documentsList.some(doc => doc.file && doc.name);
-        const hasExistingDocuments = existingDocs.length > 0;
-        if (!hasNewDocuments && !hasExistingDocuments) {
-          errors.push('document is required');
-          newFieldErrors['documents'] = 'document is required';
-        }
+      case 3: // Documents (Optional)
+        // Documents are now optional, no validation required
         break;
         
-      case 4: // Salary Slips
-        const validSalarySlips = salarySlips.filter(slip => 
-          validateRequired(slip.month) && validateRequired(slip.year) && (slip.file || slip.documentUrl)
-        );
-        const hasExistingSalarySlips = existingSalarySlips.length > 0;
-        const hasDuplicates = validateSalarySlipDuplicates(salarySlips).length > 0;
-        
-        if (validSalarySlips.length === 0 && !hasExistingSalarySlips) {
-          errors.push('At least one salary slip is required');
-          newFieldErrors['salarySlips'] = 'At least one salary slip is required';
-        }
-        if (hasDuplicates) {
-          errors.push('Duplicate month/year combinations found');
-          newFieldErrors['salarySlips'] = 'Duplicate month/year combinations found';
+      case 4: // Salary Slips (Optional - Admin only)
+        // Only validate if user is admin and salary slips step exists
+        if (userRole === 'admin') {
+          const validSalarySlips = salarySlips.filter(slip => 
+            validateRequired(slip.month) && validateRequired(slip.year) && (slip.file || slip.documentUrl)
+          );
+          const hasDuplicates = validateSalarySlipDuplicates(salarySlips).length > 0;
+          
+          // Only validate duplicates if salary slips are provided
+          if (hasDuplicates) {
+            errors.push('Duplicate month/year combinations found');
+            newFieldErrors['salarySlips'] = 'Duplicate month/year combinations found';
+          }
         }
         break;
     }
@@ -1375,18 +1374,22 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
         );
         return validExperiences.length > 0 && invalidDateRanges.length === 0 && futureEndDates.length === 0;
         
-      case 3: // Documents
-        const hasNewDocuments = documentsList.some(doc => doc.file && doc.name);
-        const hasExistingDocuments = existingDocs.length > 0;
-        return hasNewDocuments || hasExistingDocuments;
+      case 3: // Documents (Optional)
+        // Documents are now optional, always return true
+        return true;
         
-      case 4: // Salary Slips
-        const validSalarySlips = salarySlips.filter(slip => 
-          validateRequired(slip.month) && validateRequired(slip.year) && (slip.file || slip.documentUrl)
-        );
-        const hasExistingSalarySlips = existingSalarySlips.length > 0;
-        const hasDuplicates = validateSalarySlipDuplicates(salarySlips).length > 0;
-        return (validSalarySlips.length > 0 || hasExistingSalarySlips) && !hasDuplicates;
+      case 4: // Salary Slips (Optional - Admin only)
+        // Only validate if user is admin and salary slips step exists
+        if (userRole === 'admin') {
+          const validSalarySlips = salarySlips.filter(slip => 
+            validateRequired(slip.month) && validateRequired(slip.year) && (slip.file || slip.documentUrl)
+          );
+          const hasDuplicates = validateSalarySlipDuplicates(salarySlips).length > 0;
+          // Only validate duplicates if salary slips are provided, otherwise always return true
+          return !hasDuplicates;
+        }
+        // For non-admin users, this step doesn't exist, so always return true
+        return true;
         
       default:
         return false;
@@ -1406,11 +1409,30 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
     return true;
   };
 
+  // ------------------------------- User Role Check -------------------------------
+  const [userRole, setUserRole] = useState<string>('user');
+  
+  React.useEffect(() => {
+    // Get user role from localStorage
+    if (typeof window !== 'undefined') {
+      const userData = localStorage.getItem('user');
+      if (userData) {
+        try {
+          const parsedUser = JSON.parse(userData);
+          setUserRole(parsedUser.role || 'user');
+        } catch (error) {
+          console.error('Error parsing user data:', error);
+          setUserRole('user');
+        }
+      }
+    }
+  }, []);
+
   // ------------------------------- Prefill on Edit -------------------------------
   React.useEffect(() => {
-    // Initialize documentsList with default entry for new candidates
+    // Initialize documentsList as empty for new candidates (optional)
     if (!initialData && documentsList.length === 0) {
-      setDocumentsList([{ id: Date.now(), name: "CV/Resume", customName: "", file: null }]);
+      setDocumentsList([]);
     }
     
     // Initialize skills with default entry for new candidates
@@ -1653,7 +1675,7 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
           url: link.url,
         })),
         documents: [...existingDocs, ...uploadedDocs],
-        salarySlips: [...existingSalarySlips, ...uploadedSalarySlips],
+        ...(userRole === 'admin' ? { salarySlips: [...existingSalarySlips, ...uploadedSalarySlips] } : {}),
         ...(isEdit ? {} : { adminId: typeof window !== 'undefined' ? localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user') || '{}').id : null : null }), // Only include adminId for new candidates
       } as any;
 
@@ -1700,8 +1722,8 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
     }
   };
 
-  // If in Excel import mode, show Excel import UI
-  if (excelImportMode) {
+  // If in Excel import mode, show Excel import UI (only for new candidates)
+  if (excelImportMode && !initialData) {
     return (
       <div className="p-6">
         <div className="mb-6">
@@ -1835,25 +1857,27 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
 
   return (
     <div>
-      {/* Mode Selection */}
-      <div className="p-6 border-b border-defaultborder dark:border-defaultborder/10">
-        <div className="flex items-center justify-center gap-4">
-          <button
-            onClick={() => setExcelImportMode(false)}
-            className={`ti-btn ${!excelImportMode ? 'ti-btn-primary-full text-white' : 'ti-btn-secondary'}`}
-          >
-            <i className="ri-user-add-line me-2"></i>
-            Manual Entry
-          </button>
-          <button
-            onClick={() => setExcelImportMode(true)}
-            className={`ti-btn ${excelImportMode ? 'ti-btn-primary-full text-white' : 'ti-btn-secondary'}`}
-          >
-            <i className="ri-file-excel-line me-2"></i>
-            Excel Import
-          </button>
+      {/* Mode Selection - Only show for new candidates, not when editing */}
+      {!initialData && (
+        <div className="p-6 border-b border-defaultborder dark:border-defaultborder/10">
+          <div className="flex items-center justify-center gap-4">
+            <button
+              onClick={() => setExcelImportMode(false)}
+              className={`ti-btn ${!excelImportMode ? 'ti-btn-primary-full text-white' : 'ti-btn-secondary'}`}
+            >
+              <i className="ri-user-add-line me-2"></i>
+              Manual Entry
+            </button>
+            <button
+              onClick={() => setExcelImportMode(true)}
+              className={`ti-btn ${excelImportMode ? 'ti-btn-primary-full text-white' : 'ti-btn-secondary'}`}
+            >
+              <i className="ri-file-excel-line me-2"></i>
+              Excel Import
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       <Wizard 
         step={step} 
@@ -2295,7 +2319,7 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
         <div className="p-4">
           <p className="mb-1 font-semibold text-[#8c9097] opacity-50 text-[1.25rem]">04</p>
           <div className="text-[0.9375rem] font-semibold sm:flex block items-center justify-between mb-4">
-            <div>Document :</div>
+            <div>Documents (Optional) :</div>
             <button
               type="button"
               onClick={() => setDocumentsList([...documentsList, { id: Date.now(), name: "", customName: "", file: null }])}
@@ -2467,19 +2491,20 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
         </div>
       </Step>
 
-      <Step title={<><i className="ri-money-dollar-box-line basicstep-icon"></i> Salary Slips</>}>
-        <div className="p-4">
-          <p className="mb-1 font-semibold text-[#8c9097] opacity-50 text-[1.25rem]">05</p>
-          <div className="text-[0.9375rem] font-semibold sm:flex block items-center justify-between mb-4">
-            <div>Salary Slips <span className="text-red-500">*</span> :</div>
-            <button
-              type="button"
-              onClick={handleAddSalarySlip}
-              className="ti-btn bg-primary text-white !py-1 !px-2 !text-[0.75rem]"
-            >
-              + Add Salary Slip
-            </button>
-          </div>
+      {userRole === 'admin' && (
+        <Step title={<><i className="ri-money-dollar-box-line basicstep-icon"></i> Salary Slips</>}>
+          <div className="p-4">
+            <p className="mb-1 font-semibold text-[#8c9097] opacity-50 text-[1.25rem]">05</p>
+            <div className="text-[0.9375rem] font-semibold sm:flex block items-center justify-between mb-4">
+              <div>Salary Slips (Optional) :</div>
+              <button
+                type="button"
+                onClick={handleAddSalarySlip}
+                className="ti-btn bg-primary text-white !py-1 !px-2 !text-[0.75rem]"
+              >
+                + Add Salary Slip
+              </button>
+            </div>
           {fieldErrors['salarySlips'] && (
             <div className="text-red-500 text-sm mb-3">{fieldErrors['salarySlips']}</div>
           )}
@@ -2601,7 +2626,7 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
               </div>
 
               <div className="xl:col-span-4 col-span-12">
-                <label className="form-label">Upload Salary Slip <span className="text-red-500">*</span></label>
+                <label className="form-label">Upload Salary Slip</label>
                 <input
                   type="file"
                   accept=".jpg,.jpeg,.png,.pdf"
@@ -2636,7 +2661,8 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
             </div>
           )}
         </div>
-      </Step>
+        </Step>
+      )}
     </Wizard>
     </div>
   );

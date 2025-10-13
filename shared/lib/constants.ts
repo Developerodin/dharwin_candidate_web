@@ -8,6 +8,7 @@ export const Login_User_API = `${AUTH_URL}/login`;
 export const Logout_User_API = `${AUTH_URL}/logout`;
 export const Register_User_API = `${AUTH_URL}/register`;
 export const Onboard_Candidate_API = `${AUTH_URL}/send-candidate-invitation`;
+export const Forgot_Password_API = `${AUTH_URL}/forgot-password`;
 
 // Candidate API
 export const Candidates_API = `${CANDIDATES_URL}`;
@@ -17,3 +18,6 @@ export const Documents_API = `${DOCUMENTS_URL}`;
 
 // Export Candidates API
 export const Export_Candidates_API = `${CANDIDATES_URL}/export`;
+
+// Candidate SalarySlips API
+export const Candidate_SalarySlips_API = `${CANDIDATES_URL}/salary-slips`;
