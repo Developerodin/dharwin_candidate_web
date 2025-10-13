@@ -1,5 +1,5 @@
 import api from './api';
-import { Candidates_API, Documents_API, Onboard_Candidate_API, Register_User_API } from './constants';
+import { Candidates_API, Documents_API, Export_Candidates_API, Onboard_Candidate_API, Register_User_API } from './constants';
 
 // Fetch all leads
 export const fetchAllCandidates = async () => {
@@ -70,5 +70,11 @@ export const uploadDocuments = async (files: File[], labels: string[]) => {
       'Content-Type': 'multipart/form-data',
     },
   });
+  return response.data;
+};
+
+// Export candidates
+export const exportCandidates = async () => {
+  const response = await api.post(Export_Candidates_API);
   return response.data;
 };

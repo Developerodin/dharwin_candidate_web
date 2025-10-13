@@ -85,6 +85,187 @@ const Candidates = () => {
         getCandidates();
     }, []);
 
+    // Export candidates function
+    const exportCandidates = async () => {
+        try {
+            // Dynamic import of xlsx library
+            const XLSX = await import('xlsx');
+            
+            // Create workbook
+            const workbook = XLSX.utils.book_new();
+            
+            // 1. Personal Info Sheet
+            const personalInfoData = [
+                ['FullName', 'Email', 'PhoneNumber', 'ShortBio', 'SevisId', 'Ead', 'Degree', 'SupervisorName', 'SupervisorContact']
+            ];
+            
+            canData.forEach((candidate: any) => {
+                personalInfoData.push([
+                    candidate?.fullName || '',
+                    candidate?.email || '',
+                    candidate?.phoneNumber || '',
+                    candidate?.shortBio || '',
+                    candidate?.sevisId || '',
+                    candidate?.ead || '',
+                    candidate?.degree || '',
+                    candidate?.supervisorName || '',
+                    candidate?.supervisorContact || ''
+                ]);
+            });
+            
+            const personalInfoSheet = XLSX.utils.aoa_to_sheet(personalInfoData);
+            XLSX.utils.book_append_sheet(workbook, personalInfoSheet, 'Personal Info');
+            
+            // 2. Social Links Sheet
+            const socialLinksData = [
+                ['FullName', 'Platform', 'URL']
+            ];
+            
+            canData.forEach((candidate: any) => {
+                if (Array.isArray(candidate?.socialLinks) && candidate.socialLinks.length > 0) {
+                    candidate.socialLinks.forEach((link: any) => {
+                        socialLinksData.push([
+                            candidate?.fullName || '',
+                            link?.platform || '',
+                            link?.url || ''
+                        ]);
+                    });
+                }
+            });
+            
+            const socialLinksSheet = XLSX.utils.aoa_to_sheet(socialLinksData);
+            XLSX.utils.book_append_sheet(workbook, socialLinksSheet, 'Social Links');
+            
+            // 3. Skills Sheet
+            const skillsData = [
+                ['FullName', 'SkillName', 'Level', 'Category']
+            ];
+            
+            canData.forEach((candidate: any) => {
+                if (Array.isArray(candidate?.skills) && candidate.skills.length > 0) {
+                    candidate.skills.forEach((skill: any) => {
+                        skillsData.push([
+                            candidate?.fullName || '',
+                            skill?.name || '',
+                            skill?.level || '',
+                            skill?.category || ''
+                        ]);
+                    });
+                }
+            });
+            
+            const skillsSheet = XLSX.utils.aoa_to_sheet(skillsData);
+            XLSX.utils.book_append_sheet(workbook, skillsSheet, 'Skills');
+            
+            // 4. Qualification Sheet
+            const qualificationData = [
+                ['FullName', 'Degree', 'Institute', 'Location', 'StartYear', 'EndYear', 'Description']
+            ];
+            
+            canData.forEach((candidate: any) => {
+                if (Array.isArray(candidate?.qualifications) && candidate.qualifications.length > 0) {
+                    candidate.qualifications.forEach((qual: any) => {
+                        qualificationData.push([
+                            candidate?.fullName || '',
+                            qual?.degree || '',
+                            qual?.institute || '',
+                            qual?.location || '',
+                            qual?.startYear || '',
+                            qual?.endYear || '',
+                            qual?.description || ''
+                        ]);
+                    });
+                }
+            });
+            
+            const qualificationSheet = XLSX.utils.aoa_to_sheet(qualificationData);
+            XLSX.utils.book_append_sheet(workbook, qualificationSheet, 'Qualification');
+            
+            // 5. Work Experience Sheet
+            const workExperienceData = [
+                ['FullName', 'Company', 'Role', 'StartDate', 'EndDate', 'Description']
+            ];
+            
+            canData.forEach((candidate: any) => {
+                if (Array.isArray(candidate?.experiences) && candidate.experiences.length > 0) {
+                    candidate.experiences.forEach((exp: any) => {
+                        workExperienceData.push([
+                            candidate?.fullName || '',
+                            exp?.company || '',
+                            exp?.role || '',
+                            exp?.startDate ? String(exp.startDate).slice(0,10) : '',
+                            exp?.endDate ? String(exp.endDate).slice(0,10) : 'Present',
+                            exp?.description || ''
+                        ]);
+                    });
+                }
+            });
+            
+            const workExperienceSheet = XLSX.utils.aoa_to_sheet(workExperienceData);
+            XLSX.utils.book_append_sheet(workbook, workExperienceSheet, 'Work Experience');
+            
+            // 6. Documents Sheet
+            const documentsData = [
+                ['FullName', 'DocumentLabel', 'DocumentURL']
+            ];
+            
+            canData.forEach((candidate: any) => {
+                if (Array.isArray(candidate?.documents) && candidate.documents.length > 0) {
+                    candidate.documents.forEach((doc: any) => {
+                        documentsData.push([
+                            candidate?.fullName || '',
+                            doc?.label || 'Document',
+                            doc?.url || ''
+                        ]);
+                    });
+                }
+            });
+            
+            const documentsSheet = XLSX.utils.aoa_to_sheet(documentsData);
+            XLSX.utils.book_append_sheet(workbook, documentsSheet, 'Documents');
+            
+            // 7. Salary Slips Sheet
+            const salarySlipsData = [
+                ['FullName', 'Month', 'Year', 'DocumentURL']
+            ];
+            
+            canData.forEach((candidate: any) => {
+                if (Array.isArray(candidate?.salarySlips) && candidate.salarySlips.length > 0) {
+                    candidate.salarySlips.forEach((slip: any) => {
+                        salarySlipsData.push([
+                            candidate?.fullName || '',
+                            slip?.month || '',
+                            slip?.year || '',
+                            slip?.documentUrl || ''
+                        ]);
+                    });
+                }
+            });
+            
+            const salarySlipsSheet = XLSX.utils.aoa_to_sheet(salarySlipsData);
+            XLSX.utils.book_append_sheet(workbook, salarySlipsSheet, 'Salary Slips');
+            
+            // Generate and download file
+            const fileName = `Candidates_Export_${new Date().toISOString().split('T')[0]}.xlsx`;
+            XLSX.writeFile(workbook, fileName);
+            
+            await Swal.fire({
+                icon: 'success',
+                title: 'Export Successful!',
+                text: `Successfully exported ${canData.length} candidates to Excel file.`,
+                confirmButtonText: 'OK'
+            });
+        } catch (error) {
+            console.error('Export error:', error);
+            await Swal.fire({
+                icon: 'error',
+                title: 'Export Failed',
+                text: 'Failed to export candidates. Please try again.',
+                confirmButtonText: 'OK'
+            });
+        }
+    };
+
     return (
         <>
             <div className="grid grid-cols-12 gap-x-6 mt-5">
@@ -116,6 +297,13 @@ const Candidates = () => {
                                         aria-label="Search input"
                                     />
                                 </div>
+                                <button 
+                                    type="button" 
+                                    onClick={exportCandidates}
+                                    className="ti-btn ti-btn-success !bg-success !text-white !py-1 !px-2 !text-[0.75rem] !m-0 !gap-0 !font-medium me-2"
+                                >
+                                    <i className="ri-download-line font-semibold align-middle"></i> Export Candidates
+                                </button>
                                 <button type="button" className="ti-btn ti-btn-primary !bg-primary !text-white !py-1 !px-2 !text-[0.75rem] !m-0 !gap-0 !font-medium" data-hs-overlay="#create-task">
                                     <i className="ri-add-line font-semibold align-middle"></i> <Link href="/candidates/add">Add Candidate</Link>
                                 </button>

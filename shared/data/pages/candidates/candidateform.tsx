@@ -433,6 +433,19 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // ------------------------------- Excel Import State -------------------------------
+  const [excelImportMode, setExcelImportMode] = useState(false);
+  const [excelFile, setExcelFile] = useState<File | null>(null);
+  const [excelData, setExcelData] = useState<any[]>([]);
+  const [excelImportProgress, setExcelImportProgress] = useState<{
+    total: number;
+    processed: number;
+    successful: number;
+    failed: number;
+    errors: string[];
+  }>({ total: 0, processed: 0, successful: 0, failed: 0, errors: [] });
+  const [excelImportLoading, setExcelImportLoading] = useState(false);
+
   // ------------------------------- Validation State -------------------------------
   const [fieldErrors, setFieldErrors] = useState<{[key: string]: string}>({});
   const [stepValidationErrors, setStepValidationErrors] = useState<{[key: number]: string[]}>({});
@@ -627,6 +640,701 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
       delete newErrors[fieldName];
       return newErrors;
     });
+  };
+
+  // ------------------------------- Excel Template and Import Functions -------------------------------
+  const downloadCSVTemplate = () => {
+    const csvHeaders = [
+      'FullName',
+      'Email', 
+      'PhoneNumber',
+      'Password',
+      'ShortBio',
+      'SevisId',
+      'Ead',
+      'Degree',
+      'SupervisorName',
+      'SupervisorContact',
+      'Qualifications',
+      'Experiences',
+      'Skills',
+      'SocialLinks'
+    ];
+
+    const csvData = [
+      csvHeaders.join(','),
+      'John Doe,john.doe@example.com,9876543210,password123,Experienced software developer,SEVIS123456,EAD789012,Master of Computer Science,Dr. Sarah Johnson,9876543210,"Master of Computer Science|University of Technology|New York USA|2020|2022|Specialized in Software Engineering;Bachelor of Computer Science|State University|California USA|2016|2020|Graduated with honors","Tech Solutions Inc|Senior Software Developer|2022-01-15|2024-01-15|Led development of web applications;StartupXYZ|Full Stack Developer|2020-06-01|2021-12-31|Developed and maintained web applications","JavaScript|Expert|Programming Languages;React|Advanced|Frontend Frameworks;Node.js|Advanced|Backend Technologies","LinkedIn|https://linkedin.com/in/john-doe;GitHub|https://github.com/john-doe"',
+      'Jane Smith,jane.smith@example.com,9876543211,password123,Data scientist with ML expertise,SEVIS123457,EAD789013,PhD in Data Science,Dr. Michael Brown,9876543210,"PhD in Data Science|MIT|Massachusetts USA|2018|2022|Research in machine learning algorithms;Master of Statistics|Stanford University|California USA|2016|2018|Focus on statistical modeling","AI Research Lab|Data Scientist|2022-03-01||Developing machine learning models;DataCorp|Junior Data Analyst|2020-01-01|2022-02-28|Analyzed large datasets","Python|Expert|Programming Languages;TensorFlow|Advanced|Machine Learning;SQL|Intermediate|Database","LinkedIn|https://linkedin.com/in/jane-smith;Portfolio|https://janesmith.dev"'
+    ];
+
+    const csvContent = csvData.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Candidate_Import_Template_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  };
+
+  const downloadExcelTemplate = async () => {
+    try {
+      // Dynamic import of xlsx library
+      const XLSX = await import('xlsx');
+      
+      // Create workbook
+      const workbook = XLSX.utils.book_new();
+      
+      // 1. Personal Info Sheet
+      const personalInfoData = [
+        ['FullName', 'Email', 'PhoneNumber', 'Password', 'ShortBio', 'SevisId', 'Ead', 'Degree', 'SupervisorName', 'SupervisorContact'],
+        ['John Doe', 'john.doe@example.com', '9876543210', 'password123', 'Experienced software developer', 'SEVIS123456', 'EAD789012', 'Master of Computer Science', 'Dr. Sarah Johnson', '9876543210'],
+        ['Jane Smith', 'jane.smith@example.com', '9876543211', 'password123', 'Data scientist with ML expertise', 'SEVIS123457', 'EAD789013', 'PhD in Data Science', 'Dr. Michael Brown', '9876543210']
+      ];
+      const personalInfoSheet = XLSX.utils.aoa_to_sheet(personalInfoData);
+      XLSX.utils.book_append_sheet(workbook, personalInfoSheet, 'Personal Info');
+      
+      // 2. Social Links Sheet
+      const socialLinksData = [
+        ['FullName', 'Platform', 'URL'],
+        ['John Doe', 'LinkedIn', 'https://linkedin.com/in/john-doe'],
+        ['John Doe', 'GitHub', 'https://github.com/john-doe'],
+        ['Jane Smith', 'LinkedIn', 'https://linkedin.com/in/jane-smith'],
+        ['Jane Smith', 'Portfolio', 'https://janesmith.dev']
+      ];
+      const socialLinksSheet = XLSX.utils.aoa_to_sheet(socialLinksData);
+      XLSX.utils.book_append_sheet(workbook, socialLinksSheet, 'Social Links');
+      
+      // 3. Skills Sheet
+      const skillsData = [
+        ['FullName', 'SkillName', 'Level', 'Category'],
+        ['John Doe', 'JavaScript', 'Expert', 'Programming Languages'],
+        ['John Doe', 'React', 'Advanced', 'Frontend Frameworks'],
+        ['John Doe', 'Node.js', 'Advanced', 'Backend Technologies'],
+        ['Jane Smith', 'Python', 'Expert', 'Programming Languages'],
+        ['Jane Smith', 'TensorFlow', 'Advanced', 'Machine Learning'],
+        ['Jane Smith', 'SQL', 'Intermediate', 'Database']
+      ];
+      const skillsSheet = XLSX.utils.aoa_to_sheet(skillsData);
+      XLSX.utils.book_append_sheet(workbook, skillsSheet, 'Skills');
+      
+      // 4. Qualification Sheet
+      const qualificationData = [
+        ['FullName', 'Degree', 'Institute', 'Location', 'StartYear', 'EndYear', 'Description'],
+        ['John Doe', 'Master of Computer Science', 'University of Technology', 'New York, USA', '2020', '2022', 'Specialized in Software Engineering'],
+        ['John Doe', 'Bachelor of Computer Science', 'State University', 'California, USA', '2016', '2020', 'Graduated with honors'],
+        ['Jane Smith', 'PhD in Data Science', 'MIT', 'Massachusetts, USA', '2018', '2022', 'Research in machine learning algorithms'],
+        ['Jane Smith', 'Master of Statistics', 'Stanford University', 'California, USA', '2016', '2018', 'Focus on statistical modeling']
+      ];
+      const qualificationSheet = XLSX.utils.aoa_to_sheet(qualificationData);
+      XLSX.utils.book_append_sheet(workbook, qualificationSheet, 'Qualification');
+      
+      // 5. Work Experience Sheet
+      const workExperienceData = [
+        ['FullName', 'Company', 'Role', 'StartDate', 'EndDate', 'Description'],
+        ['John Doe', 'Tech Solutions Inc', 'Senior Software Developer', '2022-01-15', '2024-01-15', 'Led development of web applications using React and Node.js'],
+        ['John Doe', 'StartupXYZ', 'Full Stack Developer', '2020-06-01', '2021-12-31', 'Developed and maintained web applications'],
+        ['Jane Smith', 'AI Research Lab', 'Data Scientist', '2022-03-01', '', 'Developing machine learning models for predictive analytics'],
+        ['Jane Smith', 'DataCorp', 'Junior Data Analyst', '2020-01-01', '2022-02-28', 'Analyzed large datasets and created reports']
+      ];
+      const workExperienceSheet = XLSX.utils.aoa_to_sheet(workExperienceData);
+      XLSX.utils.book_append_sheet(workbook, workExperienceSheet, 'Work Experience');
+      
+      // Generate and download file
+      const fileName = `Candidate_Import_Template_${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.writeFile(workbook, fileName);
+      
+      await Swal.fire({
+        icon: 'success',
+        title: 'Template Downloaded!',
+        text: 'Excel template has been downloaded successfully.',
+        confirmButtonText: 'OK'
+      });
+    } catch (error) {
+      await Swal.fire({
+        icon: 'error',
+        title: 'Download Failed',
+        text: 'Failed to download template. Please install xlsx library: npm install xlsx',
+        confirmButtonText: 'OK'
+      });
+    }
+  };
+
+  const parseCSVFile = (csvText: string): any[] => {
+    const lines = csvText.split('\n').filter(line => line.trim());
+    if (lines.length < 2) {
+      throw new Error('CSV file must have at least a header row and one data row');
+    }
+
+    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+    const candidates: any[] = [];
+
+    // Process each data row
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
+      if (values.some(v => v !== '')) {
+        const candidate: any = {
+          qualifications: [],
+          experiences: [],
+          skills: [],
+          socialLinks: []
+        };
+
+        // Map CSV columns to candidate fields
+        headers.forEach((header, index) => {
+          const value = values[index] || '';
+          const normalizedHeader = header.toLowerCase().replace(/\s+/g, '');
+          
+          switch (normalizedHeader) {
+            case 'fullname':
+              candidate.fullName = value;
+              break;
+            case 'email':
+              candidate.email = value;
+              break;
+            case 'phonenumber':
+              candidate.phoneNumber = value;
+              break;
+            case 'password':
+              candidate.password = value;
+              break;
+            case 'shortbio':
+              candidate.shortBio = value;
+              break;
+            case 'sevisid':
+              candidate.sevisId = value;
+              break;
+            case 'ead':
+              candidate.ead = value;
+              break;
+            case 'degree':
+              candidate.degree = value;
+              break;
+            case 'supervisorname':
+              candidate.supervisorName = value;
+              break;
+            case 'supervisorcontact':
+              candidate.supervisorContact = value;
+              break;
+            // Handle array fields from CSV (comma-separated values)
+            case 'qualifications':
+              if (value) {
+                candidate.qualifications = parseArrayField(value, ['degree', 'institute', 'location', 'startYear', 'endYear', 'description']);
+              }
+              break;
+            case 'experiences':
+              if (value) {
+                candidate.experiences = parseArrayField(value, ['company', 'role', 'startDate', 'endDate', 'description']);
+              }
+              break;
+            case 'skills':
+              if (value) {
+                candidate.skills = parseArrayField(value, ['name', 'level', 'category']);
+              }
+              break;
+            case 'sociallinks':
+              if (value) {
+                candidate.socialLinks = parseArrayField(value, ['platform', 'url']);
+              }
+              break;
+          }
+        });
+
+        // Set default values
+        candidate.role = 'user';
+        candidate.adminId = typeof window !== 'undefined' ? localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user') || '{}').id : null : null;
+
+        candidates.push(candidate);
+      }
+    }
+
+    return candidates;
+  };
+
+  const parseArrayField = (value: string, fields: string[]): any[] => {
+    // Parse semicolon-separated entries, then pipe-separated fields within each entry
+    // Format: "entry1|field1|field2|field3;entry2|field1|field2|field3"
+    const entries = value.split(';').filter(entry => entry.trim());
+    return entries.map(entry => {
+      const values = entry.split('|').map(v => v.trim());
+      const obj: any = {};
+      fields.forEach((field, index) => {
+        obj[field] = values[index] || '';
+      });
+      return obj;
+    });
+  };
+
+  const parseMultiSheetExcel = (file: File): Promise<any[]> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = e.target?.result;
+          if (!data) {
+            reject(new Error('Failed to read file'));
+            return;
+          }
+
+          // Handle CSV files
+          if (file.name.toLowerCase().endsWith('.csv')) {
+            try {
+              const candidates = parseCSVFile(data.toString());
+              resolve(candidates);
+              return;
+            } catch (error) {
+              reject(new Error('Failed to parse CSV file: ' + (error as Error).message));
+              return;
+            }
+          }
+
+          // Dynamic import of xlsx library for Excel files
+          import('xlsx').then((XLSX) => {
+            try {
+              const workbook = XLSX.read(data, { type: 'array' });
+              const candidates: any[] = [];
+              
+              // Get all sheet names
+              const sheetNames = workbook.SheetNames;
+              
+              // Check if required sheets exist
+              const requiredSheets = ['Personal Info', 'Social Links', 'Skills', 'Qualification', 'Work Experience'];
+              const missingSheets = requiredSheets.filter(sheet => !sheetNames.includes(sheet));
+              
+              if (missingSheets.length > 0) {
+                reject(new Error(`Missing required sheets: ${missingSheets.join(', ')}`));
+                return;
+              }
+              
+              // Parse Personal Info sheet to get candidate list
+              const personalInfoSheet = workbook.Sheets['Personal Info'];
+              const personalInfoData = XLSX.utils.sheet_to_json(personalInfoSheet, { header: 1 });
+              
+              if (personalInfoData.length < 2) {
+                reject(new Error('Personal Info sheet must have at least a header row and one data row'));
+                return;
+              }
+              
+              const headers = (personalInfoData[0] as string[]).map(h => h?.toString().trim() || '');
+              
+              // Process each candidate
+              for (let i = 1; i < personalInfoData.length; i++) {
+                const row = personalInfoData[i] as any[];
+                if (row && row.some(cell => cell !== undefined && cell !== null && cell !== '')) {
+                  const candidate: any = {
+                    qualifications: [],
+                    experiences: [],
+                    skills: [],
+                    socialLinks: []
+                  };
+                  
+                  // Parse personal info
+                  headers.forEach((header, index) => {
+                    const value = row[index]?.toString().trim() || '';
+                    const normalizedHeader = header.toLowerCase().replace(/\s+/g, '');
+                    
+                    switch (normalizedHeader) {
+                      case 'fullname':
+                        candidate.fullName = value;
+                        break;
+                      case 'email':
+                        candidate.email = value;
+                        break;
+                      case 'phonenumber':
+                        candidate.phoneNumber = value;
+                        break;
+                      case 'password':
+                        candidate.password = value;
+                        break;
+                      case 'shortbio':
+                        candidate.shortBio = value;
+                        break;
+                      case 'sevisid':
+                        candidate.sevisId = value;
+                        break;
+                      case 'ead':
+                        candidate.ead = value;
+                        break;
+                      case 'degree':
+                        candidate.degree = value;
+                        break;
+                      case 'supervisorname':
+                        candidate.supervisorName = value;
+                        break;
+                      case 'supervisorcontact':
+                        candidate.supervisorContact = value;
+                        break;
+                    }
+                  });
+                  
+                  // Set default values
+                  candidate.role = 'user';
+                  candidate.adminId = typeof window !== 'undefined' ? localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user') || '{}').id : null : null;
+                  
+                  candidates.push(candidate);
+                }
+              }
+              
+              // Parse Social Links
+              const socialLinksSheet = workbook.Sheets['Social Links'];
+              const socialLinksData = XLSX.utils.sheet_to_json(socialLinksSheet, { header: 1 });
+              
+              for (let i = 1; i < socialLinksData.length; i++) {
+                const row = socialLinksData[i] as any[];
+                if (row && row.length >= 3) {
+                  const fullName = row[0]?.toString().trim();
+                  const platform = row[1]?.toString().trim();
+                  const url = row[2]?.toString().trim();
+                  
+                  if (fullName && platform && url) {
+                    const candidate = candidates.find(c => c.fullName === fullName);
+                    if (candidate) {
+                      candidate.socialLinks.push({ platform, url });
+                    }
+                  }
+                }
+              }
+              
+              // Parse Skills
+              const skillsSheet = workbook.Sheets['Skills'];
+              const skillsData = XLSX.utils.sheet_to_json(skillsSheet, { header: 1 });
+              
+              for (let i = 1; i < skillsData.length; i++) {
+                const row = skillsData[i] as any[];
+                if (row && row.length >= 3) {
+                  const fullName = row[0]?.toString().trim();
+                  const name = row[1]?.toString().trim();
+                  const level = row[2]?.toString().trim() || 'Beginner';
+                  const category = row[3]?.toString().trim() || '';
+                  
+                  if (fullName && name) {
+                    const candidate = candidates.find(c => c.fullName === fullName);
+                    if (candidate) {
+                      candidate.skills.push({ name, level, category });
+                    }
+                  }
+                }
+              }
+              
+              // Parse Qualifications
+              const qualificationSheet = workbook.Sheets['Qualification'];
+              const qualificationData = XLSX.utils.sheet_to_json(qualificationSheet, { header: 1 });
+              
+              for (let i = 1; i < qualificationData.length; i++) {
+                const row = qualificationData[i] as any[];
+                if (row && row.length >= 6) {
+                  const fullName = row[0]?.toString().trim();
+                  const degree = row[1]?.toString().trim();
+                  const institute = row[2]?.toString().trim();
+                  const location = row[3]?.toString().trim();
+                  const startYear = row[4]?.toString().trim();
+                  const endYear = row[5]?.toString().trim();
+                  const description = row[6]?.toString().trim() || '';
+                  
+                  if (fullName && degree && institute && location && startYear && endYear) {
+                    const candidate = candidates.find(c => c.fullName === fullName);
+                    if (candidate) {
+                      candidate.qualifications.push({
+                        degree,
+                        institute,
+                        location,
+                        startYear: parseInt(startYear),
+                        endYear: parseInt(endYear),
+                        description
+                      });
+                    }
+                  }
+                }
+              }
+              
+              // Parse Work Experience
+              const workExperienceSheet = workbook.Sheets['Work Experience'];
+              const workExperienceData = XLSX.utils.sheet_to_json(workExperienceSheet, { header: 1 });
+              
+              for (let i = 1; i < workExperienceData.length; i++) {
+                const row = workExperienceData[i] as any[];
+                if (row && row.length >= 5) {
+                  const fullName = row[0]?.toString().trim();
+                  const company = row[1]?.toString().trim();
+                  const role = row[2]?.toString().trim();
+                  const startDate = row[3]?.toString().trim();
+                  const endDate = row[4]?.toString().trim() || '';
+                  const description = row[5]?.toString().trim() || '';
+                  
+                  if (fullName && company && role && startDate) {
+                    const candidate = candidates.find(c => c.fullName === fullName);
+                    if (candidate) {
+                      // Convert Excel serial numbers to YYYY-MM-DD format
+                      const convertExcelDateToYYYYMMDD = (excelDate: string | number): string => {
+                        if (!excelDate) return '';
+                        
+                        // If it's already a string in YYYY-MM-DD format, return as is
+                        if (typeof excelDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(excelDate)) {
+                          return excelDate;
+                        }
+                        
+                        // If it's a number (Excel serial date), convert it
+                        if (typeof excelDate === 'number' || !isNaN(Number(excelDate))) {
+                          const serialDate = Number(excelDate);
+                          // Excel serial date conversion (Excel counts from 1900-01-01)
+                          const date = new Date((serialDate - 25569) * 86400 * 1000);
+                          return date.toISOString().split('T')[0]; // Return YYYY-MM-DD format
+                        }
+                        
+                        // If it's a string but not in YYYY-MM-DD format, try to parse it
+                        if (typeof excelDate === 'string') {
+                          const parsedDate = new Date(excelDate);
+                          if (!isNaN(parsedDate.getTime())) {
+                            return parsedDate.toISOString().split('T')[0];
+                          }
+                        }
+                        
+                        return String(excelDate);
+                      };
+                      
+                      const convertedStartDate = convertExcelDateToYYYYMMDD(startDate);
+                      const convertedEndDate = endDate ? convertExcelDateToYYYYMMDD(endDate) : undefined;
+                      
+                      console.log('Excel Import - Date conversion:', {
+                        company,
+                        rawStartDate: startDate,
+                        rawStartDateType: typeof startDate,
+                        convertedStartDate: convertedStartDate,
+                        rawEndDate: endDate,
+                        rawEndDateType: typeof endDate,
+                        convertedEndDate: convertedEndDate
+                      });
+                      
+                      candidate.experiences.push({
+                        company,
+                        role,
+                        startDate: convertedStartDate,
+                        endDate: convertedEndDate,
+                        description
+                      });
+                    }
+                  }
+                }
+              }
+              
+              resolve(candidates);
+            } catch (error) {
+              reject(new Error('Failed to parse Excel file: ' + (error as Error).message));
+            }
+          }).catch(() => {
+            reject(new Error('Excel parsing library not available. Please install xlsx library: npm install xlsx'));
+          });
+        } catch (error) {
+          reject(error);
+        }
+      };
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      
+      if (file.name.toLowerCase().endsWith('.csv')) {
+        reader.readAsText(file);
+      } else {
+        reader.readAsArrayBuffer(file);
+      }
+    });
+  };
+
+  const validateExcelCandidate = (candidate: any, index: number): { isValid: boolean; error?: string } => {
+    if (!candidate.fullName || typeof candidate.fullName !== 'string') {
+      return { isValid: false, error: `Candidate ${index + 1}: Full Name is required` };
+    }
+    
+    if (!candidate.email || typeof candidate.email !== 'string') {
+      return { isValid: false, error: `Candidate ${index + 1}: Email is required` };
+    }
+    
+    if (!validateEmail(candidate.email)) {
+      return { isValid: false, error: `Candidate ${index + 1}: Invalid email format` };
+    }
+    
+    if (!candidate.phoneNumber || typeof candidate.phoneNumber !== 'string') {
+      return { isValid: false, error: `Candidate ${index + 1}: Phone Number is required` };
+    }
+    
+    if (!validatePhone(candidate.phoneNumber)) {
+      return { isValid: false, error: `Candidate ${index + 1}: Invalid phone number format` };
+    }
+    
+    if (!candidate.password || typeof candidate.password !== 'string') {
+      return { isValid: false, error: `Candidate ${index + 1}: Password is required` };
+    }
+    
+    // Validate qualifications
+    if (!candidate.qualifications || candidate.qualifications.length === 0) {
+      return { isValid: false, error: `Candidate ${index + 1}: At least one qualification is required` };
+    }
+    
+    // Validate experiences
+    if (!candidate.experiences || candidate.experiences.length === 0) {
+      return { isValid: false, error: `Candidate ${index + 1}: At least one work experience is required` };
+    }
+    
+    // Validate skills
+    if (!candidate.skills || candidate.skills.length === 0) {
+      return { isValid: false, error: `Candidate ${index + 1}: At least one skill is required` };
+    }
+    
+    // Validate social links
+    if (!candidate.socialLinks || candidate.socialLinks.length === 0) {
+      return { isValid: false, error: `Candidate ${index + 1}: At least one social link is required` };
+    }
+    
+    return { isValid: true };
+  };
+
+  const handleExcelFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.match(/\.(xlsx|xls|csv)$/i)) {
+      await Swal.fire({
+        icon: 'error',
+        title: 'Invalid File Type',
+        text: 'Please upload an Excel file (.xlsx, .xls) or CSV file (.csv).',
+        confirmButtonText: 'OK'
+      });
+      return;
+    }
+
+    setExcelFile(file);
+    
+    try {
+      const candidates = await parseMultiSheetExcel(file);
+      
+      // Validate all candidates
+      const validationErrors: string[] = [];
+      const validCandidates: any[] = [];
+      
+      candidates.forEach((candidate, index) => {
+        const validation = validateExcelCandidate(candidate, index);
+        if (validation.isValid) {
+          validCandidates.push(candidate);
+        } else {
+          validationErrors.push(validation.error!);
+        }
+      });
+      
+      if (validationErrors.length > 0) {
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Validation Errors Found',
+          html: `Found ${validationErrors.length} validation errors:<br><br>${validationErrors.slice(0, 5).join('<br>')}${validationErrors.length > 5 ? '<br>... and more' : ''}`,
+          confirmButtonText: 'OK'
+        });
+      }
+      
+      setExcelData(validCandidates);
+      
+      if (validCandidates.length > 0) {
+        await Swal.fire({
+          icon: 'success',
+          title: 'File Parsed Successfully',
+          text: `Found ${validCandidates.length} valid candidates ready for import.`,
+          confirmButtonText: 'OK'
+        });
+      }
+    } catch (error: any) {
+      await Swal.fire({
+        icon: 'error',
+        title: 'File Parse Error',
+        text: error.message || 'Failed to parse Excel file.',
+        confirmButtonText: 'OK'
+      });
+    }
+  };
+
+  const handleExcelImport = async () => {
+    if (excelData.length === 0) {
+      await Swal.fire({
+        icon: 'error',
+        title: 'No Data',
+        text: 'Please upload and parse an Excel file first.',
+        confirmButtonText: 'OK'
+      });
+      return;
+    }
+
+    setExcelImportLoading(true);
+    setExcelImportProgress({ total: excelData.length, processed: 0, successful: 0, failed: 0, errors: [] });
+
+    try {
+      // Process candidates in batches
+      const batchSize = 3;
+      const results = { successful: 0, failed: 0, errors: [] as string[] };
+
+      for (let i = 0; i < excelData.length; i += batchSize) {
+        const batch = excelData.slice(i, i + batchSize);
+        
+        try {
+          // Send each candidate individually using existing addCandidate API
+          for (const candidate of batch) {
+            try {
+              const response = await addCandidate(candidate);
+              if (response.success !== false) {
+                results.successful++;
+              } else {
+                results.failed++;
+                results.errors.push(`Candidate ${candidate.fullName}: ${response.message || 'Unknown error'}`);
+              }
+            } catch (error: any) {
+              results.failed++;
+              results.errors.push(`Candidate ${candidate.fullName}: ${error.message || 'Network error'}`);
+            }
+          }
+        } catch (error: any) {
+          results.failed += batch.length;
+          results.errors.push(`Batch ${Math.floor(i / batchSize) + 1}: ${error.message || 'Network error'}`);
+        }
+
+        setExcelImportProgress(prev => ({
+          ...prev,
+          processed: Math.min(i + batchSize, excelData.length),
+          successful: results.successful,
+          failed: results.failed,
+          errors: results.errors
+        }));
+
+        // Small delay between batches
+        if (i + batchSize < excelData.length) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+
+      // Show final results
+      if (results.failed === 0) {
+        await Swal.fire({
+          icon: 'success',
+          title: 'Excel Import Successful!',
+          text: `Successfully imported ${results.successful} candidates.`,
+          confirmButtonText: 'OK',
+          timer: 3000,
+          timerProgressBar: true
+        });
+        router.push("/candidates");
+      } else {
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Excel Import Completed with Errors',
+          text: `Successfully imported: ${results.successful}, Failed: ${results.failed}`,
+          confirmButtonText: 'OK'
+        });
+      }
+    } catch (error: any) {
+      await Swal.fire({
+        icon: 'error',
+        title: 'Excel Import Failed',
+        text: error.message || 'An error occurred during Excel import.',
+        confirmButtonText: 'OK'
+      });
+    } finally {
+      setExcelImportLoading(false);
+    }
   };
 
   // ------------------------------- Step Navigation Validation -------------------------------
@@ -921,13 +1629,21 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
           endYear: edu.endYear ? Number(edu.endYear) : undefined,
           description: edu.description,
         })),
-        experiences: experiences.map((exp) => ({
-          company: exp.company,
-          role: exp.role,
-          startDate: (exp as any).startDate ? new Date((exp as any).startDate).toISOString() : undefined,
-          endDate: (exp as any).endDate ? new Date((exp as any).endDate).toISOString() : undefined,
-          description: exp.description,
-        })),
+        experiences: experiences.map((exp) => {
+          console.log('Backend Submission - Sending dates to backend:', {
+            company: exp.company,
+            startDate: (exp as any).startDate,
+            endDate: (exp as any).endDate
+          });
+          
+          return {
+            company: exp.company,
+            role: exp.role,
+            startDate: (exp as any).startDate || undefined,
+            endDate: (exp as any).endDate || undefined,
+            description: exp.description,
+          };
+        }),
         skills: skills.filter(skill => skill.name.trim() !== "").map((skill) => ({
           name: skill.name,
           level: skill.level,
@@ -984,15 +1700,169 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
     }
   };
 
+  // If in Excel import mode, show Excel import UI
+  if (excelImportMode) {
+    return (
+      <div className="p-6">
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold">Excel Import Candidates</h3>
+            <button
+              onClick={() => setExcelImportMode(false)}
+              className="ti-btn ti-btn-secondary"
+            >
+              Back to Manual Entry
+            </button>
+          </div>
+          
+          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-6">
+            <h4 className="font-semibold text-blue-800 dark:text-blue-200 mb-2">File Format Requirements:</h4>
+            <ul className="text-sm text-blue-700 dark:text-blue-300 space-y-1">
+              <li>• <strong>Excel Files (.xlsx/.xls):</strong> 5 Required Sheets - Personal Info, Social Links, Skills, Qualification, Work Experience</li>
+              <li>• <strong>CSV Files (.csv):</strong> Single sheet with all data in columns</li>
+              <li>• <strong>Required Columns:</strong> FullName, Email, PhoneNumber, Password</li>
+              <li>• <strong>Optional Columns:</strong> ShortBio, SevisId, Ead, Degree, SupervisorName, SupervisorContact</li>
+              <li>• <strong>Array Fields (CSV):</strong> Qualifications, Experiences, Skills, SocialLinks (use semicolon to separate entries, pipe to separate fields)</li>
+              <li>• <em>Note: Excel files require xlsx library: npm install xlsx</em></li>
+            </ul>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-12 gap-4">
+          <div className="col-span-12">
+            <div className="flex gap-4 mb-4">
+              {/* <button
+                onClick={downloadCSVTemplate}
+                className="ti-btn ti-btn-success text-white"
+              >
+                <i className="ri-file-text-line me-2"></i>
+                Download CSV Template
+              </button> */}
+              <button
+                onClick={downloadExcelTemplate}
+                className="ti-btn ti-btn-primary text-white"
+              >
+                <i className="ri-file-excel-line me-2"></i>
+                Download Excel Template
+              </button>
+            </div>
+          </div>
+
+          <div className="col-span-12">
+            <label className="form-label">Upload File</label>
+            <input
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={handleExcelFileUpload}
+              className="form-control w-full !rounded-md"
+            />
+            <small className="text-gray-500 text-xs mt-1">Supported formats: .csv (fully supported), .xlsx/.xls (requires xlsx library)</small>
+          </div>
+
+          {excelFile && (
+            <div className="col-span-12">
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                <h5 className="font-semibold mb-2">Selected File:</h5>
+                <p className="text-sm text-gray-600 dark:text-gray-400">{excelFile.name}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Size: {(excelFile.size / 1024).toFixed(2)} KB</p>
+              </div>
+            </div>
+          )}
+
+          {excelData.length > 0 && (
+            <div className="col-span-12">
+              <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+                <h5 className="font-semibold text-green-800 dark:text-green-200 mb-2">Ready to Import:</h5>
+                <p className="text-sm text-green-700 dark:text-green-300">
+                  {excelData.length} valid candidates found and ready for import.
+                </p>
+                <div className="mt-2">
+                  <h6 className="font-medium text-green-800 dark:text-green-200">Candidates Preview:</h6>
+                  <ul className="text-sm text-green-700 dark:text-green-300 mt-1">
+                    {excelData.slice(0, 3).map((candidate, index) => (
+                      <li key={index}>• {candidate.fullName} ({candidate.email})</li>
+                    ))}
+                    {excelData.length > 3 && <li>• ... and {excelData.length - 3} more</li>}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {excelImportLoading && (
+            <div className="col-span-12">
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                <h5 className="font-semibold text-blue-800 dark:text-blue-200 mb-2">Import Progress:</h5>
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-2">
+                  <div 
+                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${(excelImportProgress.processed / excelImportProgress.total) * 100}%` }}
+                  ></div>
+                </div>
+                <p className="text-sm text-blue-700 dark:text-blue-300">
+                  Processed: {excelImportProgress.processed} / {excelImportProgress.total} | 
+                  Successful: {excelImportProgress.successful} | 
+                  Failed: {excelImportProgress.failed}
+                </p>
+              </div>
+            </div>
+          )}
+
+          <div className="col-span-12 flex gap-4">
+            <button
+              onClick={handleExcelImport}
+              disabled={excelData.length === 0 || excelImportLoading}
+              className="ti-btn ti-btn-primary-full text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {excelImportLoading ? 'Importing...' : `Import ${excelData.length} Candidates`}
+            </button>
+            
+            <button
+              onClick={() => {
+                setExcelFile(null);
+                setExcelData([]);
+                setExcelImportProgress({ total: 0, processed: 0, successful: 0, failed: 0, errors: [] });
+              }}
+              className="ti-btn ti-btn-secondary"
+            >
+              Clear Data
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <Wizard 
-      step={step} 
-      onChange={setStep} 
-      onSubmit={handleSubmit}
-      validateStep={validateStep}
-      stepValidationErrors={stepValidationErrors}
-      canNavigateToStep={canNavigateToStep}
-    >
+    <div>
+      {/* Mode Selection */}
+      <div className="p-6 border-b border-defaultborder dark:border-defaultborder/10">
+        <div className="flex items-center justify-center gap-4">
+          <button
+            onClick={() => setExcelImportMode(false)}
+            className={`ti-btn ${!excelImportMode ? 'ti-btn-primary-full text-white' : 'ti-btn-secondary'}`}
+          >
+            <i className="ri-user-add-line me-2"></i>
+            Manual Entry
+          </button>
+          <button
+            onClick={() => setExcelImportMode(true)}
+            className={`ti-btn ${excelImportMode ? 'ti-btn-primary-full text-white' : 'ti-btn-secondary'}`}
+          >
+            <i className="ri-file-excel-line me-2"></i>
+            Excel Import
+          </button>
+        </div>
+      </div>
+
+      <Wizard 
+        step={step} 
+        onChange={setStep} 
+        onSubmit={handleSubmit}
+        validateStep={validateStep}
+        stepValidationErrors={stepValidationErrors}
+        canNavigateToStep={canNavigateToStep}
+      >
       <Step title={<><i className="ri-user-3-line basicstep-icon"></i> Personal Info</>}>
         <div className="p-6">
           <p className="mb-1 font-semibold text-[#8c9097] dark:text-white/50 opacity-50 text-[1.25rem]">01</p>
@@ -1768,5 +2638,6 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
         </div>
       </Step>
     </Wizard>
+    </div>
   );
 };

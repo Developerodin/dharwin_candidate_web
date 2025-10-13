@@ -14,3 +14,6 @@ export const Candidates_API = `${CANDIDATES_URL}`;
 
 // Ducuments API
 export const Documents_API = `${DOCUMENTS_URL}`;
+
+// Export Candidates API
+export const Export_Candidates_API = `${CANDIDATES_URL}/export`;
