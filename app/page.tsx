@@ -1,7 +1,7 @@
 "use client"
-import { basePath } from "@/next.config";
 import { auth } from "@/shared/firebase/firebaseapi";
 import { useAuth } from "@/shared/hooks/useAuth";
+import { forgotPassword } from "@/shared/lib/candidates";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -14,6 +14,8 @@ export default function Home() {
   const [email, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [passwordshow1, setpasswordshow1] = useState(false);
+  const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
+  const [forgotPasswordResponse, setForgotPasswordResponse] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); 
@@ -36,6 +38,48 @@ export default function Home() {
           text: (err as any)?.message || 'An error occurred during login.',
           confirmButtonText: 'OK'
         });
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      await Swal.fire({
+        icon: 'warning',
+        title: 'Email Required',
+        text: 'Please enter your email address first.',
+        confirmButtonText: 'OK'
+      });
+      return;
+    }
+
+    setForgotPasswordLoading(true);
+    setForgotPasswordResponse(null);
+    
+    try {
+      const response = await forgotPassword(email);
+      console.log('Forgot Password API Response:', response);
+      
+      setForgotPasswordResponse(JSON.stringify(response, null, 2));
+      
+      await Swal.fire({
+        icon: 'success',
+        title: 'Reset Email Sent',
+        text: 'Please check your email for password reset instructions.',
+        confirmButtonText: 'OK'
+      });
+    } catch (err: any) {
+      console.error('Forgot password failed:', err);
+      const errorMessage = err?.response?.data?.message || err?.message || 'Failed to send reset email';
+      setForgotPasswordResponse(`Error: ${errorMessage}`);
+      
+      await Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: errorMessage,
+        confirmButtonText: 'OK'
+      });
+    } finally {
+      setForgotPasswordLoading(false);
     }
   };
 
@@ -67,9 +111,14 @@ export default function Home() {
                       <div className="xl:col-span-12 col-span-12 mb-2">
                         <label htmlFor="signin-password" className="form-label text-default block">
                           Password
-                          <Link href="/authentication/reset-password/reset-basic/" className="float-right text-danger">
-                            Forget password ?
-                          </Link>
+                          <button 
+                            type="button"
+                            onClick={handleForgotPassword}
+                            disabled={forgotPasswordLoading}
+                            className="float-right text-danger bg-transparent border-none cursor-pointer hover:underline"
+                          >
+                            {forgotPasswordLoading ? 'Sending...' : 'Forget password ?'}
+                          </button>
                         </label>
                         <div className="input-group">
                           <input name="password" type={(passwordshow1) ? 'text' : "password"} value={password} onChange={e => setPassword(e.target.value)} className="form-control  !border-s form-control-lg !rounded-s-md" id="signin-password" placeholder="password" />
@@ -83,6 +132,18 @@ export default function Home() {
                       </div>
                     </div>
                   </form>
+
+                  {/* API Response Display */}
+                  {forgotPasswordResponse && (
+                    <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border">
+                      <h6 className="text-sm font-semibold mb-2 text-gray-700 dark:text-gray-300">
+                        Forgot Password API Response:
+                      </h6>
+                      <pre className="text-xs text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-900 p-3 rounded border overflow-auto max-h-40">
+                        {forgotPasswordResponse}
+                      </pre>
+                    </div>
+                  )}
 
                 </div>
               </div>

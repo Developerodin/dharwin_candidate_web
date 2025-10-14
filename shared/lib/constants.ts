@@ -21,3 +21,9 @@ export const Export_Candidates_API = `${CANDIDATES_URL}/export`;
 
 // Candidate SalarySlips API
 export const Candidate_SalarySlips_API = `${CANDIDATES_URL}/salary-slips`;
+
+// Verify Document API
+export const Verify_Document_API = `${CANDIDATES_URL}/documents/verify`;
+
+// fetch candidate documents
+export const Fetch_Candidate_Documents_API = `${CANDIDATES_URL}/documents`;

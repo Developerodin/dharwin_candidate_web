@@ -6,7 +6,7 @@ const Select = dynamic(() => import("react-select"), {ssr : false});
 import dynamic from 'next/dynamic';
 import Swal from "sweetalert2";
 import { useEffect, useState } from 'react';
-import { fetchAllCandidates, deleteCandidate, addCandidateSalarySlips, uploadDocuments } from '@/shared/lib/candidates';
+import { fetchAllCandidates, deleteCandidate, addCandidateSalarySlips, uploadDocuments, fetchCandidateDocuments, verifyDocument } from '@/shared/lib/candidates';
 
 const Candidates = () => {
     const [canData, setCanData] = useState<any[]>([]);
@@ -25,6 +25,10 @@ const Candidates = () => {
     const [salarySlipYear, setSalarySlipYear] = useState<string>('');
     const [uploadingSalarySlip, setUploadingSalarySlip] = useState<boolean>(false);
     const [userRole, setUserRole] = useState<string>('user');
+    const [showDocumentsModal, setShowDocumentsModal] = useState<boolean>(false);
+    const [selectedCandidateForDocuments, setSelectedCandidateForDocuments] = useState<any>(null);
+    const [candidateDocuments, setCandidateDocuments] = useState<any[]>([]);
+    const [loadingDocuments, setLoadingDocuments] = useState<boolean>(false);
 
     const getCandidates = async () => {
         try {
@@ -123,6 +127,82 @@ const Candidates = () => {
         setSalarySlipMonth('');
         setSalarySlipYear('');
     };
+
+    // Function to open documents modal
+    const openDocumentsModal = async (candidate: any) => {
+        setSelectedCandidateForDocuments(candidate);
+        setShowDocumentsModal(true);
+        setLoadingDocuments(true);
+        setCandidateDocuments([]);
+        
+        try {
+            const response = await fetchCandidateDocuments(candidate.id || candidate._id);
+            
+            // Handle the API response structure
+            if (response && response.success && response.data && response.data.documents) {
+                setCandidateDocuments(Array.isArray(response.data.documents) ? response.data.documents : []);
+            } else if (Array.isArray(response)) {
+                setCandidateDocuments(response);
+            } else {
+                setCandidateDocuments([]);
+            }
+        } catch (error: any) {
+            console.error('Error fetching documents:', error);
+            await Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: 'Failed to fetch candidate documents. Please try again.',
+                confirmButtonText: 'OK'
+            });
+            setCandidateDocuments([]);
+        } finally {
+            setLoadingDocuments(false);
+        }
+    };
+
+    // Function to close documents modal
+    const closeDocumentsModal = () => {
+        setShowDocumentsModal(false);
+        setSelectedCandidateForDocuments(null);
+        setCandidateDocuments([]);
+        setLoadingDocuments(false);
+    };
+
+    // Function to handle document verification
+    const handleDocumentVerification = async (doc: any, index: number, status: number) => {
+        try {
+            const candidateId = selectedCandidateForDocuments?.id || selectedCandidateForDocuments?._id;
+            
+            // Call the verify document API
+            await verifyDocument(candidateId, index, status);
+            
+            // Update the local state
+            setCandidateDocuments(prevDocs => 
+                prevDocs.map((document, docIndex) => 
+                    docIndex === index 
+                        ? { ...document, status: status }
+                        : document
+                )
+            );
+            
+            const statusText = status === 1 ? 'verified' : 'rejected';
+            await Swal.fire({
+                icon: 'success',
+                title: 'Document Status Updated!',
+                text: `Document has been ${statusText}.`,
+                confirmButtonText: 'OK'
+            });
+        } catch (error: any) {
+            console.error('Verification error:', error);
+            await Swal.fire({
+                icon: 'error',
+                title: 'Verification Failed',
+                text: error?.message || 'Failed to update document status. Please try again.',
+                confirmButtonText: 'OK'
+            });
+        }
+    };
+
 
     // Function to handle salary slip upload
     const handleSalarySlipUpload = async () => {
@@ -469,6 +549,16 @@ const Candidates = () => {
                                                             <Link aria-label="anchor" href={`/candidates/edit?id=${encodeURIComponent(String(can?.id ?? can?._id))}`} scroll={false} className="ti-btn ti-btn-icon ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-info/10 text-info hover:bg-info hover:text-white hover:border-info">
                                                                 <i className="ri-pencil-line"></i>
                                                             </Link>
+                                                            <button 
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    openDocumentsModal(can);
+                                                                }}
+                                                                className="ti-btn ti-btn-icon ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-secondary/10 text-secondary hover:bg-secondary hover:text-white hover:border-secondary"
+                                                                title="View Documents"
+                                                            >
+                                                                <i className="ri-file-list-line"></i>
+                                                            </button>
                                                             {userRole === 'admin' && (
                                                                 <button 
                                                                     onClick={(e) => {
@@ -996,6 +1086,158 @@ const Candidates = () => {
                                             Upload Salary Slip
                                         </>
                                     )}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Documents Modal */}
+            {showDocumentsModal && selectedCandidateForDocuments && (
+                <div className="fixed inset-0 z-50 overflow-y-auto">
+                    <div className="flex items-center justify-center min-h-screen pt-4 px-2 sm:px-4 pb-20 text-center sm:block sm:p-0">
+                        {/* Background overlay */}
+                        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={closeDocumentsModal}></div>
+
+                        {/* Modal panel */}
+                        <div className="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all w-full max-w-xs mx-auto sm:max-w-2xl md:max-w-4xl lg:max-w-5xl sm:my-8 sm:align-middle">
+                            {/* Modal header */}
+                            <div className="bg-white dark:bg-gray-800 px-3 sm:px-6 py-3 sm:py-4 border-b border-gray-200 dark:border-gray-700">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center min-w-0 flex-1">
+                                        <div className="avatar avatar-md sm:avatar-lg avatar-rounded me-2 sm:me-3 flex-shrink-0">
+                                            <img src={selectedCandidateForDocuments?.src || "/assets/images/faces/1.jpg"} alt="Candidate" />
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <h3 className="text-sm sm:text-base md:text-lg font-semibold text-gray-900 dark:text-white truncate">
+                                                {selectedCandidateForDocuments?.fullName} - Documents
+                                            </h3>
+                                            <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                                                {selectedCandidateForDocuments?.email}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={closeDocumentsModal}
+                                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex-shrink-0 ml-2"
+                                    >
+                                        <i className="ri-close-line text-lg sm:text-xl"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Modal body */}
+                            <div className="bg-white dark:bg-gray-800 px-3 sm:px-6 py-3 sm:py-6">
+                                {loadingDocuments ? (
+                                    <div className="flex items-center justify-center py-8">
+                                        <div className="flex items-center">
+                                            <i className="ri-loader-4-line animate-spin text-2xl text-primary me-2"></i>
+                                            <span className="text-gray-600 dark:text-gray-300">Loading documents...</span>
+                                        </div>
+                                    </div>
+                                ) : candidateDocuments.length > 0 ? (
+                                    <div className="space-y-3 sm:space-y-4">
+                                        <h4 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-3 sm:mb-4">Candidate Documents ({candidateDocuments.length})</h4>
+                                        <div className="space-y-2 sm:space-y-3">
+                                            {candidateDocuments.map((doc: any, index: number) => (
+                                                <div key={index} className="flex items-center justify-between p-2 sm:p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                                                    <div className="flex items-center flex-1 min-w-0">
+                                                        <div className="flex-shrink-0 me-2 sm:me-3">
+                                                            {doc?.mimeType?.includes('image') ? (
+                                                                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
+                                                                    <img 
+                                                                        src={doc?.url || doc?.documentUrl} 
+                                                                        alt={doc?.label || doc?.originalName}
+                                                                        className="w-full h-full object-cover"
+                                                                        onError={(e) => {
+                                                                            const target = e.target as HTMLImageElement;
+                                                                            target.style.display = 'none';
+                                                                            target.nextElementSibling?.classList.remove('hidden');
+                                                                        }}
+                                                                    />
+                                                                    <div className="w-full h-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center hidden">
+                                                                        <i className="ri-image-line text-xl text-gray-500"></i>
+                                                                    </div>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center border border-gray-200 dark:border-gray-600">
+                                                                    {doc?.mimeType?.includes('pdf') ? (
+                                                                        <i className="ri-file-pdf-line text-xl sm:text-2xl text-red-500"></i>
+                                                                    ) : doc?.mimeType?.includes('word') || doc?.mimeType?.includes('document') ? (
+                                                                        <i className="ri-file-word-line text-xl sm:text-2xl text-blue-600"></i>
+                                                                    ) : doc?.mimeType?.includes('excel') || doc?.mimeType?.includes('spreadsheet') ? (
+                                                                        <i className="ri-file-excel-line text-xl sm:text-2xl text-green-600"></i>
+                                                                    ) : (
+                                                                        <i className="ri-file-line text-xl sm:text-2xl text-gray-500 dark:text-gray-400"></i>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="font-medium text-gray-900 dark:text-white truncate text-xs sm:text-sm">
+                                                                {doc?.label || doc?.originalName || `Document ${index + 1}`}
+                                                            </p>
+                                                            <div className="flex items-center space-x-1 sm:space-x-2 text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                                                {doc?.status !== undefined && (
+                                                                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs ${
+                                                                        doc.status === 0 ? 'bg-yellow-100 text-yellow-800' : 
+                                                                        doc.status === 1 ? 'bg-green-100 text-green-800' : 
+                                                                        'bg-red-100 text-red-800'
+                                                                    }`}>
+                                                                        {doc.status === 0 ? 'Pending' : doc.status === 1 ? 'Verified' : 'Rejected'}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center space-x-1 sm:space-x-2 flex-shrink-0">
+                                                        <button
+                                                            onClick={() => handleDocumentVerification(doc, index, 1)}
+                                                            className="ti-btn ti-btn-icon ti-btn-sm ti-btn-success !w-7 !h-7 sm:!w-8 sm:!h-8 !p-0"
+                                                            title="Verify document"
+                                                        >
+                                                            <i className="ri-check-line text-sm sm:text-base"></i>
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDocumentVerification(doc, index, 2)}
+                                                            className="ti-btn ti-btn-icon ti-btn-sm ti-btn-danger !w-7 !h-7 sm:!w-8 sm:!h-8 !p-0"
+                                                            title="Reject document"
+                                                        >
+                                                            <i className="ri-close-line text-sm sm:text-base"></i>
+                                                        </button>
+                                                        <a
+                                                            href={doc?.url || doc?.documentUrl}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="ti-btn ti-btn-icon ti-btn-sm ti-btn-primary !w-7 !h-7 sm:!w-8 sm:!h-8 !p-0"
+                                                            title="View document"
+                                                        >
+                                                            <i className="ri-external-link-line text-sm sm:text-base"></i>
+                                                        </a>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-8">
+                                        <i className="ri-file-list-line text-4xl text-gray-400 dark:text-gray-500 mb-4"></i>
+                                        <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No Documents Found</h4>
+                                        <p className="text-gray-500 dark:text-gray-400">
+                                            This candidate doesn't have any documents uploaded yet.
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Modal footer */}
+                            <div className="bg-gray-50 dark:bg-gray-700 px-3 sm:px-6 py-2 sm:py-3 flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3">
+                                <button
+                                    onClick={closeDocumentsModal}
+                                    className="ti-btn ti-btn-light w-full sm:w-auto text-sm sm:text-base"
+                                >
+                                    Close
                                 </button>
                             </div>
                         </div>

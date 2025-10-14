@@ -565,6 +565,7 @@ const profile = () => {
                                                                 <tr>
                                                                     <th>Thumbnail</th>
                                                                     <th>Document</th>
+                                                                    <th>Status</th>
                                                                     <th>Actions</th>
                                                                 </tr>
                                                             </thead>
@@ -578,6 +579,19 @@ const profile = () => {
                                                                             <th scope="row" className="!font-semibold text-start">
                                                                                 {d?.label || 'Document'}
                                                                             </th>
+                                                                            <td className="text-gray-600">
+                                                                                {d?.status !== undefined ? (
+                                                                                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                                                                        d.status === 0 ? 'bg-yellow-100 text-yellow-800' : 
+                                                                                        d.status === 1 ? 'bg-green-100 text-green-800' : 
+                                                                                        'bg-red-100 text-red-800'
+                                                                                    }`}>
+                                                                                        {d.status === 0 ? 'Pending' : d.status === 1 ? 'Approved' : 'Rejected'}
+                                                                                    </span>
+                                                                                ) : (
+                                                                                    <span className="text-gray-400">-</span>
+                                                                                )}
+                                                                            </td>
                                                                             <td className="text-gray-600">
                                                                                 {d?.url ? (
                                                                                     <div className="flex gap-2">
@@ -596,7 +610,7 @@ const profile = () => {
                                                                     ))
                                                                 ) : (
                                                                     <tr className="border border-defaultborder dark:border-defaultborder/10">
-                                                                        <td colSpan={3} className="text-[#8c9097] dark:text-white/50 text-center">No documents found.</td>
+                                                                        <td colSpan={4} className="text-[#8c9097] dark:text-white/50 text-center">No documents found.</td>
                                                                     </tr>
                                                                 )}
                                                             </tbody>
