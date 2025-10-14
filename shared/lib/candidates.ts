@@ -1,5 +1,5 @@
 import api from './api';
-import { Candidate_SalarySlips_API, Candidates_API, Documents_API, Export_Candidates_API, Fetch_Candidate_Documents_API, Forgot_Password_API, Onboard_Candidate_API, Register_User_API, Verify_Document_API } from './constants';
+import { Candidate_SalarySlips_API, Candidates_API, Documents_API, Export_Candidates_API, Fetch_Candidate_Documents_API, Forgot_Password_API, Onboard_Candidate_API, Register_User_API, Share_Candidate_API, Verify_Document_API } from './constants';
 
 // Fetch all leads
 export const fetchAllCandidates = async () => {
@@ -114,5 +114,14 @@ export const verifyDocument = async (candidateId: string, documentIndex: number,
 // Fetch candidate documents
 export const fetchCandidateDocuments = async (candidateId: string) => {
   const response = await api.get(`${Fetch_Candidate_Documents_API}/${candidateId}`);
+  return response.data;
+};
+
+// Share candidate
+export const shareCandidate = async (candidateId: string, shareData: {
+  email: string;
+  withDoc: boolean;
+}) => {
+  const response = await api.post(`${Share_Candidate_API}/${candidateId}`, shareData);
   return response.data;
 };

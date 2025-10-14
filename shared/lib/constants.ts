@@ -27,3 +27,6 @@ export const Verify_Document_API = `${CANDIDATES_URL}/documents/verify`;
 
 // fetch candidate documents
 export const Fetch_Candidate_Documents_API = `${CANDIDATES_URL}/documents`;
+
+// share candidate API
+export const Share_Candidate_API = `${CANDIDATES_URL}/share`;

@@ -4,7 +4,7 @@ import Pageheader from '@/shared/layout-components/page-header/pageheader'
 import Seo from '@/shared/layout-components/seo/seo'
 import Link from 'next/link'
 import React, { Fragment, useEffect, useState, useCallback } from 'react'
-import { fetchAllCandidates } from '@/shared/lib/candidates'
+import { fetchAllCandidates, shareCandidate } from '@/shared/lib/candidates'
 import PerfectScrollbar from 'react-perfect-scrollbar';
 import 'react-perfect-scrollbar/dist/css/styles.css';
 import { useRouter } from 'next/navigation';
@@ -16,6 +16,10 @@ const profile = () => {
     const [profileData, setProfileData] = useState<any>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
+    const [showShareModal, setShowShareModal] = useState<boolean>(false);
+    const [shareEmail, setShareEmail] = useState<string>('');
+    const [shareWithDoc, setShareWithDoc] = useState<boolean>(false);
+    const [sharingProfile, setSharingProfile] = useState<boolean>(false);
 
     // Function to check if profile is completed
     const isProfileCompleted = useCallback((profile: any): boolean => {
@@ -276,6 +280,75 @@ const profile = () => {
         }
     };
 
+    // Function to open share modal
+    const openShareModal = () => {
+        setShowShareModal(true);
+        setShareEmail('');
+        setShareWithDoc(false);
+    };
+
+    // Function to close share modal
+    const closeShareModal = () => {
+        setShowShareModal(false);
+        setShareEmail('');
+        setShareWithDoc(false);
+        setSharingProfile(false);
+    };
+
+    // Function to handle share profile
+    const handleShareProfile = async () => {
+        if (!shareEmail.trim()) {
+            await Swal.fire({
+                icon: 'warning',
+                title: 'Email Required',
+                text: 'Please enter an email address.',
+                confirmButtonText: 'OK'
+            });
+            return;
+        }
+
+        // Basic email validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(shareEmail.trim())) {
+            await Swal.fire({
+                icon: 'warning',
+                title: 'Invalid Email',
+                text: 'Please enter a valid email address.',
+                confirmButtonText: 'OK'
+            });
+            return;
+        }
+
+        try {
+            setSharingProfile(true);
+
+            const candidateId = profileData?.id || profileData?._id;
+            await shareCandidate(candidateId, {
+                email: shareEmail.trim(),
+                withDoc: shareWithDoc
+            });
+
+            await Swal.fire({
+                icon: 'success',
+                title: 'Profile Shared!',
+                text: `Your profile has been shared with ${shareEmail}.`,
+                confirmButtonText: 'OK'
+            });
+
+            closeShareModal();
+        } catch (error: any) {
+            console.error('Share profile error:', error);
+            await Swal.fire({
+                icon: 'error',
+                title: 'Share Failed',
+                text: error?.message || 'Failed to share profile. Please try again.',
+                confirmButtonText: 'OK'
+            });
+        } finally {
+            setSharingProfile(false);
+        }
+    };
+
     return (
         <Fragment>
             <Seo title={"Profile"} />
@@ -304,6 +377,14 @@ const profile = () => {
                                                     {/* Edit Profile */}
                                                 </button>
                                             )}
+                                            <button 
+                                                type="button" 
+                                                onClick={openShareModal}
+                                                className="ti-btn ti-btn-success !font-medium !gap-0"
+                                            >
+                                                <i className="ri-share-line me-1 align-middle inline-block"></i>
+                                                Share Profile
+                                            </button>
                                             {/* <button type="button" className="ti-btn ti-btn-light !font-medium !gap-0"><i className="ri-add-line me-1 align-middle inline-block"></i>Follow</button> */}
                                         </div>
                                     </div>
@@ -678,6 +759,122 @@ const profile = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Share Profile Modal */}
+            {showShareModal && (
+                <div className="fixed inset-0 z-50 overflow-y-auto">
+                    <div className="flex items-center justify-center min-h-screen pt-4 px-2 sm:px-4 pb-20 text-center sm:block sm:p-0">
+                        {/* Background overlay */}
+                        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={closeShareModal}></div>
+
+                        {/* Modal panel */}
+                        <div className="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all w-full max-w-md mx-auto sm:max-w-lg sm:my-8 sm:align-middle">
+                            {/* Modal header */}
+                            <div className="bg-white dark:bg-gray-800 px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center min-w-0 flex-1">
+                                        <div className="avatar avatar-md avatar-rounded me-3 flex-shrink-0">
+                                            <img src={profileData?.src || "/assets/images/faces/1.jpg"} alt="Profile" />
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white truncate">
+                                                Share Profile
+                                            </h3>
+                                            <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate">
+                                                {profileData?.fullName}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={closeShareModal}
+                                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex-shrink-0 ml-2"
+                                    >
+                                        <i className="ri-close-line text-xl"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Modal body */}
+                            <div className="bg-white dark:bg-gray-800 px-4 sm:px-6 py-4">
+                                <div className="space-y-4">
+                                    {/* Email Input */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                            Email Address <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="email"
+                                            value={shareEmail}
+                                            onChange={(e) => setShareEmail(e.target.value)}
+                                            className="form-control w-full"
+                                            placeholder="Enter email address to share with"
+                                            required
+                                        />
+                                    </div>
+
+                                    {/* Toggle for with/without documents */}
+                                    <div className="flex items-center justify-between p-3 border border-gray-200 dark:border-gray-700 rounded-lg">
+                                        <div className="flex items-center">
+                                            <i className="ri-file-list-line text-xl text-gray-500 dark:text-gray-400 me-3"></i>
+                                            <div>
+                                                <p className="font-medium text-gray-900 dark:text-white">Include Documents</p>
+                                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                                    {shareWithDoc ? 'Documents will be included' : 'Only profile information will be shared'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <label className="relative inline-flex items-center cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={shareWithDoc}
+                                                onChange={(e) => setShareWithDoc(e.target.checked)}
+                                                className="sr-only peer"
+                                            />
+                                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                                        </label>
+                                    </div>
+
+                                    {/* Share preview */}
+                                    <div className="bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
+                                        <p className="text-sm text-gray-600 dark:text-gray-300">
+                                            <strong>Share Preview:</strong> {profileData?.fullName}'s profile 
+                                            {shareWithDoc ? ' with documents' : ' without documents'} will be shared with {shareEmail || 'the specified email'}.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Modal footer */}
+                            <div className="bg-gray-50 dark:bg-gray-700 px-4 sm:px-6 py-3 flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3">
+                                <button
+                                    onClick={closeShareModal}
+                                    className="ti-btn ti-btn-light w-full sm:w-auto"
+                                    disabled={sharingProfile}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleShareProfile}
+                                    disabled={sharingProfile || !shareEmail.trim()}
+                                    className="ti-btn ti-btn-primary w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {sharingProfile ? (
+                                        <>
+                                            <i className="ri-loader-4-line animate-spin me-1"></i>
+                                            Sharing...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <i className="ri-share-line me-1"></i>
+                                            Share Profile
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </Fragment>
     )
 }

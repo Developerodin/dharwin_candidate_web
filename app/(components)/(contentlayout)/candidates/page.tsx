@@ -6,7 +6,7 @@ const Select = dynamic(() => import("react-select"), {ssr : false});
 import dynamic from 'next/dynamic';
 import Swal from "sweetalert2";
 import { useEffect, useState } from 'react';
-import { fetchAllCandidates, deleteCandidate, addCandidateSalarySlips, uploadDocuments, fetchCandidateDocuments, verifyDocument } from '@/shared/lib/candidates';
+import { fetchAllCandidates, deleteCandidate, addCandidateSalarySlips, uploadDocuments, fetchCandidateDocuments, verifyDocument, shareCandidate } from '@/shared/lib/candidates';
 
 const Candidates = () => {
     const [canData, setCanData] = useState<any[]>([]);
@@ -29,6 +29,11 @@ const Candidates = () => {
     const [selectedCandidateForDocuments, setSelectedCandidateForDocuments] = useState<any>(null);
     const [candidateDocuments, setCandidateDocuments] = useState<any[]>([]);
     const [loadingDocuments, setLoadingDocuments] = useState<boolean>(false);
+    const [showShareModal, setShowShareModal] = useState<boolean>(false);
+    const [selectedCandidateForShare, setSelectedCandidateForShare] = useState<any>(null);
+    const [shareEmail, setShareEmail] = useState<string>('');
+    const [shareWithDoc, setShareWithDoc] = useState<boolean>(false);
+    const [sharingCandidate, setSharingCandidate] = useState<boolean>(false);
 
     const getCandidates = async () => {
         try {
@@ -166,6 +171,77 @@ const Candidates = () => {
         setSelectedCandidateForDocuments(null);
         setCandidateDocuments([]);
         setLoadingDocuments(false);
+    };
+
+    // Function to open share modal
+    const openShareModal = (candidate: any) => {
+        setSelectedCandidateForShare(candidate);
+        setShowShareModal(true);
+        setShareEmail('');
+        setShareWithDoc(false);
+    };
+
+    // Function to close share modal
+    const closeShareModal = () => {
+        setShowShareModal(false);
+        setSelectedCandidateForShare(null);
+        setShareEmail('');
+        setShareWithDoc(false);
+        setSharingCandidate(false);
+    };
+
+    // Function to handle share candidate
+    const handleShareCandidate = async () => {
+        if (!shareEmail.trim()) {
+            await Swal.fire({
+                icon: 'warning',
+                title: 'Email Required',
+                text: 'Please enter an email address.',
+                confirmButtonText: 'OK'
+            });
+            return;
+        }
+
+        // Basic email validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(shareEmail.trim())) {
+            await Swal.fire({
+                icon: 'warning',
+                title: 'Invalid Email',
+                text: 'Please enter a valid email address.',
+                confirmButtonText: 'OK'
+            });
+            return;
+        }
+
+        try {
+            setSharingCandidate(true);
+
+            const candidateId = selectedCandidateForShare?.id || selectedCandidateForShare?._id;
+            await shareCandidate(candidateId, {
+                email: shareEmail.trim(),
+                withDoc: shareWithDoc
+            });
+
+            await Swal.fire({
+                icon: 'success',
+                title: 'Candidate Shared!',
+                text: `Candidate profile has been shared with ${shareEmail}.`,
+                confirmButtonText: 'OK'
+            });
+
+            closeShareModal();
+        } catch (error: any) {
+            console.error('Share candidate error:', error);
+            await Swal.fire({
+                icon: 'error',
+                title: 'Share Failed',
+                text: error?.message || 'Failed to share candidate. Please try again.',
+                confirmButtonText: 'OK'
+            });
+        } finally {
+            setSharingCandidate(false);
+        }
     };
 
     // Function to handle document verification
@@ -571,6 +647,16 @@ const Candidates = () => {
                                                                     <i className="ri-file-add-line"></i>
                                                                 </button>
                                                             )}
+                                                            <button 
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    openShareModal(can);
+                                                                }}
+                                                                className="ti-btn ti-btn-icon ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-primary/10 text-primary hover:bg-primary hover:text-white hover:border-primary"
+                                                                title="Share Candidate"
+                                                            >
+                                                                <i className="ri-share-line"></i>
+                                                            </button>
 
                                                             <button type="button"
                                                                 onClick={(e) => {
@@ -1238,6 +1324,122 @@ const Candidates = () => {
                                     className="ti-btn ti-btn-light w-full sm:w-auto text-sm sm:text-base"
                                 >
                                     Close
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Share Candidate Modal */}
+            {showShareModal && selectedCandidateForShare && (
+                <div className="fixed inset-0 z-50 overflow-y-auto">
+                    <div className="flex items-center justify-center min-h-screen pt-4 px-2 sm:px-4 pb-20 text-center sm:block sm:p-0">
+                        {/* Background overlay */}
+                        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={closeShareModal}></div>
+
+                        {/* Modal panel */}
+                        <div className="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all w-full max-w-md mx-auto sm:max-w-lg sm:my-8 sm:align-middle">
+                            {/* Modal header */}
+                            <div className="bg-white dark:bg-gray-800 px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center min-w-0 flex-1">
+                                        <div className="avatar avatar-md avatar-rounded me-3 flex-shrink-0">
+                                            <img src={selectedCandidateForShare?.src || "/assets/images/faces/1.jpg"} alt="Candidate" />
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white truncate">
+                                                Share Candidate Profile
+                                            </h3>
+                                            <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate">
+                                                {selectedCandidateForShare?.fullName}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={closeShareModal}
+                                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex-shrink-0 ml-2"
+                                    >
+                                        <i className="ri-close-line text-xl"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Modal body */}
+                            <div className="bg-white dark:bg-gray-800 px-4 sm:px-6 py-4">
+                                <div className="space-y-4">
+                                    {/* Email Input */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                            Email Address <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="email"
+                                            value={shareEmail}
+                                            onChange={(e) => setShareEmail(e.target.value)}
+                                            className="form-control w-full"
+                                            placeholder="Enter email address to share with"
+                                            required
+                                        />
+                                    </div>
+
+                                    {/* Toggle for with/without documents */}
+                                    <div className="flex items-center justify-between p-3 border border-gray-200 dark:border-gray-700 rounded-lg">
+                                        <div className="flex items-center">
+                                            <i className="ri-file-list-line text-xl text-gray-500 dark:text-gray-400 me-3"></i>
+                                            <div>
+                                                <p className="font-medium text-gray-900 dark:text-white">Include Documents</p>
+                                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                                    {shareWithDoc ? 'Documents will be included' : 'Only profile information will be shared'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <label className="relative inline-flex items-center cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={shareWithDoc}
+                                                onChange={(e) => setShareWithDoc(e.target.checked)}
+                                                className="sr-only peer"
+                                            />
+                                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                                        </label>
+                                    </div>
+
+                                    {/* Share preview */}
+                                    <div className="bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
+                                        <p className="text-sm text-gray-600 dark:text-gray-300">
+                                            <strong>Share Preview:</strong> {selectedCandidateForShare?.fullName}'s profile 
+                                            {shareWithDoc ? ' with documents' : ' without documents'} will be shared with {shareEmail || 'the specified email'}.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Modal footer */}
+                            <div className="bg-gray-50 dark:bg-gray-700 px-4 sm:px-6 py-3 flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3">
+                                <button
+                                    onClick={closeShareModal}
+                                    className="ti-btn ti-btn-light w-full sm:w-auto"
+                                    disabled={sharingCandidate}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleShareCandidate}
+                                    disabled={sharingCandidate || !shareEmail.trim()}
+                                    className="ti-btn ti-btn-primary w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {sharingCandidate ? (
+                                        <>
+                                            <i className="ri-loader-4-line animate-spin me-1"></i>
+                                            Sharing...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <i className="ri-share-line me-1"></i>
+                                            Share Candidate
+                                        </>
+                                    )}
                                 </button>
                             </div>
                         </div>
