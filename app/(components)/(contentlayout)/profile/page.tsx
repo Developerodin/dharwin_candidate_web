@@ -357,10 +357,16 @@ const profile = () => {
                 <div className="xxl:col-span-4 xl:col-span-12 col-span-12">
                     <div className="box overflow-hidden">
                         <div className="box-body !p-0">
-                            <div className="sm:flex items-start p-6      main-profile-cover">
+                            <div className="sm:flex items-start p-6 !bg-primary">
                                 <div>
                                     <span className="avatar avatar-xxl avatar-rounded online me-4">
-                                        <img src="/assets/images/faces/9.jpg" alt="" />
+                                        {profileData?.profilePicture ? (
+                                            <img src={profileData.profilePicture} alt="Profile Picture" />
+                                        ) : (
+                                            <div className="avatar avatar-xxl avatar-rounded bg-white/20 flex items-center justify-center">
+                                                <i className="ri-user-line text-4xl text-white"></i>
+                                            </div>
+                                        )}
                                     </span>
                                 </div>
                                 <div className="flex-grow main-profile-info">
@@ -371,7 +377,7 @@ const profile = () => {
                                                 <button 
                                                     type="button" 
                                                     onClick={handleEditProfile}
-                                                    className="ti-btn ti-btn-primary !font-medium !gap-0"
+                                                    className="ti-btn ti-btn-light !font-medium !gap-0"
                                                 >
                                                     <i className="ri-edit-line me-1 align-middle inline-block"></i>
                                                     {/* Edit Profile */}
@@ -380,7 +386,7 @@ const profile = () => {
                                             <button 
                                                 type="button" 
                                                 onClick={openShareModal}
-                                                className="ti-btn ti-btn-success !font-medium !gap-0"
+                                                className="ti-btn ti-btn-light !font-medium !gap-0"
                                             >
                                                 <i className="ri-share-line me-1 align-middle inline-block"></i>
                                                 Share Profile
@@ -390,8 +396,8 @@ const profile = () => {
                                     </div>
                                     <p className="mb-1 !text-white  opacity-[0.7]">{profileData?.shortBio}</p>
                                     <p className="text-[0.75rem] text-white mb-6 opacity-[0.5]">
-                                        <span className="me-4 inline-flex"><i className="ri-building-line me-1 align-middle"></i>Georgia</span>
-                                        <span className="inline-flex"><i className="ri-map-pin-line me-1 align-middle"></i>Washington D.C</span>
+                                        <span className="me-4 inline-flex"><i className="ri-building-line me-1 align-middle"></i>Country</span>
+                                        <span className="inline-flex"><i className="ri-map-pin-line me-1 align-middle"></i>Address</span>
                                     </p>
                                     {/* <div className="flex mb-0">
                                         <div className="me-6">

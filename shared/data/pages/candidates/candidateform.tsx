@@ -462,8 +462,8 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
   };
 
   const validatePhone = (phone: string): boolean => {
-    const phoneRegex = /^[\+]?[1-9][\d]{0,15}$/;
-    return phoneRegex.test(phone.replace(/[\s\-\(\)]/g, ''));
+    const phoneRegex = /^[6-9]\d{9}$/;
+    return phoneRegex.test(phone);
   };
 
   const validateURL = (url: string): boolean => {
@@ -606,9 +606,7 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
         // Documents are now optional, no validation required
         break;
         
-      case 4: // Salary Slips (Optional - Admin only)
-        // Only validate if user is admin and salary slips step exists
-        if (userRole === 'admin') {
+      case 4: // Salary Slips (Optional)
           const validSalarySlips = salarySlips.filter(slip => 
             validateRequired(slip.month) && validateRequired(slip.year) && (slip.file || slip.documentUrl)
           );
@@ -619,7 +617,7 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
             errors.push('Duplicate month/year combinations found');
             newFieldErrors['salarySlips'] = 'Duplicate month/year combinations found';
           }
-        }
+
         break;
     }
     
@@ -1378,16 +1376,13 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
         // Documents are now optional, always return true
         return true;
         
-      case 4: // Salary Slips (Optional - Admin only)
-        // Only validate if user is admin and salary slips step exists
-        if (userRole === 'admin') {
+      case 4: // Salary Slips (Optional)
           const validSalarySlips = salarySlips.filter(slip => 
             validateRequired(slip.month) && validateRequired(slip.year) && (slip.file || slip.documentUrl)
           );
           const hasDuplicates = validateSalarySlipDuplicates(salarySlips).length > 0;
           // Only validate duplicates if salary slips are provided, otherwise always return true
           return !hasDuplicates;
-        }
         // For non-admin users, this step doesn't exist, so always return true
         return true;
         
@@ -1930,7 +1925,10 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
                   onChange={handleFormChange} 
                   className={`form-control w-full !rounded-md ${fieldErrors['phoneNumber'] ? 'border-red-500' : ''}`} 
                   id="phone" 
-                  placeholder="ex: 98XXX4XXX0" 
+                  placeholder="Enter 10-digit mobile number" 
+                  maxLength={10}
+                  pattern="[6-9][0-9]{9}"
+                  inputMode="numeric"
                   // required
                 />
                 {fieldErrors['phoneNumber'] && (
@@ -2491,178 +2489,177 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
         </div>
       </Step>
 
-      {userRole === 'admin' && (
-        <Step title={<><i className="ri-money-dollar-box-line basicstep-icon"></i> Salary Slips</>}>
-          <div className="p-4">
-            <p className="mb-1 font-semibold text-[#8c9097] opacity-50 text-[1.25rem]">05</p>
-            <div className="text-[0.9375rem] font-semibold sm:flex block items-center justify-between mb-4">
-              <div>Salary Slips (Optional) :</div>
-              <button
-                type="button"
-                onClick={handleAddSalarySlip}
-                className="ti-btn bg-primary text-white !py-1 !px-2 !text-[0.75rem]"
-              >
-                + Add Salary Slip
-              </button>
-            </div>
-          {fieldErrors['salarySlips'] && (
-            <div className="text-red-500 text-sm mb-3">{fieldErrors['salarySlips']}</div>
-          )}
-          {validateSalarySlipDuplicates(salarySlips).length > 0 && (
-            <div className="text-red-500 text-sm mb-3">
-              Duplicate month/year combinations found. Each month and year combination must be unique.
-            </div>
-          )}
+      <Step title={<><i className="ri-money-dollar-box-line basicstep-icon"></i> Salary Slips</>}>
+        <div className="p-4">
+          <p className="mb-1 font-semibold text-[#8c9097] opacity-50 text-[1.25rem]">05</p>
+          <div className="text-[0.9375rem] font-semibold sm:flex block items-center justify-between mb-4">
+            <div>Salary Slips (Optional) :</div>
+            <button
+              type="button"
+              onClick={handleAddSalarySlip}
+              className="ti-btn bg-primary text-white !py-1 !px-2 !text-[0.75rem]"
+            >
+              + Add Salary Slip
+            </button>
+          </div>
+        {fieldErrors['salarySlips'] && (
+          <div className="text-red-500 text-sm mb-3">{fieldErrors['salarySlips']}</div>
+        )}
+        {validateSalarySlipDuplicates(salarySlips).length > 0 && (
+          <div className="text-red-500 text-sm mb-3">
+            Duplicate month/year combinations found. Each month and year combination must be unique.
+          </div>
+        )}
 
-          {/* Existing Salary Slips */}
-          {existingSalarySlips.length > 0 && (
-            <div className="mb-6">
-              <h6 className="text-sm font-semibold mb-3 text-gray-700 dark:text-gray-300">Existing Salary Slips</h6>
-              {existingSalarySlips.map((slip, index) => (
-                <div key={index} className="relative grid grid-cols-12 gap-4 border rounded-sm p-3 mb-3 bg-gray-50 dark:bg-gray-800">
-                  <button
-                    type="button"
-                    onClick={() => setExistingSalarySlips(existingSalarySlips.filter((_, i) => i !== index))}
-                    className="absolute top-2 right-2 border rounded-full px-1 text-red-500 hover:text-white hover:bg-red-600"
-                  >
-                    ✕
-                  </button>
+        {/* Existing Salary Slips */}
+        {existingSalarySlips.length > 0 && (
+          <div className="mb-6">
+            <h6 className="text-sm font-semibold mb-3 text-gray-700 dark:text-gray-300">Existing Salary Slips</h6>
+            {existingSalarySlips.map((slip, index) => (
+              <div key={index} className="relative grid grid-cols-12 gap-4 border rounded-sm p-3 mb-3 bg-gray-50 dark:bg-gray-800">
+                <button
+                  type="button"
+                  onClick={() => setExistingSalarySlips(existingSalarySlips.filter((_, i) => i !== index))}
+                  className="absolute top-2 right-2 border rounded-full px-1 text-red-500 hover:text-white hover:bg-red-600"
+                >
+                  ✕
+                </button>
 
-                  <div className="xl:col-span-4 col-span-12">
-                    <label className="form-label">Month</label>
-                    <input
-                      type="text"
-                      className="form-control w-full !rounded-md bg-white dark:bg-gray-700"
-                      value={slip.month}
-                      readOnly
-                    />
-                  </div>
-
-                  <div className="xl:col-span-4 col-span-12">
-                    <label className="form-label">Year</label>
-                    <input
-                      type="text"
-                      className="form-control w-full !rounded-md bg-white dark:bg-gray-700"
-                      value={slip.year}
-                      readOnly
-                    />
-                  </div>
-
-                  <div className="xl:col-span-4 col-span-12">
-                    <label className="form-label">File Preview</label>
-                    <div className="flex items-center">
-                      {getExistingFileThumbnail(slip.documentUrl, `${slip.month} ${slip.year}`)}
-                      <div className="ml-2 text-sm text-gray-600 dark:text-gray-400">
-                        <div className="text-xs">Existing File</div>
-                        <div className="text-xs font-medium text-blue-600 dark:text-blue-400">
-                          {slip.month} {slip.year}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                <div className="xl:col-span-4 col-span-12">
+                  <label className="form-label">Month</label>
+                  <input
+                    type="text"
+                    className="form-control w-full !rounded-md bg-white dark:bg-gray-700"
+                    value={slip.month}
+                    readOnly
+                  />
                 </div>
-              ))}
-            </div>
-          )}
 
-          {/* New Salary Slips */}
-          {salarySlips.length > 0 && (
-            <div>
-              {salarySlips.map((slip, index) => {
-                const duplicateIndexes = validateSalarySlipDuplicates(salarySlips);
-                const isDuplicate = duplicateIndexes.includes(index);
-                return (
-            <div key={slip.id} className={`relative grid grid-cols-12 gap-4 border rounded-sm p-3 mb-3 ${isDuplicate ? 'border-red-500 bg-red-50 dark:bg-red-900/20' : ''}`}>
-              <button
-                type="button"
-                onClick={() => setSalarySlips(salarySlips.filter(s => s.id !== slip.id))}
-                className="absolute top-2 right-2 border rounded-full px-1 text-red-500 hover:text-white hover:bg-red-600"
-              >
-                ✕
-              </button>
+                <div className="xl:col-span-4 col-span-12">
+                  <label className="form-label">Year</label>
+                  <input
+                    type="text"
+                    className="form-control w-full !rounded-md bg-white dark:bg-gray-700"
+                    value={slip.year}
+                    readOnly
+                  />
+                </div>
 
-              <div className="xl:col-span-2 col-span-6">
-                <label className="form-label">Month <span className="text-red-500">*</span></label>
-                <select
-                  className={`form-control w-full !rounded-md ${fieldErrors['salarySlips'] || isDuplicate ? 'border-red-500' : ''}`}
-                  value={slip.month}
-                  onChange={(e) => handleSalarySlipChange(index, "month", e.target.value)}
-                  required
-                >
-                  <option value="">Select</option>
-                  <option value="January">January</option>
-                  <option value="February">February</option>
-                  <option value="March">March</option>
-                  <option value="April">April</option>
-                  <option value="May">May</option>
-                  <option value="June">June</option>
-                  <option value="July">July</option>
-                  <option value="August">August</option>
-                  <option value="September">September</option>
-                  <option value="October">October</option>
-                  <option value="November">November</option>
-                  <option value="December">December</option>
-                </select>
-              </div>
-
-              <div className="xl:col-span-2 col-span-6">
-                <label className="form-label">Year <span className="text-red-500">*</span></label>
-                <select
-                  className={`form-control w-full !rounded-md ${fieldErrors['salarySlips'] || isDuplicate ? 'border-red-500' : ''}`}
-                  value={slip.year}
-                  onChange={(e) => handleSalarySlipChange(index, "year", e.target.value)}
-                  required
-                >
-                  <option value="">Select</option>
-                  {Array.from({ length: 10 }, (_, i) => {
-                    const year = new Date().getFullYear() - i;
-                    return (
-                      <option key={year} value={year.toString()}>
-                        {year}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-
-              <div className="xl:col-span-4 col-span-12">
-                <label className="form-label">Upload Salary Slip</label>
-                <input
-                  type="file"
-                  accept=".jpg,.jpeg,.png,.pdf"
-                  className={`form-control w-full !rounded-md ${fieldErrors['salarySlips'] ? 'border-red-500' : ''}`}
-                  onChange={(e) => {
-                    if (e.target.files && e.target.files[0]) {
-                      handleSalarySlipChange(index, "file", e.target.files[0]);
-                    }
-                  }}
-                  required
-                />
-                <small className="text-gray-500 text-xs mt-1">Supported formats: JPG, JPEG, PNG, PDF</small>
-              </div>
-
-              {(slip.file || slip.documentUrl) && (
-                <div className="xl:col-span-4 col-span-12 mt-6">
+                <div className="xl:col-span-4 col-span-12">
                   <label className="form-label">File Preview</label>
                   <div className="flex items-center">
-                    {slip.file ? getFileThumbnail(slip.file) : getExistingFileThumbnail(slip.documentUrl, `${slip.month} ${slip.year}`)}
+                    {getExistingFileThumbnail(slip.documentUrl, `${slip.month} ${slip.year}`)}
                     <div className="ml-2 text-sm text-gray-600 dark:text-gray-400">
-                      <div className="text-xs">{slip.file ? slip.file.name : 'Uploaded File'}</div>
+                      <div className="text-xs">Existing File</div>
                       <div className="text-xs font-medium text-blue-600 dark:text-blue-400">
                         {slip.month} {slip.year}
                       </div>
                     </div>
                   </div>
                 </div>
-              )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* New Salary Slips */}
+        {salarySlips.length > 0 && (
+          <div>
+            {salarySlips.map((slip, index) => {
+              const duplicateIndexes = validateSalarySlipDuplicates(salarySlips);
+              const isDuplicate = duplicateIndexes.includes(index);
+              return (
+          <div key={slip.id} className={`relative grid grid-cols-12 gap-4 border rounded-sm p-3 mb-3 ${isDuplicate ? 'border-red-500 bg-red-50 dark:bg-red-900/20' : ''}`}>
+            <button
+              type="button"
+              onClick={() => setSalarySlips(salarySlips.filter(s => s.id !== slip.id))}
+              className="absolute top-2 right-2 border rounded-full px-1 text-red-500 hover:text-white hover:bg-red-600"
+            >
+              ✕
+            </button>
+
+            <div className="xl:col-span-2 col-span-6">
+              <label className="form-label">Month <span className="text-red-500">*</span></label>
+              <select
+                className={`form-control w-full !rounded-md ${fieldErrors['salarySlips'] || isDuplicate ? 'border-red-500' : ''}`}
+                value={slip.month}
+                onChange={(e) => handleSalarySlipChange(index, "month", e.target.value)}
+                required
+              >
+                <option value="">Select</option>
+                <option value="January">January</option>
+                <option value="February">February</option>
+                <option value="March">March</option>
+                <option value="April">April</option>
+                <option value="May">May</option>
+                <option value="June">June</option>
+                <option value="July">July</option>
+                <option value="August">August</option>
+                <option value="September">September</option>
+                <option value="October">October</option>
+                <option value="November">November</option>
+                <option value="December">December</option>
+              </select>
             </div>
-                );
-              })}
+
+            <div className="xl:col-span-2 col-span-6">
+              <label className="form-label">Year <span className="text-red-500">*</span></label>
+              <select
+                className={`form-control w-full !rounded-md ${fieldErrors['salarySlips'] || isDuplicate ? 'border-red-500' : ''}`}
+                value={slip.year}
+                onChange={(e) => handleSalarySlipChange(index, "year", e.target.value)}
+                required
+              >
+                <option value="">Select</option>
+                {Array.from({ length: 10 }, (_, i) => {
+                  const year = new Date().getFullYear() - i;
+                  return (
+                    <option key={year} value={year.toString()}>
+                      {year}
+                    </option>
+                  );
+                })}
+              </select>
             </div>
-          )}
-        </div>
-        </Step>
-      )}
+
+            <div className="xl:col-span-4 col-span-12">
+              <label className="form-label">Upload Salary Slip</label>
+              <input
+                type="file"
+                accept=".jpg,.jpeg,.png,.pdf"
+                className={`form-control w-full !rounded-md ${fieldErrors['salarySlips'] ? 'border-red-500' : ''}`}
+                onChange={(e) => {
+                  if (e.target.files && e.target.files[0]) {
+                    handleSalarySlipChange(index, "file", e.target.files[0]);
+                  }
+                }}
+                required
+              />
+              <small className="text-gray-500 text-xs mt-1">Supported formats: JPG, JPEG, PNG, PDF</small>
+            </div>
+
+            {(slip.file || slip.documentUrl) && (
+              <div className="xl:col-span-4 col-span-12 mt-6">
+                <label className="form-label">File Preview</label>
+                <div className="flex items-center">
+                  {slip.file ? getFileThumbnail(slip.file) : getExistingFileThumbnail(slip.documentUrl, `${slip.month} ${slip.year}`)}
+                  <div className="ml-2 text-sm text-gray-600 dark:text-gray-400">
+                    <div className="text-xs">{slip.file ? slip.file.name : 'Uploaded File'}</div>
+                    <div className="text-xs font-medium text-blue-600 dark:text-blue-400">
+                      {slip.month} {slip.year}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+      </Step>
+
     </Wizard>
     </div>
   );
