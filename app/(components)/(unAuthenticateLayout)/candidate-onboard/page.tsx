@@ -182,7 +182,7 @@ export default function CandidateOnboardLayout() {
           email: formData.email,
           password: formData.password,
           role: "user",
-          phoneNumber: `+91${formData.phoneNumber}`, // Add +91 prefix for Indian numbers
+          phoneNumber: formData.phoneNumber, // Store phone number without prefix
           adminId: adminId
         };
 
