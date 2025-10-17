@@ -112,20 +112,62 @@ const profile = () => {
     // Download function for documents
     const handleDownload = async (url: string, filename: string) => {
         try {
+            // Show loading indicator
+            const loadingToast = Swal.fire({
+                title: 'Downloading...',
+                text: 'Please wait while we prepare your file.',
+                allowOutsideClick: false,
+                showConfirmButton: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
             const response = await fetch(url);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
             const blob = await response.blob();
             const downloadUrl = window.URL.createObjectURL(blob);
+            
+            // Create download link
             const link = document.createElement('a');
             link.href = downloadUrl;
             link.download = filename || 'document';
+            link.style.display = 'none';
+            
+            // Trigger download
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+            
+            // Clean up
             window.URL.revokeObjectURL(downloadUrl);
+            
+            // Close loading and show success
+            await Swal.fire({
+                icon: 'success',
+                title: 'Download Complete!',
+                text: 'Your file has been downloaded successfully.',
+                timer: 2000,
+                showConfirmButton: false
+            });
+            
         } catch (error) {
             console.error('Download failed:', error);
-            // Fallback: open in new tab
-            window.open(url, '_blank');
+            
+            // Close loading if still open
+            Swal.close();
+            
+            // Show error message
+            await Swal.fire({
+                icon: 'error',
+                title: 'Download Failed',
+                text: 'Unable to download the file. Please try again or contact support if the problem persists.',
+                confirmButtonText: 'OK'
+            });
         }
     };
 
@@ -360,13 +402,19 @@ const profile = () => {
                             <div className="sm:flex items-start p-6 !bg-primary">
                                 <div>
                                     <span className="avatar avatar-xxl avatar-rounded online me-4">
-                                        {profileData?.profilePicture ? (
-                                            <img src={profileData.profilePicture} alt="Profile Picture" />
-                                        ) : (
-                                            <div className="avatar avatar-xxl avatar-rounded bg-white/20 flex items-center justify-center">
-                                                <i className="ri-user-line text-4xl text-white"></i>
-                                            </div>
-                                        )}
+                                        <img 
+                                            src={
+                                                profileData?.profilePicture?.url || 
+                                                profileData?.src || 
+                                                "/assets/images/faces/1.jpg"
+                                            } 
+                                            alt={profileData?.fullName || "Profile Picture"} 
+                                            className="w-full h-full object-cover"
+                                            onError={(e) => {
+                                                const target = e.target as HTMLImageElement;
+                                                target.src = "/assets/images/faces/1.jpg";
+                                            }}
+                                        />
                                     </span>
                                 </div>
                                 <div className="flex-grow main-profile-info">
@@ -396,8 +444,8 @@ const profile = () => {
                                     </div>
                                     <p className="mb-1 !text-white  opacity-[0.7]">{profileData?.shortBio}</p>
                                     <p className="text-[0.75rem] text-white mb-6 opacity-[0.5]">
-                                        <span className="me-4 inline-flex"><i className="ri-building-line me-1 align-middle"></i>Country</span>
-                                        <span className="inline-flex"><i className="ri-map-pin-line me-1 align-middle"></i>Address</span>
+                                        <span className="me-4 inline-flex"><i className="ri-building-line me-1 align-middle"></i>{profileData?.address?.country || 'Country'}</span>
+                                        <span className="inline-flex"><i className="ri-map-pin-line me-1 align-middle"></i>{profileData?.address?.city || 'Location'}</span>
                                     </p>
                                     {/* <div className="flex mb-0">
                                         <div className="me-6">
@@ -461,7 +509,11 @@ const profile = () => {
                                         <span className="avatar avatar-sm avatar-rounded me-2 bg-light text-[#8c9097] dark:text-white/50">
                                             <i className="ri-map-pin-line align-middle text-[.875rem] text-[#8c9097] dark:text-white/50"></i>
                                         </span>
-                                        MIG-1-11, Monroe Street, Georgetown, Washington D.C, USA,20071
+                                        {profileData?.address ? (
+                                            `${profileData.address.streetAddress || ''} ${profileData.address.city || ''} ${profileData.address.state || ''} ${profileData.address.country || ''} ${profileData.address.zipCode || ''}`.trim() || 'Address not provided'
+                                        ) : (
+                                            'Address not provided'
+                                        )}
                                     </p>
                                 </div>
                             </div>
@@ -533,7 +585,7 @@ const profile = () => {
                                                             <tbody>
                                                                 <tr className="border border-defaultborder dark:border-defaultborder/10">
                                                                     <th scope="row" className="!font-semibold text-start">
-                                                                        Name
+                                                                        Full Name
                                                                     </th>
                                                                     <td className="text-gray-600">{profileData?.fullName || '-'}</td>
                                                                 </tr>
@@ -547,7 +599,57 @@ const profile = () => {
                                                                     <th scope="row" className="!font-semibold text-start">
                                                                         Phone Number
                                                                     </th>
-                                                                    <td className="text-gray-600">{profileData?.phoneNumber || '-'}</td>
+                                                                    <td className="text-gray-600">{profileData?.countryCode === "IN" ? "+91 " : "+1 "}{profileData?.phoneNumber || '-'}</td>
+                                                                </tr>
+                                                                <tr className="border border-defaultborder dark:border-defaultborder/10">
+                                                                    <th scope="row" className="!font-semibold text-start">
+                                                                        SEVIS ID
+                                                                    </th>
+                                                                    <td className="text-gray-600">{profileData?.sevisId || '-'}</td>
+                                                                </tr>
+                                                                <tr className="border border-defaultborder dark:border-defaultborder/10">
+                                                                    <th scope="row" className="!font-semibold text-start">
+                                                                        EAD
+                                                                    </th>
+                                                                    <td className="text-gray-600">{profileData?.ead || '-'}</td>
+                                                                </tr>
+                                                                <tr className="border border-defaultborder dark:border-defaultborder/10">
+                                                                    <th scope="row" className="!font-semibold text-start">
+                                                                        Degree
+                                                                    </th>
+                                                                    <td className="text-gray-600">{profileData?.degree || '-'}</td>
+                                                                </tr>
+                                                                <tr className="border border-defaultborder dark:border-defaultborder/10">
+                                                                    <th scope="row" className="!font-semibold text-start">
+                                                                        Visa Type
+                                                                    </th>
+                                                                    <td className="text-gray-600">{profileData?.visaType || '-'}</td>
+                                                                </tr>
+                                                                {profileData?.customVisaType && (
+                                                                    <tr className="border border-defaultborder dark:border-defaultborder/10">
+                                                                        <th scope="row" className="!font-semibold text-start">
+                                                                            Custom Visa Type
+                                                                        </th>
+                                                                        <td className="text-gray-600">{profileData.customVisaType}</td>
+                                                                    </tr>
+                                                                )}
+                                                                <tr className="border border-defaultborder dark:border-defaultborder/10">
+                                                                    <th scope="row" className="!font-semibold text-start">
+                                                                        Salary Range
+                                                                    </th>
+                                                                    <td className="text-gray-600">{profileData?.salaryRange || '-'}</td>
+                                                                </tr>
+                                                                <tr className="border border-defaultborder dark:border-defaultborder/10">
+                                                                    <th scope="row" className="!font-semibold text-start">
+                                                                        Supervisor Name
+                                                                    </th>
+                                                                    <td className="text-gray-600">{profileData?.supervisorName || '-'}</td>
+                                                                </tr>
+                                                                <tr className="border border-defaultborder dark:border-defaultborder/10">
+                                                                    <th scope="row" className="!font-semibold text-start">
+                                                                        Supervisor Contact
+                                                                    </th>
+                                                                    <td className="text-gray-600">{profileData?.supervisorCountryCode === "IN" ? "+91 " : "+1 "}{profileData?.supervisorContact || '-'}</td>
                                                                 </tr>
                                                                 <tr className="border border-defaultborder dark:border-defaultborder/10">
                                                                     <th scope="row" className="!font-semibold text-start">
@@ -558,6 +660,57 @@ const profile = () => {
                                                             </tbody>
                                                         </table>
                                                     </div>
+                                                    
+                                                    {/* Address Information */}
+                                                    {profileData?.address && (
+                                                        <div className="mt-6">
+                                                            <p className="text-[.9375rem] font-semibold mb-2">Address Information :</p>
+                                                            <div className="table-responsive min-w-full">
+                                                                <table className="table table-bordered whitespace-nowrap w-full">
+                                                                    <tbody>
+                                                                        <tr className="border border-defaultborder dark:border-defaultborder/10">
+                                                                            <th scope="row" className="!font-semibold text-start">
+                                                                                Street Address
+                                                                            </th>
+                                                                            <td className="text-gray-600">{profileData?.address?.streetAddress || '-'}</td>
+                                                                        </tr>
+                                                                        {profileData?.address?.streetAddress2 && (
+                                                                            <tr className="border border-defaultborder dark:border-defaultborder/10">
+                                                                                <th scope="row" className="!font-semibold text-start">
+                                                                                    Street Address 2
+                                                                                </th>
+                                                                                <td className="text-gray-600">{profileData.address.streetAddress2}</td>
+                                                                            </tr>
+                                                                        )}
+                                                                        <tr className="border border-defaultborder dark:border-defaultborder/10">
+                                                                            <th scope="row" className="!font-semibold text-start">
+                                                                                City
+                                                                            </th>
+                                                                            <td className="text-gray-600">{profileData?.address?.city || '-'}</td>
+                                                                        </tr>
+                                                                        <tr className="border border-defaultborder dark:border-defaultborder/10">
+                                                                            <th scope="row" className="!font-semibold text-start">
+                                                                                State
+                                                                            </th>
+                                                                            <td className="text-gray-600">{profileData?.address?.state || '-'}</td>
+                                                                        </tr>
+                                                                        <tr className="border border-defaultborder dark:border-defaultborder/10">
+                                                                            <th scope="row" className="!font-semibold text-start">
+                                                                                Zip Code
+                                                                            </th>
+                                                                            <td className="text-gray-600">{profileData?.address?.zipCode || '-'}</td>
+                                                                        </tr>
+                                                                        <tr className="border border-defaultborder dark:border-defaultborder/10">
+                                                                            <th scope="row" className="!font-semibold text-start">
+                                                                                Country
+                                                                            </th>
+                                                                            <td className="text-gray-600">{profileData?.address?.country || '-'}</td>
+                                                                        </tr>
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                             <div className="tab-pane fade !p-0 !border-0 hidden !rounded-md" id="posts-tab-pane"
@@ -578,7 +731,7 @@ const profile = () => {
                                                                                             <p className="mb-4">Degree : <span className="text-[0.75rem] mb-1 text-[#8c9097] dark:text-white/50">{q?.degree || '-'}</span></p>
                                                                                             <p className="mb-4">University/Institute : <span className="text-[0.75rem] mb-1 text-[#8c9097] dark:text-white/50">{q?.institute || '-'}</span></p>
                                                                                             <p className="mb-4">Location : <span className="text-[0.75rem] mb-1 text-[#8c9097] dark:text-white/50">{q?.location || '-'}</span></p>
-                                                                                            <p className="mb-4">Start & End Year : <span className="text-[0.75rem] mb-1 text-[#8c9097] dark:text-white/50">{q?.startYear ?? '-'} - {q?.endYear ?? '-'}</span></p>
+                                                                                            <p className="mb-4">Start & End Year : <span className="text-[0.75rem] mb-1 text-[#8c9097] dark:text-white/50">{q?.startYear ? String(q.startYear) : '-'} - {q?.endYear ? String(q.endYear) : 'Present'}</span></p>
                                                                                             <p className="mb-4">Description : <span className="text-[0.75rem] mb-1 text-[#8c9097] dark:text-white/50">{q?.description || '-'}</span></p>
                                                                                         </div>
                                                                                     </div>
@@ -622,9 +775,9 @@ const profile = () => {
                                                                                 {e?.role || '-'}
                                                                             </p>
                                                                             <p className="mt-1 text-sm text-gray-600 dark:text-white/70">
-                                                                                {(e?.startDate ? String(e.startDate).slice(0,10) : '-')}
+                                                                                {e?.startDate ? new Date(e.startDate).toLocaleDateString() : '-'}
                                                                                 {' '}-{' '}
-                                                                                {(e?.endDate ? String(e.endDate).slice(0,10) : 'Present')}
+                                                                                {e?.endDate ? new Date(e.endDate).toLocaleDateString() : 'Present'}
                                                                             </p>
                                                                             {e?.description && (
                                                                                 <button type="button" className="mt-1 -ms-1 p-1 relative z-10 inline-flex items-center gap-x-2 text-xs rounded-lg border border-transparent text-gray-500 hover:bg-white hover:shadow-sm disabled:opacity-50 disabled:pointer-events-none dark:text-white/70 dark:hover:bg-bodybg dark:focus:outline-none dark:focus:ring-1 dark:focus:ring-white/10">
@@ -661,7 +814,7 @@ const profile = () => {
                                                                     profileData.documents.map((d: any, idx: number) => (
                                                                         <tr key={idx} className="border border-defaultborder dark:border-defaultborder/10">
                                                                             <td className="text-gray-600">
-                                                                                {d?.url ? getDocumentThumbnail(d.url, d.label) : '-'}
+                                                                                {d?.url || d?.documentUrl ? getDocumentThumbnail(d.url || d.documentUrl, d.label) : '-'}
                                                                             </td>
                                                                             <th scope="row" className="!font-semibold text-start">
                                                                                 {d?.label || 'Document'}
@@ -680,13 +833,13 @@ const profile = () => {
                                                                                 )}
                                                                             </td>
                                                                             <td className="text-gray-600">
-                                                                                {d?.url ? (
+                                                                                {d?.url || d?.documentUrl ? (
                                                                                     <div className="flex gap-2">
                                                                                         <button 
-                                                                                            onClick={() => handleDownload(d.url, d.label || 'document')}
+                                                                                            onClick={() => handleDownload(d.url || d.documentUrl, d.label || 'document')}
                                                                                             className="text-green-600 inline-flex items-center hover:underline"
                                                                                         >
-                                                                                            <i className="ri-download-line me-1 align-middle inline-block"></i>Download
+                                                                                            <i className="ri-download-line me-1 align-middle inline-block"></i>
                                                                                         </button>
                                                                                     </div>
                                                                                 ) : (
@@ -723,7 +876,7 @@ const profile = () => {
                                                                     profileData.salarySlips.map((slip: any, idx: number) => (
                                                                         <tr key={idx} className="border border-defaultborder dark:border-defaultborder/10">
                                                                             <td className="text-gray-600">
-                                                                                {slip?.documentUrl ? getDocumentThumbnail(slip.documentUrl, `${slip.month} ${slip.year}`) : '-'}
+                                                                                {slip?.documentUrl || slip?.url ? getDocumentThumbnail(slip.documentUrl || slip.url, `${slip.month} ${slip.year}`) : '-'}
                                                                             </td>
                                                                             <th scope="row" className="!font-semibold text-start">
                                                                                 {slip?.month || '-'}
@@ -732,13 +885,13 @@ const profile = () => {
                                                                                 {slip?.year || '-'}
                                                                             </td>
                                                                             <td className="text-gray-600">
-                                                                                {slip?.documentUrl ? (
+                                                                                {slip?.documentUrl || slip?.url ? (
                                                                                     <div className="flex gap-2">
                                                                                         <button 
-                                                                                            onClick={() => handleDownload(slip.documentUrl, `${slip.month}_${slip.year}_salary_slip`)}
+                                                                                            onClick={() => handleDownload(slip.documentUrl || slip.url, `${slip.month}_${slip.year}_salary_slip`)}
                                                                                             className="text-green-600 inline-flex items-center hover:underline"
                                                                                         >
-                                                                                            <i className="ri-download-line me-1 align-middle inline-block"></i>Download
+                                                                                            <i className="ri-download-line me-1 align-middle inline-block"></i>
                                                                                         </button>
                                                                                     </div>
                                                                                 ) : (

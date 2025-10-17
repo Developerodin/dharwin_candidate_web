@@ -284,13 +284,55 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
   }, [initialData, router]);
 
   const [formData, setFormData] = useState({ 
-    fullName: "", email: "", phoneNumber: "", shortBio: "", sevisId: "", ead: "", degree: "", supervisorName: "", supervisorContact: "", password: "",
+    fullName: "", email: "", phoneNumber: "", countryCode: "IN", shortBio: "", sevisId: "", ead: "", degree: "", supervisorName: "", supervisorContact: "", supervisorCountryCode: "IN", visaType: "", customVisaType: "", salaryRange: "", streetAddress: "", streetAddress2: "", city: "", state: "", zipCode: "", country: "", password: "",
   });
+  const [profilePicture, setProfilePicture] = useState<File | null>(null);
+  const [profilePicturePreview, setProfilePicturePreview] = useState<string>("");
 
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
     // Clear individual field error when user starts typing
     clearFieldError(e.target.name);
+  };
+
+  const handleProfilePictureChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Validate file type - only allow JPEG, JPG, PNG
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+      const fileExtension = file.name.toLowerCase().split('.').pop();
+      const allowedExtensions = ['jpeg', 'jpg', 'png'];
+      
+      if (!allowedTypes.includes(file.type) && !allowedExtensions.includes(fileExtension || '')) {
+        Swal.fire({
+          icon: 'error',
+          title: 'Invalid File Format',
+          text: 'Please select a valid image file. Only JPEG, JPG, and PNG formats are allowed.',
+          confirmButtonText: 'OK'
+        });
+        return;
+      }
+      
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        Swal.fire({
+          icon: 'error',
+          title: 'File Too Large',
+          text: 'Please select an image smaller than 5MB',
+          confirmButtonText: 'OK'
+        });
+        return;
+      }
+      
+      setProfilePicture(file);
+      
+      // Create preview URL
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setProfilePicturePreview(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   // ------------------------------- State: Education -------------------------------
@@ -315,17 +357,17 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
   // ------------------------------- State: Work Experience -------------------------------
 
   const [experiences, setExperiences] = useState([
-    { company: "", role: "", startDate: "", endDate: "", description: "" },
+    { company: "", role: "", startDate: "", endDate: "", description: "", currentlyWorking: false },
   ]);
 
   const handleAddExperience = () => {
     setExperiences([
       ...experiences,
-      { company: "", role: "", startDate: "", endDate: "", description: "" },
+      { company: "", role: "", startDate: "", endDate: "", description: "", currentlyWorking: false },
     ]);
   };
 
-  const handleExpChange = (index: number, field: string, value: string) => {
+  const handleExpChange = (index: number, field: string, value: string | boolean) => {
     const newExperiences = [...experiences];
     (newExperiences[index] as any)[field] = value;
     setExperiences(newExperiences);
@@ -461,9 +503,17 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
     return emailRegex.test(email);
   };
 
-  const validatePhone = (phone: string): boolean => {
-    const phoneRegex = /^[6-9]\d{9}$/;
-    return phoneRegex.test(phone);
+  const validatePhone = (phone: string, countryCode: string = "IN"): boolean => {
+    if (countryCode === "IN") {
+      // Indian mobile number: 10 digits starting with 6-9
+      const phoneRegex = /^[6-9]\d{9}$/;
+      return phoneRegex.test(phone);
+    } else if (countryCode === "US") {
+      // US phone number: 10 digits
+      const phoneRegex = /^\d{10}$/;
+      return phoneRegex.test(phone);
+    }
+    return false;
   };
 
   const validateURL = (url: string): boolean => {
@@ -531,17 +581,52 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
         if (!validateRequired(formData.phoneNumber)) {
           errors.push('Phone Number is required');
           newFieldErrors['phoneNumber'] = 'Phone Number is required';
-        } else if (!validatePhone(formData.phoneNumber)) {
-          errors.push('Please enter a valid phone number');
-          newFieldErrors['phoneNumber'] = 'Please enter a valid phone number';
+        } else if (!validatePhone(formData.phoneNumber, formData.countryCode)) {
+          const countryName = formData.countryCode === "IN" ? "Indian" : "US";
+          errors.push(`Please enter a valid ${countryName} phone number`);
+          newFieldErrors['phoneNumber'] = `Please enter a valid ${countryName} phone number`;
         }
-        if (formData.supervisorContact && !validatePhone(formData.supervisorContact)) {
-          errors.push('Please enter a valid supervisor phone number');
-          newFieldErrors['supervisorContact'] = 'Please enter a valid supervisor phone number';
+        if (!validateRequired(formData.visaType)) {
+          errors.push('Visa Type is required');
+          newFieldErrors['visaType'] = 'Visa Type is required';
+        }
+        if (formData.supervisorContact && !validatePhone(formData.supervisorContact, formData.supervisorCountryCode)) {
+          const countryName = formData.supervisorCountryCode === "IN" ? "Indian" : "US";
+          errors.push(`Please enter a valid ${countryName} supervisor phone number`);
+          newFieldErrors['supervisorContact'] = `Please enter a valid ${countryName} supervisor phone number`;
+        }
+        if (formData.visaType === "Other" && !validateRequired(formData.customVisaType)) {
+          errors.push('Custom visa type is required when "Other" is selected');
+          newFieldErrors['customVisaType'] = 'Custom visa type is required when "Other" is selected';
         }
         if (!initialData && !validateRequired(formData.password)) {
           errors.push('Password is required');
           newFieldErrors['password'] = 'Password is required';
+        }
+        // Validate address fields
+        if (!validateRequired(formData.streetAddress)) {
+          errors.push('Street Address is required');
+          newFieldErrors['streetAddress'] = 'Street Address is required';
+        }
+        if (!validateRequired(formData.city)) {
+          errors.push('City is required');
+          newFieldErrors['city'] = 'City is required';
+        }
+        if (!validateRequired(formData.state)) {
+          errors.push('State is required');
+          newFieldErrors['state'] = 'State is required';
+        }
+        if (!validateRequired(formData.zipCode)) {
+          errors.push('ZIP Code is required');
+          newFieldErrors['zipCode'] = 'ZIP Code is required';
+        }
+        if (!validateRequired(formData.country)) {
+          errors.push('Country is required');
+          newFieldErrors['country'] = 'Country is required';
+        }
+        if (!validateRequired(formData.salaryRange)) {
+          errors.push('Salary Range is required');
+          newFieldErrors['salaryRange'] = 'Salary Range is required';
         }
         // Validate social links - at least one entry is required
         const validSocialLinks = socialLinks.filter(link => 
@@ -578,7 +663,8 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
         
       case 2: // Work Experience
         const validExperiences = experiences.filter(exp => 
-          validateRequired(exp.company) && validateRequired(exp.role) && validateRequired(exp.startDate) && validateRequired(exp.endDate)
+          validateRequired(exp.company) && validateRequired(exp.role) && validateRequired(exp.startDate) && 
+          (exp.currentlyWorking || validateRequired(exp.endDate))
         );
         if (validExperiences.length === 0) {
           errors.push('work experience required');
@@ -686,9 +772,9 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
       
       // 1. Personal Info Sheet
       const personalInfoData = [
-        ['FullName', 'Email', 'PhoneNumber', 'Password', 'ShortBio', 'SevisId', 'Ead', 'Degree', 'SupervisorName', 'SupervisorContact'],
-        ['John Doe', 'john.doe@example.com', '9876543210', 'password123', 'Experienced software developer', 'SEVIS123456', 'EAD789012', 'Master of Computer Science', 'Dr. Sarah Johnson', '9876543210'],
-        ['Jane Smith', 'jane.smith@example.com', '9876543211', 'password123', 'Data scientist with ML expertise', 'SEVIS123457', 'EAD789013', 'PhD in Data Science', 'Dr. Michael Brown', '9876543210']
+        ['FullName', 'Email', 'CountryCode', 'PhoneNumber', 'Password', 'ShortBio', 'SevisId', 'Ead', 'Degree', 'VisaType', 'SupervisorName', 'SupervisorContact', 'SalaryRange', 'StreetAddress', 'StreetAddress2', 'City', 'State', 'ZipCode', 'Country'],
+        ['John Doe', 'john.doe@example.com', 'US', '9876543210', 'password123', 'Experienced software developer', 'SEVIS123456', 'EAD789012', 'Master of Computer Science', 'F-1', 'Dr. Sarah Johnson', '9876543210', '$80,000 - $100,000', '123 Main St', 'Apt 4B', 'New York', 'NY', '10001', 'United States'],
+        ['Jane Smith', 'jane.smith@example.com', 'IN', '9876543211', 'password123', 'Data scientist with ML expertise', 'SEVIS123457', 'EAD789013', 'PhD in Data Science', 'H-1B', 'Dr. Michael Brown', '9876543210', '$90,000 - $120,000', '456 Oak Ave', '', 'San Francisco', 'CA', '94102', 'United States']
       ];
       const personalInfoSheet = XLSX.utils.aoa_to_sheet(personalInfoData);
       XLSX.utils.book_append_sheet(workbook, personalInfoSheet, 'Personal Info');
@@ -730,11 +816,11 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
       
       // 5. Work Experience Sheet
       const workExperienceData = [
-        ['FullName', 'Company', 'Role', 'StartDate', 'EndDate', 'Description'],
-        ['John Doe', 'Tech Solutions Inc', 'Senior Software Developer', '2022-01-15', '2024-01-15', 'Led development of web applications using React and Node.js'],
-        ['John Doe', 'StartupXYZ', 'Full Stack Developer', '2020-06-01', '2021-12-31', 'Developed and maintained web applications'],
-        ['Jane Smith', 'AI Research Lab', 'Data Scientist', '2022-03-01', '', 'Developing machine learning models for predictive analytics'],
-        ['Jane Smith', 'DataCorp', 'Junior Data Analyst', '2020-01-01', '2022-02-28', 'Analyzed large datasets and created reports']
+        ['FullName', 'Company', 'Role', 'StartDate', 'EndDate', 'Description', 'CurrentlyWorking'],
+        ['John Doe', 'Tech Solutions Inc', 'Senior Software Developer', '2022-01-15', '2024-01-15', 'Led development of web applications using React and Node.js', 'false'],
+        ['John Doe', 'StartupXYZ', 'Full Stack Developer', '2020-06-01', '2021-12-31', 'Developed and maintained web applications', 'false'],
+        ['Jane Smith', 'AI Research Lab', 'Data Scientist', '2022-03-01', '', 'Developing machine learning models for predictive analytics', 'true'],
+        ['Jane Smith', 'DataCorp', 'Junior Data Analyst', '2020-01-01', '2022-02-28', 'Analyzed large datasets and created reports', 'false']
       ];
       const workExperienceSheet = XLSX.utils.aoa_to_sheet(workExperienceData);
       XLSX.utils.book_append_sheet(workbook, workExperienceSheet, 'Work Experience');
@@ -794,6 +880,9 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
             case 'phonenumber':
               candidate.phoneNumber = value;
               break;
+            case 'countrycode':
+              candidate.countryCode = value;
+              break;
             case 'password':
               candidate.password = value;
               break;
@@ -815,6 +904,36 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
             case 'supervisorcontact':
               candidate.supervisorContact = value;
               break;
+            case 'supervisorcountrycode':
+              candidate.supervisorCountryCode = value;
+              break;
+            case 'visatype':
+              candidate.visaType = value;
+              break;
+            case 'customvisatype':
+              candidate.customVisaType = value;
+              break;
+            case 'salaryrange':
+              candidate.salaryRange = value;
+              break;
+            case 'streetaddress':
+              candidate.streetAddress = value;
+              break;
+            case 'streetaddress2':
+              candidate.streetAddress2 = value;
+              break;
+            case 'city':
+              candidate.city = value;
+              break;
+            case 'state':
+              candidate.state = value;
+              break;
+            case 'zipcode':
+              candidate.zipCode = value;
+              break;
+            case 'country':
+              candidate.country = value;
+              break;
             // Handle array fields from CSV (comma-separated values)
             case 'qualifications':
               if (value) {
@@ -823,7 +942,7 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
               break;
             case 'experiences':
               if (value) {
-                candidate.experiences = parseArrayField(value, ['company', 'role', 'startDate', 'endDate', 'description']);
+                candidate.experiences = parseArrayField(value, ['company', 'role', 'startDate', 'endDate', 'description', 'currentlyWorking']);
               }
               break;
             case 'skills':
@@ -927,7 +1046,10 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
                     socialLinks: []
                   };
                   
-                  // Parse personal info
+                  // Parse personal info and format like manual form payload
+                  let addressData: any = {};
+                  let customVisaType = '';
+                  
                   headers.forEach((header, index) => {
                     const value = row[index]?.toString().trim() || '';
                     const normalizedHeader = header.toLowerCase().replace(/\s+/g, '');
@@ -941,6 +1063,9 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
                         break;
                       case 'phonenumber':
                         candidate.phoneNumber = value;
+                        break;
+                      case 'countrycode':
+                        candidate.countryCode = value;
                         break;
                       case 'password':
                         candidate.password = value;
@@ -963,12 +1088,79 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
                       case 'supervisorcontact':
                         candidate.supervisorContact = value;
                         break;
+                      case 'supervisorcountrycode':
+                        candidate.supervisorCountryCode = value;
+                        break;
+                      case 'visatype':
+                        candidate.visaType = value;
+                        break;
+                      case 'customvisatype':
+                        customVisaType = value;
+                        break;
+                      case 'salaryrange':
+                        candidate.salaryRange = value;
+                        break;
+                      case 'streetaddress':
+                        addressData.streetAddress = value;
+                        break;
+                      case 'streetaddress2':
+                        addressData.streetAddress2 = value;
+                        break;
+                      case 'city':
+                        addressData.city = value;
+                        break;
+                      case 'state':
+                        addressData.state = value;
+                        break;
+                      case 'zipcode':
+                        addressData.zipCode = value;
+                        break;
+                      case 'country':
+                        addressData.country = value;
+                        break;
                     }
                   });
                   
-                  // Set default values
-                  candidate.role = 'user';
-                  candidate.adminId = typeof window !== 'undefined' ? localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user') || '{}').id : null : null;
+                  // Format data exactly like manual form payload
+                  const formattedCandidate = {
+                    role: 'user',
+                    fullName: candidate.fullName,
+                    email: candidate.email,
+                    phoneNumber: candidate.phoneNumber,
+                    countryCode: candidate.countryCode,
+                    shortBio: candidate.shortBio,
+                    profilePicture: {}, // Excel import doesn't include profile pictures
+                    sevisId: candidate.sevisId,
+                    ead: candidate.ead,
+                    degree: candidate.degree,
+                    supervisorName: candidate.supervisorName,
+                    supervisorContact: candidate.supervisorContact,
+                    supervisorCountryCode: candidate.supervisorCountryCode,
+                    visaType: candidate.visaType,
+                    ...(candidate.visaType === "Other" && customVisaType ? { customVisaType: customVisaType } : {}),
+                    salaryRange: candidate.salaryRange,
+                    address: {
+                      streetAddress: addressData.streetAddress || '',
+                      streetAddress2: addressData.streetAddress2 || '',
+                      city: addressData.city || '',
+                      state: addressData.state || '',
+                      zipCode: addressData.zipCode || '',
+                      country: addressData.country || '',
+                    },
+                    password: candidate.password,
+                    qualifications: candidate.qualifications || [],
+                    experiences: candidate.experiences || [],
+                    skills: candidate.skills || [],
+                    socialLinks: candidate.socialLinks || [],
+                    documents: [], // Excel import doesn't include documents
+                    salarySlips: [], // Excel import doesn't include salary slips
+                    adminId: typeof window !== 'undefined' && localStorage.getItem('user') 
+                      ? JSON.parse(localStorage.getItem('user') || '{}').id 
+                      : null
+                  };
+                  
+                  // Replace the candidate object with formatted version
+                  Object.assign(candidate, formattedCandidate);
                   
                   candidates.push(candidate);
                 }
@@ -1059,6 +1251,7 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
                   const startDate = row[3]?.toString().trim();
                   const endDate = row[4]?.toString().trim() || '';
                   const description = row[5]?.toString().trim() || '';
+                  const currentlyWorking = row[6]?.toString().trim().toLowerCase() === 'true';
                   
                   if (fullName && company && role && startDate) {
                     const candidate = candidates.find(c => c.fullName === fullName);
@@ -1109,7 +1302,8 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
                         role,
                         startDate: convertedStartDate,
                         endDate: convertedEndDate,
-                        description
+                        description,
+                        currentlyWorking
                       });
                     }
                   }
@@ -1345,9 +1539,17 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
                validateRequired(formData.email) && 
                validateEmail(formData.email) &&
                validateRequired(formData.phoneNumber) && 
-               validatePhone(formData.phoneNumber) &&
-               (!formData.supervisorContact || validatePhone(formData.supervisorContact)) &&
+               validatePhone(formData.phoneNumber, formData.countryCode) &&
+               validateRequired(formData.visaType) &&
+               (!formData.supervisorContact || validatePhone(formData.supervisorContact, formData.supervisorCountryCode)) &&
+               (formData.visaType !== "Other" || validateRequired(formData.customVisaType)) &&
                (initialData || validateRequired(formData.password)) &&
+               validateRequired(formData.streetAddress) &&
+               validateRequired(formData.city) &&
+               validateRequired(formData.state) &&
+               validateRequired(formData.zipCode) &&
+               validateRequired(formData.country) &&
+               validateRequired(formData.salaryRange) &&
                validSocialLinks.length > 0;
                
       case 1: // Qualification
@@ -1362,7 +1564,8 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
         
       case 2: // Work Experience
         const validExperiences = experiences.filter(exp => 
-          validateRequired(exp.company) && validateRequired(exp.role) && validateRequired(exp.startDate) && validateRequired(exp.endDate)
+          validateRequired(exp.company) && validateRequired(exp.role) && validateRequired(exp.startDate) && 
+          (exp.currentlyWorking || validateRequired(exp.endDate))
         );
         const invalidDateRanges = experiences.filter(exp => 
           exp.startDate && exp.endDate && !validateDateRange(exp.startDate, exp.endDate)
@@ -1446,14 +1649,34 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
         fullName: initialData.fullName || "",
         email: initialData.email || "",
         phoneNumber: initialData.phoneNumber || "",
+        countryCode: initialData.countryCode || "IN",
         shortBio: initialData.shortBio || "",
         sevisId: initialData.sevisId || "",
         ead: initialData.ead || "",
         degree: initialData.degree || "",
         supervisorName: initialData.supervisorName || "",
         supervisorContact: initialData.supervisorContact || "",
+        supervisorCountryCode: initialData.supervisorCountryCode || initialData.countryCode || "IN",
+        visaType: initialData.visaType || "",
+        customVisaType: initialData.customVisaType || "",
+        salaryRange: initialData.salaryRange || "",
+        streetAddress: initialData.address?.streetAddress || initialData.streetAddress || "",
+        streetAddress2: initialData.address?.streetAddress2 || initialData.streetAddress2 || "",
+        city: initialData.address?.city || initialData.city || "",
+        state: initialData.address?.state || initialData.state || "",
+        zipCode: initialData.address?.zipCode || initialData.zipCode || "",
+        country: initialData.address?.country || initialData.country || "",
         password: initialData ? "" : "",
       });
+      
+      // Set profile picture preview if exists
+      if (initialData.profilePicture) {
+        // Handle both old format (string URL) and new format (object with url property)
+        const profilePictureUrl = typeof initialData.profilePicture === 'string' 
+          ? initialData.profilePicture 
+          : initialData.profilePicture.url;
+        setProfilePicturePreview(profilePictureUrl);
+      }
       if (Array.isArray(initialData.qualifications) && initialData.qualifications.length) {
         setEducations(initialData.qualifications.map((q: any) => ({
           degree: q.degree || "",
@@ -1471,6 +1694,7 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
           startDate: x.startDate ? String(x.startDate).slice(0,10) : "",
           endDate: x.endDate ? String(x.endDate).slice(0,10) : "",
           description: x.description || "",
+          currentlyWorking: x.currentlyWorking || false,
         })));
       }
       if (Array.isArray(initialData.documents)) {
@@ -1626,17 +1850,55 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
 
       const isEdit = initialData?.id || initialData?._id;
       
+      // Handle profile picture upload if provided
+      let profilePictureData = null;
+      console.log('Profile picture state:', profilePicture);
+      if (profilePicture) {
+        try {
+          const uploadResult = await uploadDocuments([profilePicture], ['profile-picture']);
+          console.log('Profile picture upload result:', uploadResult);
+          if (uploadResult && uploadResult.success && uploadResult.data && uploadResult.data.length > 0) {
+            const uploadedFile = uploadResult.data[0];
+            profilePictureData = {
+              url: uploadedFile.url,
+              key: uploadedFile.key,
+              originalName: uploadedFile.originalName,
+              size: uploadedFile.size,
+              mimeType: uploadedFile.mimeType
+            };
+            console.log('Profile picture data:', profilePictureData);
+          }
+        } catch (uploadError) {
+          console.error('Profile picture upload failed:', uploadError);
+          throw new Error('Failed to upload profile picture');
+        }
+      }
+      
       const payload = {
         ...(isEdit ? {} : { role: "user" }), // Only include role for new candidates
         fullName: formData.fullName,
         email: formData.email,
         phoneNumber: formData.phoneNumber,
+        countryCode: formData.countryCode,
         shortBio: formData.shortBio,
+        profilePicture: profilePictureData || {},
         sevisId: formData.sevisId,
         ead: formData.ead,
         degree: formData.degree,
         supervisorName: formData.supervisorName,
         supervisorContact: formData.supervisorContact,
+        supervisorCountryCode: formData.supervisorCountryCode,
+        visaType: formData.visaType,
+        ...(formData.visaType === "Other" ? { customVisaType: formData.customVisaType } : {}),
+        salaryRange: formData.salaryRange,
+        address: {
+          streetAddress: formData.streetAddress,
+          streetAddress2: formData.streetAddress2,
+          city: formData.city,
+          state: formData.state,
+          zipCode: formData.zipCode,
+          country: formData.country,
+        },
         ...(initialData ? {} : { password: formData.password }),
         qualifications: educations.map((edu) => ({
           degree: edu.degree,
@@ -1659,6 +1921,7 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
             startDate: (exp as any).startDate || undefined,
             endDate: (exp as any).endDate || undefined,
             description: exp.description,
+            currentlyWorking: (exp as any).currentlyWorking || false,
           };
         }),
         skills: skills.filter(skill => skill.name.trim() !== "").map((skill) => ({
@@ -1670,9 +1933,11 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
           url: link.url,
         })),
         documents: [...existingDocs, ...uploadedDocs],
-        ...(userRole === 'admin' ? { salarySlips: [...existingSalarySlips, ...uploadedSalarySlips] } : {}),
+        salarySlips: [...existingSalarySlips, ...uploadedSalarySlips],
         ...(isEdit ? {} : { adminId: typeof window !== 'undefined' ? localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user') || '{}').id : null : null }), // Only include adminId for new candidates
       } as any;
+
+      console.log('Final payload profilePicture:', payload.profilePicture);
 
       let res: any;
       
@@ -1709,7 +1974,7 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
       await Swal.fire({
         icon: 'error',
         title: 'Creation Failed',
-        text: err?.message || err?.response?.data?.message || 'An error occurred while adding candidate.',
+        text: err?.response?.data?.message || 'An error occurred while adding candidate.',
         confirmButtonText: 'OK'
       });
     } finally {
@@ -1738,7 +2003,7 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
               <li>• <strong>Excel Files (.xlsx/.xls):</strong> 5 Required Sheets - Personal Info, Social Links, Skills, Qualification, Work Experience</li>
               <li>• <strong>CSV Files (.csv):</strong> Single sheet with all data in columns</li>
               <li>• <strong>Required Columns:</strong> FullName, Email, PhoneNumber, Password</li>
-              <li>• <strong>Optional Columns:</strong> ShortBio, SevisId, Ead, Degree, SupervisorName, SupervisorContact</li>
+              <li>• <strong>Optional Columns:</strong> ProfilePicture, ShortBio, SevisId, Ead, Degree, SupervisorName, SupervisorContact, SalaryRange</li>
               <li>• <strong>Array Fields (CSV):</strong> Qualifications, Experiences, Skills, SocialLinks (use semicolon to separate entries, pipe to separate fields)</li>
               <li>• <em>Note: Excel files require xlsx library: npm install xlsx</em></li>
             </ul>
@@ -1886,6 +2151,50 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
         <div className="p-6">
           <p className="mb-1 font-semibold text-[#8c9097] dark:text-white/50 opacity-50 text-[1.25rem]">01</p>
           <div className="grid grid-cols-12 gap-4">
+            {/* Profile Picture Upload */}
+            <div className="xl:col-span-12 col-span-12 mb-4">
+              <label className="form-label">Profile Picture (Optional)</label>
+              <div className="flex items-center gap-4">
+                <div className="relative">
+                  {profilePicturePreview ? (
+                    <img 
+                      src={profilePicturePreview} 
+                      alt="Profile Preview" 
+                      className="w-20 h-20 rounded-full object-cover border-2 border-gray-300"
+                    />
+                  ) : (
+                    <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center border-2 border-gray-300">
+                      <i className="ri-user-line text-2xl text-gray-400"></i>
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <input
+                    type="file"
+                    accept=".jpg,.jpeg,.png"
+                    onChange={handleProfilePictureChange}
+                    className="form-control w-full !rounded-md"
+                    id="profilePicture"
+                  />
+                  <small className="text-gray-500 text-xs mt-1">
+                    Supported formats: JPG, JPEG, PNG only. Max size: 5MB
+                  </small>
+                </div>
+                {profilePicturePreview && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProfilePicture(null);
+                      setProfilePicturePreview("");
+                    }}
+                    className="ti-btn ti-btn-danger ti-btn-sm"
+                  >
+                    <i className="ri-delete-bin-line"></i>
+                  </button>
+                )}
+              </div>
+            </div>
+            
             <div className="xl:col-span-6 col-span-12">
                 <label htmlFor="fullName" className="form-label">Full Name <span className="text-red-500">*</span></label>
                 <input 
@@ -1918,19 +2227,34 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
             </div>
             <div className="xl:col-span-6 col-span-12">
                 <label htmlFor="phone" className="form-label">Phone Number <span className="text-red-500">*</span></label>
-                <input 
-                  type="tel" 
-                  name="phoneNumber" 
-                  value={formData.phoneNumber} 
-                  onChange={handleFormChange} 
-                  className={`form-control w-full !rounded-md ${fieldErrors['phoneNumber'] ? 'border-red-500' : ''}`} 
-                  id="phone" 
-                  placeholder="Enter 10-digit mobile number" 
-                  maxLength={10}
-                  pattern="[6-9][0-9]{9}"
-                  inputMode="numeric"
-                  // required
-                />
+                <div className="flex gap-2">
+                  <div className="w-24">
+                    <select 
+                      name="countryCode" 
+                      value={formData.countryCode} 
+                      onChange={handleFormChange} 
+                      className="form-control w-full !rounded-md"
+                    >
+                      <option value="IN">🇮🇳 +91</option>
+                      <option value="US">🇺🇸 +1</option>
+                    </select>
+                  </div>
+                  <div className="flex-1">
+                    <input 
+                      type="tel" 
+                      name="phoneNumber" 
+                      value={formData.phoneNumber} 
+                      onChange={handleFormChange} 
+                      className={`form-control w-full !rounded-md ${fieldErrors['phoneNumber'] ? 'border-red-500' : ''}`} 
+                      id="phone" 
+                      placeholder={formData.countryCode === "IN" ? "Enter 10-digit mobile number" : "Enter 10-digit phone number"} 
+                      maxLength={10}
+                      pattern={formData.countryCode === "IN" ? "[6-9][0-9]{9}" : "[0-9]{10}"}
+                      inputMode="numeric"
+                      // required
+                    />
+                  </div>
+                </div>
                 {fieldErrors['phoneNumber'] && (
                   <div className="text-red-500 text-sm mt-1">{fieldErrors['phoneNumber']}</div>
                 )}
@@ -1953,18 +2277,221 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
             </div>
             <div className="xl:col-span-6 col-span-12">
                 <label htmlFor="supervisorContact" className="form-label">Supervisor Phone No.</label>
-                <input 
-                  type="text" 
-                  name="supervisorContact" 
-                  value={formData.supervisorContact} 
-                  onChange={handleFormChange} 
-                  className={`form-control w-full !rounded-md ${fieldErrors['supervisorContact'] ? 'border-red-500' : ''}`} 
-                  id="supervisorContact" 
-                  placeholder="ex: 98XXX4XXX0" 
-                />
+                <div className="flex gap-2">
+                  <div className="w-24">
+                    <select 
+                      name="supervisorCountryCode" 
+                      value={formData.supervisorCountryCode || formData.countryCode} 
+                      onChange={handleFormChange} 
+                      className="form-control w-full !rounded-md"
+                    >
+                      <option value="IN">🇮🇳 +91</option>
+                      <option value="US">🇺🇸 +1</option>
+                    </select>
+                  </div>
+                  <div className="flex-1">
+                    <input 
+                      type="text" 
+                      name="supervisorContact" 
+                      value={formData.supervisorContact} 
+                      onChange={handleFormChange} 
+                      className={`form-control w-full !rounded-md ${fieldErrors['supervisorContact'] ? 'border-red-500' : ''}`} 
+                      id="supervisorContact" 
+                      placeholder={formData.supervisorCountryCode === "US" || formData.countryCode === "US" ? "ex: 1234567890" : "ex: 98XXX4XXX0"} 
+                    />
+                  </div>
+                </div>
                 {fieldErrors['supervisorContact'] && (
                   <div className="text-red-500 text-sm mt-1">{fieldErrors['supervisorContact']}</div>
                 )}
+            </div>
+            <div className="xl:col-span-6 col-span-12">
+                <label htmlFor="visaType" className="form-label">Visa Type <span className="text-red-500">*</span></label>
+                <select 
+                  name="visaType" 
+                  value={formData.visaType} 
+                  onChange={handleFormChange} 
+                  className={`form-control w-full !rounded-md ${fieldErrors['visaType'] ? 'border-red-500' : ''}`} 
+                  id="visaType"
+                  required
+                >
+                  <option value="">Select Visa Type</option>
+                  <option value="F-1">F-1 (Student Visa)</option>
+                  <option value="J-1">J-1 (Exchange Visitor)</option>
+                  <option value="H-1B">H-1B (Specialty Occupation)</option>
+                  <option value="H-2B">H-2B (Temporary Non-Agricultural Worker)</option>
+                  <option value="L-1">L-1 (Intracompany Transferee)</option>
+                  <option value="O-1">O-1 (Extraordinary Ability)</option>
+                  <option value="P-1">P-1 (Athlete/Entertainer)</option>
+                  <option value="R-1">R-1 (Religious Worker)</option>
+                  <option value="TN">TN (NAFTA Professional)</option>
+                  <option value="E-1">E-1 (Treaty Trader)</option>
+                  <option value="E-2">E-2 (Treaty Investor)</option>
+                  <option value="E-3">E-3 (Australian Professional)</option>
+                  <option value="B-1">B-1 (Business Visitor)</option>
+                  <option value="B-2">B-2 (Tourist)</option>
+                  <option value="Other">Other</option>
+                </select>
+                {fieldErrors['visaType'] && (
+                  <div className="text-red-500 text-sm mt-1">{fieldErrors['visaType']}</div>
+                )}
+            </div>
+            {formData.visaType === "Other" && (
+              <div className="xl:col-span-6 col-span-12">
+                <label htmlFor="customVisaType" className="form-label">Custom Visa Type <span className="text-red-500">*</span></label>
+                <input 
+                  type="text" 
+                  name="customVisaType" 
+                  value={formData.customVisaType} 
+                  onChange={handleFormChange} 
+                  className={`form-control w-full !rounded-md ${fieldErrors['customVisaType'] ? 'border-red-500' : ''}`} 
+                  id="customVisaType" 
+                  placeholder="Enter visa type" 
+                  required
+                />
+                {fieldErrors['customVisaType'] && (
+                  <div className="text-red-500 text-sm mt-1">{fieldErrors['customVisaType']}</div>
+                )}
+              </div>
+            )}
+            
+            <div className="xl:col-span-6 col-span-12">
+                <label htmlFor="salaryRange" className="form-label">Salary Range <span className="text-red-500">*</span></label>
+                <select 
+                  name="salaryRange" 
+                  value={formData.salaryRange} 
+                  onChange={handleFormChange} 
+                  className={`form-control w-full !rounded-md ${fieldErrors['salaryRange'] ? 'border-red-500' : ''}`} 
+                  id="salaryRange"
+                >
+                  <option value="">Select Salary Range</option>
+                  <option value="$30,000 - $50,000">$30,000 - $50,000</option>
+                  <option value="$50,000 - $70,000">$50,000 - $70,000</option>
+                  <option value="$70,000 - $90,000">$70,000 - $90,000</option>
+                  <option value="$90,000 - $110,000">$90,000 - $110,000</option>
+                  <option value="$110,000 - $130,000">$110,000 - $130,000</option>
+                  <option value="$130,000 - $150,000">$130,000 - $150,000</option>
+                  <option value="$150,000 - $200,000">$150,000 - $200,000</option>
+                  <option value="$200,000+">$200,000+</option>
+                  <option value="Prefer not to disclose">Prefer not to disclose</option>
+                </select>
+                {fieldErrors['salaryRange'] && (
+                  <div className="text-red-500 text-sm mt-1">{fieldErrors['salaryRange']}</div>
+                )}
+            </div>
+            
+            {/* Address Section */}
+            
+            <div className="xl:col-span-12 col-span-12">
+              <div className="grid grid-cols-12 gap-4 border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-800/50">
+                <div className="xl:col-span-12 col-span-12">
+                  <h4 className="text-lg font-semibold text-gray-800 dark:text-white mb-4">Address Information</h4>
+                </div>
+                <div className="xl:col-span-12 col-span-12">
+                    <label htmlFor="streetAddress" className="form-label">Street Address <span className="text-red-500">*</span></label>
+                    <input 
+                      type="text" 
+                      name="streetAddress" 
+                      value={formData.streetAddress} 
+                      onChange={handleFormChange} 
+                      className={`form-control w-full !rounded-md ${fieldErrors['streetAddress'] ? 'border-red-500' : ''}`} 
+                      id="streetAddress" 
+                      placeholder="Enter street address" 
+                    />
+                    {fieldErrors['streetAddress'] && (
+                      <div className="text-red-500 text-sm mt-1">{fieldErrors['streetAddress']}</div>
+                    )}
+                </div>
+                
+                <div className="xl:col-span-12 col-span-12">
+                    <label htmlFor="streetAddress2" className="form-label">Street Address Line 2</label>
+                    <input 
+                      type="text" 
+                      name="streetAddress2" 
+                      value={formData.streetAddress2} 
+                      onChange={handleFormChange} 
+                      className="form-control w-full !rounded-md" 
+                      id="streetAddress2" 
+                      placeholder="Apartment, suite, unit, building, floor, etc." 
+                    />
+                </div>
+                
+                <div className="xl:col-span-6 col-span-12">
+                    <label htmlFor="city" className="form-label">City <span className="text-red-500">*</span></label>
+                    <input 
+                      type="text" 
+                      name="city" 
+                      value={formData.city} 
+                      onChange={handleFormChange} 
+                      className={`form-control w-full !rounded-md ${fieldErrors['city'] ? 'border-red-500' : ''}`} 
+                      id="city" 
+                      placeholder="Enter city" 
+                    />
+                    {fieldErrors['city'] && (
+                      <div className="text-red-500 text-sm mt-1">{fieldErrors['city']}</div>
+                    )}
+                </div>
+                
+                <div className="xl:col-span-6 col-span-12">
+                    <label htmlFor="state" className="form-label">State (Territory or Military Post) <span className="text-red-500">*</span></label>
+                    <input 
+                      type="text" 
+                      name="state" 
+                      value={formData.state} 
+                      onChange={handleFormChange} 
+                      className={`form-control w-full !rounded-md ${fieldErrors['state'] ? 'border-red-500' : ''}`} 
+                      id="state" 
+                      placeholder="Enter state, territory, or military post" 
+                    />
+                    {fieldErrors['state'] && (
+                      <div className="text-red-500 text-sm mt-1">{fieldErrors['state']}</div>
+                    )}
+                </div>
+                
+                <div className="xl:col-span-6 col-span-12">
+                    <label htmlFor="zipCode" className="form-label">ZIP Code <span className="text-red-500">*</span></label>
+                    <input 
+                      type="text" 
+                      name="zipCode" 
+                      value={formData.zipCode} 
+                      onChange={handleFormChange} 
+                      className={`form-control w-full !rounded-md ${fieldErrors['zipCode'] ? 'border-red-500' : ''}`} 
+                      id="zipCode" 
+                      placeholder="Enter ZIP code" 
+                    />
+                    {fieldErrors['zipCode'] && (
+                      <div className="text-red-500 text-sm mt-1">{fieldErrors['zipCode']}</div>
+                    )}
+                </div>
+                
+                <div className="xl:col-span-6 col-span-12">
+                    <label htmlFor="country" className="form-label">Country <span className="text-red-500">*</span></label>
+                    <select 
+                      name="country" 
+                      value={formData.country} 
+                      onChange={handleFormChange} 
+                      className={`form-control w-full !rounded-md ${fieldErrors['country'] ? 'border-red-500' : ''}`} 
+                      id="country"
+                    >
+                      <option value="">Select Country</option>
+                      <option value="United States">United States</option>
+                      <option value="Canada">Canada</option>
+                      <option value="United Kingdom">United Kingdom</option>
+                      <option value="Australia">Australia</option>
+                      <option value="Germany">Germany</option>
+                      <option value="France">France</option>
+                      <option value="India">India</option>
+                      <option value="China">China</option>
+                      <option value="Japan">Japan</option>
+                      <option value="Brazil">Brazil</option>
+                      <option value="Mexico">Mexico</option>
+                      <option value="Other">Other</option>
+                    </select>
+                    {fieldErrors['country'] && (
+                      <div className="text-red-500 text-sm mt-1">{fieldErrors['country']}</div>
+                    )}
+                </div>
+              </div>
             </div>
                             
             <div className="xl:col-span-12 col-span-12">
@@ -2278,15 +2805,35 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
                 />
               </div>
               <div className="xl:col-span-6 col-span-12">
-                <label className="form-label">End Date <span className="text-red-500">*</span></label>
+                <label className="form-label">End Date {!exp.currentlyWorking && <span className="text-red-500">*</span>}</label>
                 <input
                   type="date"
                   className={`form-control w-full !rounded-md ${fieldErrors['experience'] ? 'border-red-500' : ''}`}
                   placeholder="End Date"
                   value={(exp as any).endDate}
                   onChange={(e) => handleExpChange(index, "endDate", e.target.value)}
-                  // required
+                  disabled={exp.currentlyWorking}
+                  // required={!exp.currentlyWorking}
                 />
+              </div>
+              <div className="xl:col-span-12 col-span-12">
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id={`currentlyWorking-${index}`}
+                    checked={(exp as any).currentlyWorking}
+                    onChange={(e) => {
+                      handleExpChange(index, "currentlyWorking", e.target.checked);
+                      if (e.target.checked) {
+                        handleExpChange(index, "endDate", "");
+                      }
+                    }}
+                    className="form-checkbox h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                  />
+                  <label htmlFor={`currentlyWorking-${index}`} className="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                    Currently working here
+                  </label>
+                </div>
               </div>
               {exp.startDate && exp.endDate && !validateDateRange(exp.startDate, exp.endDate) && (
                 <div className="text-red-500 text-sm mt-2 col-span-12">

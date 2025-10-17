@@ -351,7 +351,7 @@ const Candidates = () => {
             
             // 1. Personal Info Sheet
             const personalInfoData = [
-                ['FullName', 'Email', 'PhoneNumber', 'ShortBio', 'SevisId', 'Ead', 'Degree', 'SupervisorName', 'SupervisorContact']
+                ['FullName', 'Email', 'PhoneNumber', 'CountryCode', 'ShortBio', 'SevisId', 'Ead', 'Degree', 'VisaType', 'CustomVisaType', 'SalaryRange', 'SupervisorName', 'SupervisorContact', 'SupervisorCountryCode', 'StreetAddress', 'StreetAddress2', 'City', 'State', 'ZipCode', 'Country']
             ];
             
             canData.forEach((candidate: any) => {
@@ -359,12 +359,23 @@ const Candidates = () => {
                     candidate?.fullName || '',
                     candidate?.email || '',
                     candidate?.phoneNumber || '',
+                    candidate?.countryCode || '',
                     candidate?.shortBio || '',
                     candidate?.sevisId || '',
                     candidate?.ead || '',
                     candidate?.degree || '',
+                    candidate?.visaType || '',
+                    candidate?.customVisaType || '',
+                    candidate?.salaryRange || '',
                     candidate?.supervisorName || '',
-                    candidate?.supervisorContact || ''
+                    candidate?.supervisorContact || '',
+                    candidate?.supervisorCountryCode || '',
+                    candidate?.address?.streetAddress || '',
+                    candidate?.address?.streetAddress2 || '',
+                    candidate?.address?.city || '',
+                    candidate?.address?.state || '',
+                    candidate?.address?.zipCode || '',
+                    candidate?.address?.country || ''
                 ]);
             });
             
@@ -438,7 +449,7 @@ const Candidates = () => {
             
             // 5. Work Experience Sheet
             const workExperienceData = [
-                ['FullName', 'Company', 'Role', 'StartDate', 'EndDate', 'Description']
+                ['FullName', 'Company', 'Role', 'StartDate', 'EndDate', 'CurrentlyWorking', 'Description']
             ];
             
             canData.forEach((candidate: any) => {
@@ -449,7 +460,8 @@ const Candidates = () => {
                             exp?.company || '',
                             exp?.role || '',
                             exp?.startDate ? String(exp.startDate).slice(0,10) : '',
-                            exp?.endDate ? String(exp.endDate).slice(0,10) : 'Present',
+                            exp?.endDate ? String(exp.endDate).slice(0,10) : (exp?.currentlyWorking ? 'Present' : ''),
+                            exp?.currentlyWorking ? 'Yes' : 'No',
                             exp?.description || ''
                         ]);
                     });
@@ -461,7 +473,7 @@ const Candidates = () => {
             
             // 6. Documents Sheet
             const documentsData = [
-                ['FullName', 'DocumentLabel', 'DocumentURL']
+                ['FullName', 'DocumentLabel', 'DocumentURL', 'DocumentType']
             ];
             
             canData.forEach((candidate: any) => {
@@ -470,7 +482,8 @@ const Candidates = () => {
                         documentsData.push([
                             candidate?.fullName || '',
                             doc?.label || 'Document',
-                            doc?.url || ''
+                            doc?.url || doc?.documentUrl || '',
+                            doc?.type || 'Document'
                         ]);
                     });
                 }
@@ -481,7 +494,7 @@ const Candidates = () => {
             
             // 7. Salary Slips Sheet
             const salarySlipsData = [
-                ['FullName', 'Month', 'Year', 'DocumentURL']
+                ['FullName', 'Month', 'Year', 'DocumentURL', 'DocumentType']
             ];
             
             canData.forEach((candidate: any) => {
@@ -491,7 +504,8 @@ const Candidates = () => {
                             candidate?.fullName || '',
                             slip?.month || '',
                             slip?.year || '',
-                            slip?.documentUrl || ''
+                            slip?.documentUrl || slip?.url || '',
+                            slip?.type || 'Salary Slip'
                         ]);
                     });
                 }
@@ -746,7 +760,19 @@ const Candidates = () => {
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center min-w-0 flex-1">
                                         <div className="avatar avatar-lg avatar-rounded me-3 flex-shrink-0">
-                                            <img src={selectedCandidate?.src || "/assets/images/faces/1.jpg"} alt="Candidate" />
+                                            <img 
+                                                src={
+                                                    selectedCandidate?.profilePicture?.url || 
+                                                    selectedCandidate?.src || 
+                                                    "/assets/images/faces/1.jpg"
+                                                } 
+                                                alt={selectedCandidate?.fullName || "Candidate"} 
+                                                className="w-full h-full object-cover"
+                                                onError={(e) => {
+                                                    const target = e.target as HTMLImageElement;
+                                                    target.src = "/assets/images/faces/1.jpg";
+                                                }}
+                                            />
                                         </div>
                                         <div className="min-w-0 flex-1">
                                             <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white truncate">
@@ -755,6 +781,11 @@ const Candidates = () => {
                                             <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate">
                                                 {selectedCandidate?.email}
                                             </p>
+                                            {selectedCandidate?.shortBio && (
+                                                <p className="text-xs text-gray-600 dark:text-gray-300 truncate mt-1">
+                                                    {selectedCandidate.shortBio}
+                                                </p>
+                                            )}
                                         </div>
                                     </div>
                                     <button
@@ -816,6 +847,10 @@ const Candidates = () => {
                                                     <p className="mt-1 text-sm text-gray-900 dark:text-white">{selectedCandidate?.phoneNumber || '-'}</p>
                                                 </div>
                                                 <div>
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Country Code</label>
+                                                    <p className="mt-1 text-sm text-gray-900 dark:text-white">{selectedCandidate?.countryCode || '-'}</p>
+                                                </div>
+                                                <div>
                                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">SEVIS ID</label>
                                                     <p className="mt-1 text-sm text-gray-900 dark:text-white">{selectedCandidate?.sevisId || '-'}</p>
                                                 </div>
@@ -827,11 +862,68 @@ const Candidates = () => {
                                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Degree</label>
                                                     <p className="mt-1 text-sm text-gray-900 dark:text-white">{selectedCandidate?.degree || '-'}</p>
                                                 </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Visa Type</label>
+                                                    <p className="mt-1 text-sm text-gray-900 dark:text-white">{selectedCandidate?.visaType || '-'}</p>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Custom Visa Type</label>
+                                                    <p className="mt-1 text-sm text-gray-900 dark:text-white">{selectedCandidate?.customVisaType || '-'}</p>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Salary Range</label>
+                                                    <p className="mt-1 text-sm text-gray-900 dark:text-white">{selectedCandidate?.salaryRange || '-'}</p>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Supervisor Name</label>
+                                                    <p className="mt-1 text-sm text-gray-900 dark:text-white">{selectedCandidate?.supervisorName || '-'}</p>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Supervisor Contact</label>
+                                                    <p className="mt-1 text-sm text-gray-900 dark:text-white">{selectedCandidate?.supervisorContact || '-'}</p>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Supervisor Country Code</label>
+                                                    <p className="mt-1 text-sm text-gray-900 dark:text-white">{selectedCandidate?.supervisorCountryCode || '-'}</p>
+                                                </div>
                                                 <div className="md:col-span-2">
                                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Short Bio</label>
                                                     <p className="mt-1 text-sm text-gray-900 dark:text-white">{selectedCandidate?.shortBio || '-'}</p>
                                                 </div>
                                             </div>
+                                            
+                                            {/* Address Information */}
+                                            {selectedCandidate?.address && (
+                                                <div className="mt-6">
+                                                    <h5 className="text-base font-semibold text-gray-900 dark:text-white mb-3">Address Information</h5>
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                                                        <div>
+                                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Street Address</label>
+                                                            <p className="mt-1 text-sm text-gray-900 dark:text-white">{selectedCandidate?.address?.streetAddress || '-'}</p>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Street Address 2</label>
+                                                            <p className="mt-1 text-sm text-gray-900 dark:text-white">{selectedCandidate?.address?.streetAddress2 || '-'}</p>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">City</label>
+                                                            <p className="mt-1 text-sm text-gray-900 dark:text-white">{selectedCandidate?.address?.city || '-'}</p>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">State</label>
+                                                            <p className="mt-1 text-sm text-gray-900 dark:text-white">{selectedCandidate?.address?.state || '-'}</p>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Zip Code</label>
+                                                            <p className="mt-1 text-sm text-gray-900 dark:text-white">{selectedCandidate?.address?.zipCode || '-'}</p>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Country</label>
+                                                            <p className="mt-1 text-sm text-gray-900 dark:text-white">{selectedCandidate?.address?.country || '-'}</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
 
@@ -857,7 +949,9 @@ const Candidates = () => {
                                                             </div>
                                                             <div>
                                                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Duration</label>
-                                                                <p className="mt-1 text-sm text-gray-900 dark:text-white">{qual?.startYear || '-'} - {qual?.endYear || '-'}</p>
+                                                                <p className="mt-1 text-sm text-gray-900 dark:text-white">
+                                                                    {qual?.startYear ? String(qual.startYear) : '-'} - {qual?.endYear ? String(qual.endYear) : 'Present'}
+                                                                </p>
                                                             </div>
                                                             <div className="md:col-span-2">
                                                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
@@ -867,7 +961,13 @@ const Candidates = () => {
                                                     </div>
                                                 ))
                                             ) : (
-                                                <p className="text-gray-500 dark:text-gray-400">No qualifications available</p>
+                                                <div className="text-center py-8">
+                                                    <i className="ri-book-line text-4xl text-gray-400 dark:text-gray-500 mb-4"></i>
+                                                    <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No Qualifications Found</h4>
+                                                    <p className="text-gray-500 dark:text-gray-400">
+                                                        This candidate doesn't have any educational qualifications listed yet.
+                                                    </p>
+                                                </div>
                                             )}
                                         </div>
                                     )}
@@ -890,11 +990,15 @@ const Candidates = () => {
                                                             </div>
                                                             <div>
                                                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Start Date</label>
-                                                                <p className="mt-1 text-sm text-gray-900 dark:text-white">{exp?.startDate ? String(exp.startDate).slice(0,10) : '-'}</p>
+                                                                <p className="mt-1 text-sm text-gray-900 dark:text-white">
+                                                                    {exp?.startDate ? new Date(exp.startDate).toLocaleDateString() : '-'}
+                                                                </p>
                                                             </div>
                                                             <div>
                                                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">End Date</label>
-                                                                <p className="mt-1 text-sm text-gray-900 dark:text-white">{exp?.endDate ? String(exp.endDate).slice(0,10) : 'Present'}</p>
+                                                                <p className="mt-1 text-sm text-gray-900 dark:text-white">
+                                                                    {exp?.endDate ? new Date(exp.endDate).toLocaleDateString() : 'Present'}
+                                                                </p>
                                                             </div>
                                                             <div className="md:col-span-2">
                                                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
@@ -904,7 +1008,13 @@ const Candidates = () => {
                                                     </div>
                                                 ))
                                             ) : (
-                                                <p className="text-gray-500 dark:text-gray-400">No work experience available</p>
+                                                <div className="text-center py-8">
+                                                    <i className="ri-briefcase-line text-4xl text-gray-400 dark:text-gray-500 mb-4"></i>
+                                                    <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No Work Experience Found</h4>
+                                                    <p className="text-gray-500 dark:text-gray-400">
+                                                        This candidate doesn't have any work experience listed yet.
+                                                    </p>
+                                                </div>
                                             )}
                                         </div>
                                     )}
@@ -913,18 +1023,34 @@ const Candidates = () => {
                                         <div className="space-y-4">
                                             <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Skills</h4>
                                             {Array.isArray(selectedCandidate?.skills) && selectedCandidate.skills.length > 0 ? (
-                                                <div className="flex flex-wrap gap-2">
+                                                <div className="space-y-3">
                                                     {selectedCandidate.skills.map((skill: any, index: number) => (
-                                                        <span key={index} className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-                                                            {skill?.name}
+                                                        <div key={index} className="flex items-center justify-between p-3 border border-gray-200 dark:border-gray-700 rounded-lg">
+                                                            <div className="flex items-center">
+                                                                <i className="ri-tools-line text-xl text-gray-500 dark:text-gray-400 me-3"></i>
+                                                                <div>
+                                                                    <p className="font-medium text-gray-900 dark:text-white">{skill?.name || `Skill ${index + 1}`}</p>
+                                                                    {skill?.category && (
+                                                                        <p className="text-sm text-gray-500 dark:text-gray-400">Category: {skill.category}</p>
+                                                                    )}
+                                                                </div>
+                                                            </div>
                                                             {skill?.level && (
-                                                                <span className="ml-1 text-xs opacity-75">({skill.level})</span>
+                                                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                                                                    {skill.level}
+                                                                </span>
                                                             )}
-                                                        </span>
+                                                        </div>
                                                     ))}
                                                 </div>
                                             ) : (
-                                                <p className="text-gray-500 dark:text-gray-400">No skills available</p>
+                                                <div className="text-center py-8">
+                                                    <i className="ri-tools-line text-4xl text-gray-400 dark:text-gray-500 mb-4"></i>
+                                                    <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No Skills Found</h4>
+                                                    <p className="text-gray-500 dark:text-gray-400">
+                                                        This candidate doesn't have any skills listed yet.
+                                                    </p>
+                                                </div>
                                             )}
                                         </div>
                                     )}
@@ -936,18 +1062,57 @@ const Candidates = () => {
                                                 <div className="space-y-3">
                                                     {selectedCandidate.documents.map((doc: any, index: number) => (
                                                         <div key={index} className="flex items-center justify-between p-3 border border-gray-200 dark:border-gray-700 rounded-lg">
-                                                            <div className="flex items-center">
-                                                                <i className="ri-file-line text-xl text-gray-500 dark:text-gray-400 me-3"></i>
-                                                                <div>
-                                                                    <p className="font-medium text-gray-900 dark:text-white">{doc?.label || 'Document'}</p>
-                                                                    <p className="text-sm text-gray-500 dark:text-gray-400">Click to view</p>
+                                                            <div className="flex items-center flex-1 min-w-0">
+                                                                <div className="flex-shrink-0 me-3">
+                                                                    {doc?.mimeType?.includes('image') ? (
+                                                                        <div className="w-10 h-10 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
+                                                                            <img 
+                                                                                src={doc?.url || doc?.documentUrl} 
+                                                                                alt={doc?.label || doc?.originalName}
+                                                                                className="w-full h-full object-cover"
+                                                                                onError={(e) => {
+                                                                                    const target = e.target as HTMLImageElement;
+                                                                                    target.style.display = 'none';
+                                                                                    target.nextElementSibling?.classList.remove('hidden');
+                                                                                }}
+                                                                            />
+                                                                            <div className="w-full h-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center hidden">
+                                                                                <i className="ri-image-line text-xl text-gray-500"></i>
+                                                                            </div>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center border border-gray-200 dark:border-gray-600">
+                                                                            {doc?.mimeType?.includes('pdf') ? (
+                                                                                <i className="ri-file-pdf-line text-xl text-red-500"></i>
+                                                                            ) : doc?.mimeType?.includes('word') || doc?.mimeType?.includes('document') ? (
+                                                                                <i className="ri-file-word-line text-xl text-blue-600"></i>
+                                                                            ) : doc?.mimeType?.includes('excel') || doc?.mimeType?.includes('spreadsheet') ? (
+                                                                                <i className="ri-file-excel-line text-xl text-green-600"></i>
+                                                                            ) : (
+                                                                                <i className="ri-file-line text-xl text-gray-500 dark:text-gray-400"></i>
+                                                                            )}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <p className="font-medium text-gray-900 dark:text-white truncate">
+                                                                        {doc?.label || doc?.originalName || `Document ${index + 1}`}
+                                                                    </p>
+                                                                    <div className="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                                                        {doc?.size && (
+                                                                            <span>{(doc.size / 1024 / 1024).toFixed(2)} MB</span>
+                                                                        )}
+                                                                        {doc?.mimeType && (
+                                                                            <span>• {doc.mimeType.split('/')[1]?.toUpperCase()}</span>
+                                                                        )}
+                                                                    </div>
                                                                 </div>
                                                             </div>
                                                             <a
-                                                                href={doc?.url}
+                                                                href={doc?.url || doc?.documentUrl}
                                                                 target="_blank"
                                                                 rel="noopener noreferrer"
-                                                                className="ti-btn ti-btn-sm ti-btn-primary"
+                                                                className="ti-btn ti-btn-sm ti-btn-primary flex-shrink-0"
                                                             >
                                                                 <i className="ri-external-link-line me-1"></i>
                                                                 View
@@ -956,7 +1121,13 @@ const Candidates = () => {
                                                     ))}
                                                 </div>
                                             ) : (
-                                                <p className="text-gray-500 dark:text-gray-400">No documents available</p>
+                                                <div className="text-center py-8">
+                                                    <i className="ri-file-line text-4xl text-gray-400 dark:text-gray-500 mb-4"></i>
+                                                    <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No Documents Found</h4>
+                                                    <p className="text-gray-500 dark:text-gray-400">
+                                                        This candidate doesn't have any documents uploaded yet.
+                                                    </p>
+                                                </div>
                                             )}
                                         </div>
                                     )}
@@ -968,18 +1139,32 @@ const Candidates = () => {
                                                 <div className="space-y-3">
                                                     {selectedCandidate.salarySlips.map((slip: any, index: number) => (
                                                         <div key={index} className="flex items-center justify-between p-3 border border-gray-200 dark:border-gray-700 rounded-lg">
-                                                            <div className="flex items-center">
-                                                                <i className="ri-money-dollar-box-line text-xl text-gray-500 dark:text-gray-400 me-3"></i>
-                                                                <div>
-                                                                    <p className="font-medium text-gray-900 dark:text-white">{slip?.month} {slip?.year}</p>
-                                                                    <p className="text-sm text-gray-500 dark:text-gray-400">Salary Slip</p>
+                                                            <div className="flex items-center flex-1 min-w-0">
+                                                                <div className="flex-shrink-0 me-3">
+                                                                    <div className="w-10 h-10 rounded-lg bg-green-100 dark:bg-green-900 flex items-center justify-center border border-green-200 dark:border-green-600">
+                                                                        <i className="ri-money-dollar-box-line text-xl text-green-600 dark:text-green-400"></i>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <p className="font-medium text-gray-900 dark:text-white">
+                                                                        {slip?.month} {slip?.year}
+                                                                    </p>
+                                                                    <div className="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                                                        <span>Salary Slip</span>
+                                                                        {slip?.size && (
+                                                                            <span>• {(slip.size / 1024 / 1024).toFixed(2)} MB</span>
+                                                                        )}
+                                                                        {slip?.mimeType && (
+                                                                            <span>• {slip.mimeType.split('/')[1]?.toUpperCase()}</span>
+                                                                        )}
+                                                                    </div>
                                                                 </div>
                                                             </div>
                                                             <a
-                                                                href={slip?.documentUrl}
+                                                                href={slip?.documentUrl || slip?.url}
                                                                 target="_blank"
                                                                 rel="noopener noreferrer"
-                                                                className="ti-btn ti-btn-sm ti-btn-primary"
+                                                                className="ti-btn ti-btn-sm ti-btn-primary flex-shrink-0"
                                                             >
                                                                 <i className="ri-external-link-line me-1"></i>
                                                                 View
@@ -988,7 +1173,13 @@ const Candidates = () => {
                                                     ))}
                                                 </div>
                                             ) : (
-                                                <p className="text-gray-500 dark:text-gray-400">No salary slips available</p>
+                                                <div className="text-center py-8">
+                                                    <i className="ri-money-dollar-box-line text-4xl text-gray-400 dark:text-gray-500 mb-4"></i>
+                                                    <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No Salary Slips Found</h4>
+                                                    <p className="text-gray-500 dark:text-gray-400">
+                                                        This candidate doesn't have any salary slips uploaded yet.
+                                                    </p>
+                                                </div>
                                             )}
                                         </div>
                                     )}
@@ -998,29 +1189,67 @@ const Candidates = () => {
                                             <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Social Links</h4>
                                             {Array.isArray(selectedCandidate?.socialLinks) && selectedCandidate.socialLinks.length > 0 ? (
                                                 <div className="space-y-3">
-                                                    {selectedCandidate.socialLinks.map((link: any, index: number) => (
-                                                        <div key={index} className="flex items-center justify-between p-3 border border-gray-200 dark:border-gray-700 rounded-lg">
-                                                            <div className="flex items-center">
-                                                                <i className="ri-links-line text-xl text-gray-500 dark:text-gray-400 me-3"></i>
-                                                                <div>
-                                                                    <p className="font-medium text-gray-900 dark:text-white">{link?.platform}</p>
-                                                                    <p className="text-sm text-gray-500 dark:text-gray-400 truncate max-w-xs">{link?.url}</p>
+                                                    {selectedCandidate.socialLinks.map((link: any, index: number) => {
+                                                        const getPlatformIcon = (platform: string) => {
+                                                            const platformLower = platform?.toLowerCase() || '';
+                                                            if (platformLower.includes('linkedin')) return 'ri-linkedin-line';
+                                                            if (platformLower.includes('github')) return 'ri-github-line';
+                                                            if (platformLower.includes('twitter')) return 'ri-twitter-line';
+                                                            if (platformLower.includes('facebook')) return 'ri-facebook-line';
+                                                            if (platformLower.includes('instagram')) return 'ri-instagram-line';
+                                                            if (platformLower.includes('youtube')) return 'ri-youtube-line';
+                                                            return 'ri-links-line';
+                                                        };
+
+                                                        const getPlatformColor = (platform: string) => {
+                                                            const platformLower = platform?.toLowerCase() || '';
+                                                            if (platformLower.includes('linkedin')) return 'text-blue-600';
+                                                            if (platformLower.includes('github')) return 'text-gray-800 dark:text-gray-200';
+                                                            if (platformLower.includes('twitter')) return 'text-blue-400';
+                                                            if (platformLower.includes('facebook')) return 'text-blue-600';
+                                                            if (platformLower.includes('instagram')) return 'text-pink-500';
+                                                            if (platformLower.includes('youtube')) return 'text-red-500';
+                                                            return 'text-gray-500 dark:text-gray-400';
+                                                        };
+
+                                                        return (
+                                                            <div key={index} className="flex items-center justify-between p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                                                                <div className="flex items-center flex-1 min-w-0">
+                                                                    <div className="flex-shrink-0 me-3">
+                                                                        <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center border border-gray-200 dark:border-gray-600">
+                                                                            <i className={`${getPlatformIcon(link?.platform)} text-xl ${getPlatformColor(link?.platform)}`}></i>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <p className="font-medium text-gray-900 dark:text-white">
+                                                                            {link?.platform || `Social Link ${index + 1}`}
+                                                                        </p>
+                                                                        <p className="text-sm text-gray-500 dark:text-gray-400 truncate max-w-xs">
+                                                                            {link?.url}
+                                                                        </p>
                                                                 </div>
                                                             </div>
                                                             <a
                                                                 href={link?.url}
                                                                 target="_blank"
                                                                 rel="noopener noreferrer"
-                                                                className="ti-btn ti-btn-sm ti-btn-primary"
+                                                                    className="ti-btn ti-btn-sm ti-btn-primary flex-shrink-0"
                                                             >
                                                                 <i className="ri-external-link-line me-1"></i>
                                                                 Visit
                                                             </a>
                                                         </div>
-                                                    ))}
+                                                        );
+                                                    })}
                                                 </div>
                                             ) : (
-                                                <p className="text-gray-500 dark:text-gray-400">No social links available</p>
+                                                <div className="text-center py-8">
+                                                    <i className="ri-links-line text-4xl text-gray-400 dark:text-gray-500 mb-4"></i>
+                                                    <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No Social Links Found</h4>
+                                                    <p className="text-gray-500 dark:text-gray-400">
+                                                        This candidate doesn't have any social media links listed yet.
+                                                    </p>
+                                                </div>
                                             )}
                                         </div>
                                     )}

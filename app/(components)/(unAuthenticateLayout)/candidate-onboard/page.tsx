@@ -11,6 +11,7 @@ interface FormData {
   lastName: string;
   email: string;
   phoneNumber: string;
+  countryCode: string;
   password: string;
   confirmPassword: string;
 }
@@ -20,6 +21,7 @@ interface FormErrors {
   lastName?: string;
   email?: string;
   phoneNumber?: string;
+  countryCode?: string;
   password?: string;
   confirmPassword?: string;
 }
@@ -31,6 +33,7 @@ export default function CandidateOnboardLayout() {
     lastName: '',
     email: '',
     phoneNumber: '',
+    countryCode: 'IN',
     password: '',
     confirmPassword: ''
   });
@@ -123,12 +126,25 @@ export default function CandidateOnboardLayout() {
       newErrors.email = 'Please enter a valid email address';
     }
 
-    // Phone number validation (Indian standard - 10 digits)
-    const phoneRegex = /^[6-9]\d{9}$/;
+    // Phone number validation with country code support
+    const validatePhone = (phone: string, countryCode: string = "IN"): boolean => {
+      if (countryCode === "IN") {
+        // Indian mobile number: 10 digits starting with 6-9
+        const phoneRegex = /^[6-9]\d{9}$/;
+        return phoneRegex.test(phone);
+      } else if (countryCode === "US") {
+        // US phone number: 10 digits
+        const phoneRegex = /^\d{10}$/;
+        return phoneRegex.test(phone);
+      }
+      return false;
+    };
+
     if (!formData.phoneNumber.trim()) {
       newErrors.phoneNumber = 'Phone number is required';
-    } else if (!phoneRegex.test(formData.phoneNumber.replace(/\s/g, ''))) {
-      newErrors.phoneNumber = 'Please enter a valid 10-digit Indian phone number';
+    } else if (!validatePhone(formData.phoneNumber.replace(/\s/g, ''), formData.countryCode)) {
+      const countryName = formData.countryCode === "IN" ? "Indian" : "US";
+      newErrors.phoneNumber = `Please enter a valid ${countryName} phone number`;
     }
 
     // Password validation
@@ -151,7 +167,7 @@ export default function CandidateOnboardLayout() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
@@ -183,6 +199,7 @@ export default function CandidateOnboardLayout() {
           password: formData.password,
           role: "user",
           phoneNumber: formData.phoneNumber, // Store phone number without prefix
+          countryCode: formData.countryCode, // Include country code
           adminId: adminId
         };
 
@@ -243,6 +260,7 @@ export default function CandidateOnboardLayout() {
           lastName: '',
           email: '',
           phoneNumber: '',
+          countryCode: 'IN',
           password: '',
           confirmPassword: ''
         });
@@ -436,18 +454,35 @@ export default function CandidateOnboardLayout() {
               <label htmlFor="phoneNumber" className="block text-sm font-medium text-gray-700 mb-2">
                 Phone Number
               </label>
-              <input
-                type="tel"
-                id="phoneNumber"
-                name="phoneNumber"
-                value={formData.phoneNumber}
-                onChange={handleInputChange}
-                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#36af4c] focus:border-transparent transition-colors ${
-                  errors.phoneNumber ? 'border-red-500' : 'border-gray-300'
-                }`}
-                placeholder="Enter your 10-digit phone number"
-                maxLength={10}
-              />
+              <div className="flex gap-2">
+                <div className="w-24">
+                  <select
+                    name="countryCode"
+                    value={formData.countryCode}
+                    onChange={handleInputChange}
+                    className={`w-full px-3 py-3 border rounded-lg focus:ring-2 focus:ring-[#36af4c] focus:border-transparent transition-colors ${
+                      errors.countryCode ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                  >
+                    <option value="IN">🇮🇳 +91</option>
+                    <option value="US">🇺🇸 +1</option>
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <input
+                    type="tel"
+                    id="phoneNumber"
+                    name="phoneNumber"
+                    value={formData.phoneNumber}
+                    onChange={handleInputChange}
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#36af4c] focus:border-transparent transition-colors ${
+                      errors.phoneNumber ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                    placeholder={formData.countryCode === "IN" ? "Enter your 10-digit phone number" : "Enter your 10-digit phone number"}
+                    maxLength={10}
+                  />
+                </div>
+              </div>
               {errors.phoneNumber && (
                 <p className="mt-1 text-sm text-red-600">{errors.phoneNumber}</p>
               )}

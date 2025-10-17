@@ -35,7 +35,7 @@ export default function Home() {
         await Swal.fire({
           icon: 'error',
           title: 'Login Failed',
-          text: (err as any)?.message || 'An error occurred during login.',
+          text: 'Please check your email and password and try again.',
           confirmButtonText: 'OK'
         });
     }
