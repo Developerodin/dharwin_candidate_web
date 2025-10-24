@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 const ProfileGroupIcon = <i className="bx bx-group side-menu__icon"></i>;
 const ProfileIcon = <i className="bx bx-user side-menu__icon"></i>;
 const ShareIcon = <i className="bx bx-share side-menu__icon"></i>;
+const TestIcon = <i className="bx bx-right-arrow-alt side-menu__icon"></i>;
 
 // Custom hook to get dynamic menu items based on user role
 export const useMenuItems = () => {
@@ -48,6 +49,24 @@ export const useMenuItems = () => {
             path: "/share-candidate-form",
             title: "Share Candidate Form",
             icon: ShareIcon,
+            type: "link",
+            active: true,
+            selected: true,
+            dirchange: false,
+          },
+          {
+            path: "/agora",
+            title: "Agora API Test",
+            icon: TestIcon,
+            type: "link",
+            active: true,
+            selected: true,
+            dirchange: false,
+          },
+          {
+            path: "/generate-meeting-link",
+            title: "Generate Meeting Link",
+            icon: TestIcon,
             type: "link",
             active: true,
             selected: true,

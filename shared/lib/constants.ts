@@ -2,6 +2,7 @@ const BASE_API_URL = process.env.NEXT_PUBLIC_API_URL || "https://crm-apis.dharwi
 const AUTH_URL = `${BASE_API_URL}/auth`;
 const CANDIDATES_URL = `${BASE_API_URL}/candidates`;
 const DOCUMENTS_URL = `${BASE_API_URL}/upload/multiple`;
+const AGORA_URL = `${BASE_API_URL}/agora`;
 
 // Auth API
 export const Login_User_API = `${AUTH_URL}/login`;
@@ -30,3 +31,12 @@ export const Fetch_Candidate_Documents_API = `${CANDIDATES_URL}/documents`;
 
 // share candidate API
 export const Share_Candidate_API = `${CANDIDATES_URL}/share`;
+
+// Agora Token API
+export const Agora_Token_API = `${AGORA_URL}/token`;
+
+// Agora Token API
+export const Agora_Tokens_API = `${AGORA_URL}/tokens`;
+
+// Agora Config API
+export const Agora_Config_API = `${AGORA_URL}/config`;

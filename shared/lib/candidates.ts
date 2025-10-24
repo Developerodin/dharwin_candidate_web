@@ -1,5 +1,5 @@
 import api from './api';
-import { Candidate_SalarySlips_API, Candidates_API, Documents_API, Export_Candidates_API, Fetch_Candidate_Documents_API, Forgot_Password_API, Onboard_Candidate_API, Register_User_API, Share_Candidate_API, Verify_Document_API } from './constants';
+import { Agora_Config_API, Agora_Token_API, Agora_Tokens_API, Candidate_SalarySlips_API, Candidates_API, Documents_API, Export_Candidates_API, Fetch_Candidate_Documents_API, Forgot_Password_API, Onboard_Candidate_API, Register_User_API, Share_Candidate_API, Verify_Document_API } from './constants';
 
 // Fetch all leads
 export const fetchAllCandidates = async () => {
@@ -123,5 +123,35 @@ export const shareCandidate = async (candidateId: string, shareData: {
   withDoc: boolean;
 }) => {
   const response = await api.post(`${Share_Candidate_API}/${candidateId}`, shareData);
+  return response.data;
+};
+
+// Generate Agora token
+export const generateAgoraToken = async (shareData: {
+  channelName: string;
+  uid: string;
+  role?: 1 | 2;
+  expirationTimeInSeconds?: number;
+}) => {
+  const response = await api.post(Agora_Token_API, shareData);
+  return response.data;
+};
+
+// Generate multiple Agora tokens
+export const generateMultipleAgoraTokens = async (shareData: {
+  users: Array<{
+    channelName: string;
+    uid?: number;
+    role?: 1 | 2;
+  }>;
+  expirationTimeInSeconds?: number;
+}) => {
+  const response = await api.post(Agora_Tokens_API, shareData);
+  return response.data;
+};
+
+// Get Agora config
+export const getAgoraConfig = async () => {
+  const response = await api.get(Agora_Config_API);
   return response.data;
 };
