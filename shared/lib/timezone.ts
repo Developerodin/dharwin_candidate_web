@@ -35,3 +35,18 @@ export const getTimeUntilIST = (scheduledTime: Date | string): number => {
 export const isMeetingInFutureIST = (scheduledTime: Date | string): boolean => {
   return getTimeUntilIST(scheduledTime) > 0;
 };
+
+// Format a date/time explicitly in UTC for display
+export const formatUTCDateTime = (date: Date | string): string => {
+  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  return dateObj.toLocaleString('en-GB', {
+    timeZone: 'UTC',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true
+  }) + ' UTC';
+};
