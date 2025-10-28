@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { createMeeting } from '@/shared/lib/candidates';
-import { convertIndianTimeToUTC, getCurrentISTTimeString } from '@/shared/lib/timezone';
+import { isUserInIndia, convertIndianTimeToUTC, convertLocalTimeToUTC, getUserTimeZone } from '@/shared/lib/timezone';
 
 interface MeetingFormData {
   title: string;
@@ -62,10 +62,14 @@ export default function GenerateMeetingLinkPage() {
     setMeetingResult(null);
 
     try {
-      // Convert Indian time to UTC before sending to API
+      // Convert local time to UTC based on user's region
+      const scheduledAtUTC = isUserInIndia()
+        ? convertIndianTimeToUTC(formData.scheduledAt)      // IST -> UTC
+        : convertLocalTimeToUTC(formData.scheduledAt);      // local -> UTC
+      
       const meetingData = {
         ...formData,
-        scheduledAt: formData.scheduledAt ? convertIndianTimeToUTC(formData.scheduledAt) : formData.scheduledAt
+        scheduledAt: scheduledAtUTC
       };
       
       const result = await createMeeting(meetingData);
@@ -122,7 +126,7 @@ export default function GenerateMeetingLinkPage() {
 
               <div>
                 <label htmlFor="scheduledAt" className="block text-sm font-medium text-gray-700 mb-2">
-                  Scheduled Date & Time * (IST)
+                  Scheduled Date & Time * ({isUserInIndia() ? 'IST' : getUserTimeZone()})
                 </label>
                 <input
                   type="datetime-local"
