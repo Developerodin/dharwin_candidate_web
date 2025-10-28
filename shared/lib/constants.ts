@@ -32,8 +32,8 @@ export const Fetch_Candidate_Documents_API = `${CANDIDATES_URL}/documents`;
 // share candidate API
 export const Share_Candidate_API = `${CANDIDATES_URL}/share`;
 
-// create meeting API
-export const Create_Meeting_API = `${MEETINGS_URL}`;
+// meeting API
+export const Meeting_API = `${MEETINGS_URL}`;
 
 // join meeting API
 export const Join_Meeting_API = `${MEETINGS_URL}`;

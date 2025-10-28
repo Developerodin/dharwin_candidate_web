@@ -1,5 +1,5 @@
 import api from './api';
-import { Candidate_SalarySlips_API, Candidates_API, Create_Meeting_API, Documents_API, Export_Candidates_API, Fetch_Candidate_Documents_API, Forgot_Password_API, Join_Meeting_API, Onboard_Candidate_API, Register_User_API, Share_Candidate_API, Verify_Document_API } from './constants';
+import { Candidate_SalarySlips_API, Candidates_API, Documents_API, Export_Candidates_API, Fetch_Candidate_Documents_API, Forgot_Password_API, Join_Meeting_API, Meeting_API, Onboard_Candidate_API, Register_User_API, Share_Candidate_API, Verify_Document_API } from './constants';
 
 // Fetch all leads
 export const fetchAllCandidates = async () => {
@@ -136,7 +136,39 @@ export const createMeeting = async (meetingData: {
   allowGuestJoin: boolean;
   requireApproval: boolean;
 }) => {
-  const response = await api.post(Create_Meeting_API, meetingData);
+  const response = await api.post(Meeting_API, meetingData);
+  return response.data;
+};
+
+// Get meetings list
+export const getMeetingsList = async () => {
+  const response = await api.get(Meeting_API);
+  return response.data;
+};
+
+// get meeting by id
+export const getMeetingById = async (meetingId: string) => {
+  const response = await api.get(`${Meeting_API}/${meetingId}`);
+  return response.data;
+};
+
+// update meeting by id
+export const updateMeetingById = async (meetingId: string, meetingData: {
+  title: string;
+  description: string;
+  scheduledAt: string;
+  duration: number;
+  maxParticipants: number;
+  allowGuestJoin: boolean;
+  requireApproval: boolean;
+}) => {
+  const response = await api.patch(`${Meeting_API}/${meetingId}`, meetingData);
+  return response.data;
+};
+
+// delete meeting by id
+export const deleteMeetingById = async (meetingId: string) => {
+  const response = await api.delete(`${Meeting_API}/${meetingId}`);
   return response.data;
 };
 
@@ -146,12 +178,32 @@ export const joinMeeting = async (meetingId: string, data: {
   name: string;
   email: string;
 }) => {
-  const response = await api.post(`${Join_Meeting_API}/${meetingId}/join`, data);
+  const response = await api.post(`${Meeting_API}/${meetingId}/join`, data);
+  return response.data;
+};
+
+// Leave meeting
+export const leaveMeeting = async (meetingId: string, data: {
+  email: string;
+}) => {
+  const response = await api.post(`${Meeting_API}/${meetingId}/leave`);
+  return response.data;
+};
+
+// List participants in a meeting
+export const listParticipantsInMeeting = async (meetingId: string) => {
+  const response = await api.get(`${Meeting_API}/${meetingId}/participants`);
+  return response.data;
+};
+
+// end meeting
+export const endMeeting = async (meetingId: string) => {
+  const response = await api.post(`${Meeting_API}/${meetingId}/end`);
   return response.data;
 };
 
 // Get meeting info
 export const getMeetingInfo = async (meetingId: string, token: string) => {
-  const response = await api.get(`${Join_Meeting_API}/${meetingId}/info?token=${token}`);
+  const response = await api.get(`${Meeting_API}/${meetingId}/info?token=${token}`);
   return response.data;
 };

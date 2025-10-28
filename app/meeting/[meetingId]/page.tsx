@@ -288,7 +288,53 @@ export default function MeetingJoinPage() {
   const handleUserUnpublished = (user: any, mediaType: 'audio' | 'video') => {
     if (mediaType === 'video') {
       const videoContainer = document.getElementById(`remote-video-container-${user.uid}`);
-      videoContainer?.remove();
+      if (videoContainer) {
+        videoContainer.innerHTML = '';
+
+        const placeholder = document.createElement('div');
+        placeholder.className = 'w-full h-full min-h-[256px] bg-gray-700 flex items-center justify-center relative';
+
+        const inner = document.createElement('div');
+        inner.className = 'text-center text-white';
+
+        const avatar = document.createElement('div');
+        avatar.className = 'w-14 h-14 rounded-full bg-gray-800 flex items-center justify-center mx-auto mb-2';
+        const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svgEl.setAttribute('viewBox', '0 0 20 20');
+        svgEl.setAttribute('fill', 'currentColor');
+        svgEl.setAttribute('class', 'w-7 h-7 text-gray-200');
+        const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        pathEl.setAttribute('d', 'M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z');
+        svgEl.appendChild(pathEl);
+        avatar.appendChild(svgEl);
+
+        const displayName = participantNames[user.uid] || `Participant ${user.uid}`;
+        const nameEl = document.createElement('div');
+        nameEl.className = 'font-medium';
+        nameEl.textContent = displayName;
+
+        const emailEl = document.createElement('div');
+        emailEl.className = 'text-xs text-gray-200';
+        emailEl.textContent = '';
+
+        const noteEl = document.createElement('p');
+        noteEl.className = 'text-xs mt-1 text-gray-100/80';
+        noteEl.textContent = 'Camera Off';
+
+        inner.appendChild(avatar);
+        inner.appendChild(nameEl);
+        inner.appendChild(emailEl);
+        inner.appendChild(noteEl);
+        placeholder.appendChild(inner);
+
+        const nameOverlay = document.createElement('div');
+        nameOverlay.id = `remote-name-${user.uid}`;
+        nameOverlay.className = 'absolute bottom-2 left-2 bg-black bg-opacity-50 px-2 py-1 rounded text-sm text-white';
+        nameOverlay.textContent = displayName;
+
+        videoContainer.appendChild(placeholder);
+        videoContainer.appendChild(nameOverlay);
+      }
     }
   };
 
@@ -420,16 +466,21 @@ export default function MeetingJoinPage() {
                     objectFit: 'cover'
                   }}
                 />
-                <div className="absolute bottom-2 left-2 bg-black bg-opacity-50 px-2 py-1 rounded text-sm">
-                  {joinResult.data.participant.name} (You)
+                <div className="absolute bottom-2 left-2 bg-black bg-opacity-50 px-2 py-1 rounded text-xs md:text-sm">
+                  <div className="font-medium">{joinResult.data.participant.name} (You)</div>
+                  <div className="text-gray-300 text-[11px] md:text-xs">{joinResult.data.participant.email}</div>
                 </div>
                 {!isVideoOn && (
                   <div className="absolute inset-0 bg-gray-600 flex items-center justify-center">
                     <div className="text-center">
-                      <svg className="w-12 h-12 mx-auto mb-2" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z" />
-                      </svg>
-                      <p className="text-sm">Camera Off</p>
+                      <div className="w-14 h-14 rounded-full bg-gray-800 flex items-center justify-center mx-auto mb-2">
+                        <svg className="w-7 h-7 text-gray-200" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z" />
+                        </svg>
+                      </div>
+                      <div className="font-medium">{joinResult.data.participant.name} (You)</div>
+                      <div className="text-xs text-gray-200">{joinResult.data.participant.email}</div>
+                      <p className="text-xs mt-1 text-gray-100/80">Camera Off</p>
                     </div>
                   </div>
                 )}
@@ -511,6 +562,11 @@ export default function MeetingJoinPage() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Your Name</label>
               <p className="text-gray-900">{joinResult.data.participant.name}</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Your Email</label>
+              <p className="text-gray-900">{joinResult.data.participant.email}</p>
             </div>
 
             <div>
