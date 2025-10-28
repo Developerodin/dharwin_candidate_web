@@ -10,6 +10,11 @@ interface MeetingInfo {
   title: string;
   status: string;
   currentParticipants: number;
+  scheduledAt?: string;
+  duration?: number;
+  maxParticipants?: number;
+  allowGuestJoin?: boolean;
+  requireApproval?: boolean;
 }
 
 interface Participant {
@@ -50,6 +55,8 @@ export default function MeetingJoinPage() {
   const [isJoining, setIsJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [joinResult, setJoinResult] = useState<JoinMeetingResponse | null>(null);
+  const [timeUntilStart, setTimeUntilStart] = useState<string>('');
+  const [isMeetingScheduled, setIsMeetingScheduled] = useState(false);
 
   const [joinForm, setJoinForm] = useState({
     name: '',
@@ -78,6 +85,41 @@ export default function MeetingJoinPage() {
       setIsLoading(false);
     }
   }, [meetingId, token]);
+
+  // Countdown timer effect
+  useEffect(() => {
+    if (!meetingInfo?.scheduledAt) return;
+
+    const updateCountdown = () => {
+      const now = new Date();
+      const scheduledTime = new Date(meetingInfo.scheduledAt!);
+      const timeDiff = scheduledTime.getTime() - now.getTime();
+
+      if (timeDiff > 0) {
+        setIsMeetingScheduled(true);
+        const days = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((timeDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((timeDiff % (1000 * 60)) / 1000);
+
+        let countdown = '';
+        if (days > 0) countdown += `${days}d `;
+        if (hours > 0) countdown += `${hours}h `;
+        if (minutes > 0) countdown += `${minutes}m `;
+        countdown += `${seconds}s`;
+
+        setTimeUntilStart(countdown);
+      } else {
+        setIsMeetingScheduled(false);
+        setTimeUntilStart('');
+      }
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+
+    return () => clearInterval(interval);
+  }, [meetingInfo?.scheduledAt]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -507,10 +549,27 @@ export default function MeetingJoinPage() {
         {meetingInfo && (
           <div className="mb-6 p-4 bg-blue-50 rounded-lg">
             <h3 className="font-semibold text-gray-900 mb-2">{meetingInfo.title}</h3>
-            <div className="flex items-center justify-between text-sm text-gray-600">
+            <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
               <span>Status: {meetingInfo.status}</span>
               <span>Participants: {meetingInfo.currentParticipants}</span>
             </div>
+            
+            {isMeetingScheduled && meetingInfo.scheduledAt && (
+              <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <div className="flex items-center space-x-2">
+                  <svg className="w-5 h-5 text-yellow-600" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                  </svg>
+                  <div>
+                    <p className="text-sm font-medium text-yellow-800">Meeting starts in:</p>
+                    <p className="text-lg font-bold text-yellow-900">{timeUntilStart}</p>
+                    <p className="text-xs text-yellow-700">
+                      Scheduled for: {new Date(meetingInfo.scheduledAt).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -555,10 +614,10 @@ export default function MeetingJoinPage() {
 
           <button
             type="submit"
-            disabled={isJoining}
+            disabled={isJoining || isMeetingScheduled}
             className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isJoining ? 'Joining...' : 'Join Meeting'}
+            {isJoining ? 'Joining...' : isMeetingScheduled ? 'Meeting Not Started Yet' : 'Join Meeting'}
           </button>
         </form>
       </div>
