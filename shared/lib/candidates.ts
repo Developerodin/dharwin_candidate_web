@@ -1,5 +1,5 @@
 import api from './api';
-import { Agora_Config_API, Agora_Token_API, Agora_Tokens_API, Candidate_SalarySlips_API, Candidates_API, Documents_API, Export_Candidates_API, Fetch_Candidate_Documents_API, Forgot_Password_API, Onboard_Candidate_API, Register_User_API, Share_Candidate_API, Verify_Document_API } from './constants';
+import { Candidate_SalarySlips_API, Candidates_API, Create_Meeting_API, Documents_API, Export_Candidates_API, Fetch_Candidate_Documents_API, Forgot_Password_API, Join_Meeting_API, Onboard_Candidate_API, Register_User_API, Share_Candidate_API, Verify_Document_API } from './constants';
 
 // Fetch all leads
 export const fetchAllCandidates = async () => {
@@ -126,32 +126,32 @@ export const shareCandidate = async (candidateId: string, shareData: {
   return response.data;
 };
 
-// Generate Agora token
-export const generateAgoraToken = async (shareData: {
-  channelName: string;
-  uid: string;
-  role?: 1 | 2;
-  expirationTimeInSeconds?: number;
+// Create meeting
+export const createMeeting = async (meetingData: {
+  title: string;
+  description: string;
+  scheduledAt: string;
+  duration: number;
+  maxParticipants: number;
+  allowGuestJoin: boolean;
+  requireApproval: boolean;
 }) => {
-  const response = await api.post(Agora_Token_API, shareData);
+  const response = await api.post(Create_Meeting_API, meetingData);
   return response.data;
 };
 
-// Generate multiple Agora tokens
-export const generateMultipleAgoraTokens = async (shareData: {
-  users: Array<{
-    channelName: string;
-    uid?: number;
-    role?: 1 | 2;
-  }>;
-  expirationTimeInSeconds?: number;
+// Join meeting
+export const joinMeeting = async (meetingId: string, data: {
+  joinToken: string;
+  name: string;
+  email: string;
 }) => {
-  const response = await api.post(Agora_Tokens_API, shareData);
+  const response = await api.post(`${Join_Meeting_API}/${meetingId}/join`, data);
   return response.data;
 };
 
-// Get Agora config
-export const getAgoraConfig = async () => {
-  const response = await api.get(Agora_Config_API);
+// Get meeting info
+export const getMeetingInfo = async (meetingId: string, token: string) => {
+  const response = await api.get(`${Join_Meeting_API}/${meetingId}/info?token=${token}`);
   return response.data;
 };

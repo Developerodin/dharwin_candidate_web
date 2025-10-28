@@ -54,15 +54,6 @@ export const useMenuItems = () => {
             selected: true,
             dirchange: false,
           },
-          // {
-          //   path: "/agora",
-          //   title: "Agora API Test",
-          //   icon: TestIcon,
-          //   type: "link",
-          //   active: true,
-          //   selected: true,
-          //   dirchange: false,
-          // },
           {
             path: "/generate-meeting-link",
             title: "Generate Meeting Link",

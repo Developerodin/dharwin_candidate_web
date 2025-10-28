@@ -1,734 +1,495 @@
-"use client";
-import React, { useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
-import AgoraRTC, { 
-  IAgoraRTCClient, 
-  IAgoraRTCRemoteUser, 
-  IMicrophoneAudioTrack, 
-  ICameraVideoTrack,
-  ConnectionState,
-  ClientRole
-} from 'agora-rtc-sdk-ng';
-import Swal from 'sweetalert2';
+'use client';
 
-interface MeetingState {
-  isJoined: boolean;
-  isMuted: boolean;
-  isVideoOn: boolean;
-  participants: number;
-  connectionState: ConnectionState;
+import React, { useState, useEffect, useRef } from 'react';
+import { useParams, useSearchParams } from 'next/navigation';
+import { getMeetingInfo, joinMeeting } from '@/shared/lib/candidates';
+import AgoraRTC, { IAgoraRTCClient, ICameraVideoTrack, IMicrophoneAudioTrack } from 'agora-rtc-sdk-ng';
+
+interface MeetingInfo {
+  meetingId: string;
+  title: string;
+  status: string;
+  currentParticipants: number;
 }
 
-const MeetingPage = ({ params }: { params: { meetingId: string } }) => {
+interface Participant {
+  name: string;
+  email: string;
+  role: string;
+  joinedAt: string;
+  isActive: boolean;
+}
+
+interface AgoraToken {
+  token: string;
+  channelName: string;
+  account: string;
+  role: number;
+  expirationTime: number;
+  appId: string;
+}
+
+interface JoinMeetingResponse {
+  success: boolean;
+  data: {
+    meeting: MeetingInfo;
+    participant: Participant;
+    agoraToken: AgoraToken;
+    meetingUrl: string;
+  };
+}
+
+export default function MeetingJoinPage() {
+  const params = useParams();
   const searchParams = useSearchParams();
-  
-  // Static fallback App ID
-  const STATIC_APP_ID = "bba65876c8d549e1b3a98a275f6d8624";
-  
-  // Error boundary state
-  const [hasError, setHasError] = useState(false);
-  const [isInitialized, setIsInitialized] = useState(false);
-  const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
-  const [meetingState, setMeetingState] = useState<MeetingState>({
-    isJoined: false,
-    isMuted: false,
-    isVideoOn: true,
-    participants: 0,
-    connectionState: 'DISCONNECTED'
+  const meetingId = params.meetingId as string;
+  const token = searchParams.get('token');
+
+  const [meetingInfo, setMeetingInfo] = useState<MeetingInfo | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isJoining, setIsJoining] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [joinResult, setJoinResult] = useState<JoinMeetingResponse | null>(null);
+
+  const [joinForm, setJoinForm] = useState({
+    name: '',
+    email: '',
   });
+
+  // Agora states
+  const [isVideoCallActive, setIsVideoCallActive] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isVideoOn, setIsVideoOn] = useState(true);
+  const [remoteUsers, setRemoteUsers] = useState<any[]>([]);
+  const [isLeaving, setIsLeaving] = useState(false);
+  const [participantNames, setParticipantNames] = useState<{[uid: string]: string}>({});
 
   // Refs for Agora
   const clientRef = useRef<IAgoraRTCClient | null>(null);
   const localVideoTrackRef = useRef<ICameraVideoTrack | null>(null);
   const localAudioTrackRef = useRef<IMicrophoneAudioTrack | null>(null);
   const localVideoElementRef = useRef<HTMLDivElement>(null);
-  const remoteVideoContainerRef = useRef<HTMLDivElement>(null);
-
-  // Get meeting parameters from URL
-  const channelName = params.meetingId || '';
-  const token = searchParams.get('token') || '';
-  const uid = searchParams.get('uid') || '';
-  const role = searchParams.get('role') || '1';
-  const expires = searchParams.get('expires') || '';
-  const appId = searchParams.get('appId') || '';
-
-  // Fallback: try to parse from URL hash if query params are missing
-  const [fallbackParams, setFallbackParams] = useState<{
-    token?: string;
-    uid?: string;
-    role?: string;
-    expires?: string;
-    appId?: string;
-  }>({});
-
-  // Use fallback parameters if main ones are missing
-  const finalToken = token || fallbackParams.token || '';
-  const finalUid = uid || fallbackParams.uid || '';
-  const finalRole = role || fallbackParams.role || '1';
-  const finalExpires = expires || fallbackParams.expires || '';
-  
-  // Validate and set App ID with fallbacks
-  let finalAppId = appId || fallbackParams.appId || '';
-  
-  // If no App ID from URL, try environment variable
-  if (!finalAppId) {
-    finalAppId = process.env.NEXT_PUBLIC_AGORA_APP_ID || '';
-  }
-
-  // If still no App ID, try to fetch from API as last resort
-  const [apiAppId, setApiAppId] = useState<string>('');
-  useEffect(() => {
-    if (!finalAppId) {
-      const fetchAppIdFromAPI = async () => {
-        try {
-          console.log('🔄 Attempting to fetch App ID from API as fallback...');
-          const { getAgoraConfig } = await import('@/shared/lib/candidates');
-          const config = await getAgoraConfig();
-          if (config?.data?.appId) {
-            console.log('✅ Got App ID from API:', config.data.appId);
-            setApiAppId(config.data.appId);
-          }
-        } catch (error) {
-          console.error('❌ Failed to fetch App ID from API:', error);
-        }
-      };
-      fetchAppIdFromAPI();
-    }
-  }, [finalAppId]);
-
-  // Use API App ID if available and no other App ID
-  if (!finalAppId && apiAppId) {
-    finalAppId = apiAppId;
-  }
-  
-  // Enhanced App ID validation
-  if (finalAppId) {
-    console.log('🔍 App ID Validation:', {
-      appId: finalAppId,
-      length: finalAppId.length,
-      expectedLength: 32,
-      isCorrectLength: finalAppId.length === 32,
-      isHex: /^[a-f0-9]+$/i.test(finalAppId),
-      first8: finalAppId.substring(0, 8),
-      last8: finalAppId.substring(finalAppId.length - 8),
-      source: (appId || fallbackParams.appId) ? 'URL' : 'Environment'
-    });
-    
-    // Validate App ID format (should be 32 characters)
-    if (finalAppId.length !== 32) {
-      console.error('❌ Invalid App ID length:', finalAppId.length, 'Expected: 32');
-      finalAppId = '';
-    }
-    
-    // Additional validation for hex characters
-    if (finalAppId && !/^[a-f0-9]+$/i.test(finalAppId)) {
-      console.error('❌ App ID contains invalid characters:', finalAppId);
-      console.error('❌ Must contain only hexadecimal characters (0-9, a-f)');
-      finalAppId = '';
-    }
-  }
-  
-  // Additional App ID validation
-  if (finalAppId) {
-    console.log('App ID validation:', {
-      appId: finalAppId,
-      length: finalAppId.length,
-      is32Chars: finalAppId.length === 32,
-      containsOnlyHex: /^[a-f0-9]+$/i.test(finalAppId),
-      source: (appId || fallbackParams.appId) ? 'URL' : 'Environment',
-      first8: finalAppId.substring(0, 8),
-      last8: finalAppId.substring(finalAppId.length - 8)
-    });
-  }
-
 
   useEffect(() => {
-    if (!token && !uid) {
-      // Try to parse from URL hash
-      const hash = window.location.hash;
-      if (hash) {
-        const hashParams = new URLSearchParams(hash.substring(1));
-        setFallbackParams({
-          token: hashParams.get('token') || '',
-          uid: hashParams.get('uid') || '',
-          role: hashParams.get('role') || '1',
-          expires: hashParams.get('expires') || '',
-          appId: hashParams.get('appId') || ''
-        });
-      }
-    }
-  }, [token, uid]);
-
-  // Use App ID from URL parameters (fetched during link generation)
-
-  // Debug logging
-  useEffect(() => {
-    console.log('Meeting Parameters:', {
-      channelName,
-      token: token ? 'Present' : 'Missing',
-      uid,
-      role,
-      expires,
-      appId: appId ? `Present: ${appId}` : 'Missing',
-      finalAppId: finalAppId ? `Present: ${finalAppId}` : 'Missing',
-      searchParams: Object.fromEntries(searchParams.entries()),
-      currentUrl: window.location.href
-    });
-    
-    // Configuration validation
-    if (!finalAppId) {
-      console.error('❌ Agora App ID is missing!');
-      console.error('Sources checked:', {
-        urlAppId: appId,
-        fallbackAppId: fallbackParams.appId,
-        envAppId: process.env.NEXT_PUBLIC_AGORA_APP_ID
-      });
-    } else if (finalAppId.length !== 32) {
-      console.error('❌ Invalid App ID length:', finalAppId.length, 'Expected: 32');
-    } else if (!/^[a-f0-9]+$/i.test(finalAppId)) {
-      console.error('❌ App ID contains invalid characters. Must be hexadecimal.');
+    if (meetingId && token) {
+      fetchMeetingInfo();
     } else {
-      console.log('✅ App ID validation passed:', finalAppId);
+      setError('Invalid meeting link. Missing meeting ID or token.');
+      setIsLoading(false);
     }
-  }, [channelName, token, uid, role, expires, appId, finalAppId, searchParams]);
+  }, [meetingId, token]);
 
-  // Check if meeting has expired and set document title
+  // Cleanup on unmount
   useEffect(() => {
-    if (finalExpires) {
-      const expirationTime = parseInt(finalExpires);
-      const currentTime = Math.floor(Date.now() / 1000); // Convert to seconds
-      
-      console.log('Expiration check:', {
-        expirationTime,
-        currentTime,
-        isExpired: expirationTime < currentTime,
-        timeRemaining: expirationTime - currentTime
-      });
-      
-      if (expirationTime < currentTime) {
-        const timeExpired = currentTime - expirationTime;
-        const hoursExpired = Math.floor(timeExpired / 3600);
-        const minutesExpired = Math.floor((timeExpired % 3600) / 60);
-        
-        Swal.fire({
-          icon: 'error',
-          title: 'Meeting Expired',
-          html: `
-            <div style="text-align: left;">
-              <p>This meeting link has expired.</p>
-              <div style="background: #f8f9fa; padding: 10px; border-radius: 4px; margin-top: 10px; font-size: 12px;">
-                <strong>Expired:</strong> ${hoursExpired > 0 ? `${hoursExpired}h ` : ''}${minutesExpired}m ago<br/>
-                <strong>Please request a new meeting link.</strong>
-              </div>
-            </div>
-          `,
-          confirmButtonText: 'OK'
-        }).then(() => {
-          window.close();
-        });
-        return;
-      }
-    }
-    
-    // Set document title
-    if (channelName) {
-      document.title = `Meeting: ${channelName}`;
-    }
-    
-    // Mark as initialized
-    setIsInitialized(true);
-    
-    // Set up countdown timer if meeting has expiration
-    if (finalExpires) {
-      const expirationTime = parseInt(finalExpires);
-      const currentTime = Math.floor(Date.now() / 1000);
-      const remaining = expirationTime - currentTime;
-      
-      if (remaining > 0) {
-        setTimeRemaining(remaining);
-        
-        // Update countdown every second
-        const interval = setInterval(() => {
-          const now = Math.floor(Date.now() / 1000);
-          const newRemaining = expirationTime - now;
-          
-          if (newRemaining <= 0) {
-            setTimeRemaining(0);
-            clearInterval(interval);
-            // Show expiration warning
-            Swal.fire({
-              icon: 'warning',
-              title: 'Meeting Expired',
-              text: 'This meeting has expired. You will be redirected.',
-              confirmButtonText: 'OK'
-            }).then(() => {
-              window.close();
-            });
-          } else {
-            setTimeRemaining(newRemaining);
-          }
-        }, 1000);
-        
-        return () => clearInterval(interval);
-      }
-    }
-  }, [finalExpires, channelName]);
-
-  // Initialize Agora client
-  useEffect(() => {
-    if (!channelName || !finalToken || !finalUid || !finalAppId) {
-      console.error('Missing meeting parameters:', { 
-        channelName, 
-        token: !!finalToken, 
-        uid: finalUid,
-        appId: !!finalAppId,
-        fallbackParams,
-        currentUrl: window.location.href
-      });
-      Swal.fire({
-        icon: 'error',
-        title: 'Invalid Meeting Link',
-        html: `
-          <div style="text-align: left;">
-            <p>This meeting link is invalid or incomplete.</p>
-            <div style="background: #f8f9fa; padding: 10px; border-radius: 4px; margin-top: 10px; font-size: 12px;">
-              <strong>Missing parameters:</strong><br/>
-              ${!channelName ? '• Channel Name<br/>' : ''}
-              ${!finalToken ? '• Token<br/>' : ''}
-              ${!finalUid ? '• User ID<br/>' : ''}
-              ${!finalAppId ? '• Agora App ID<br/>' : ''}
-            </div>
-            <p style="margin-top: 10px; font-size: 12px; color: #666;">
-              Please check the meeting link and try again.
-            </p>
-          </div>
-        `,
-        confirmButtonText: 'OK'
-      }).then(() => {
-        window.close();
-      });
-      return;
-    }
-
-    // Initialize Agora client
-    console.log('Creating Agora client with App ID:', finalAppId);
-    const client = AgoraRTC.createClient({ 
-      mode: 'rtc', 
-      codec: 'vp8' 
-    });
-    clientRef.current = client;
-    
-    // Test client creation
-    console.log('Agora client created successfully:', !!client);
-    console.log('Client mode:', client.mode);
-
-    // Set up event listeners
-    client.on('user-published', handleUserPublished);
-    client.on('user-unpublished', handleUserUnpublished);
-    client.on('user-joined', handleUserJoined);
-    client.on('user-left', handleUserLeft);
-    client.on('connection-state-change', handleConnectionStateChange);
-
     return () => {
       if (clientRef.current) {
-        clientRef.current.removeAllListeners();
         clientRef.current.leave();
       }
-      
-      // Clean up any remaining video elements
-      if (remoteVideoContainerRef.current) {
-        while (remoteVideoContainerRef.current.firstChild) {
-          remoteVideoContainerRef.current.removeChild(remoteVideoContainerRef.current.firstChild);
-        }
+      if (localAudioTrackRef.current) {
+        localAudioTrackRef.current.close();
+      }
+      if (localVideoTrackRef.current) {
+        localVideoTrackRef.current.close();
       }
     };
-  }, [channelName, finalToken, finalUid, finalAppId]);
+  }, []);
 
-  const handleUserPublished = async (user: IAgoraRTCRemoteUser, mediaType: 'audio' | 'video') => {
+  const fetchMeetingInfo = async () => {
     try {
-      await clientRef.current?.subscribe(user, mediaType);
-      
-      if (mediaType === 'video') {
-        // Check if element already exists
-        const existingElement = document.getElementById(`remote-video-${user.uid}`);
-        if (existingElement) {
-          existingElement.remove();
-        }
-        
-        const remoteVideoElement = document.createElement('div');
-        remoteVideoElement.id = `remote-video-${user.uid}`;
-        remoteVideoElement.style.width = '100%';
-        remoteVideoElement.style.height = '200px';
-        remoteVideoElement.style.marginBottom = '10px';
-        remoteVideoElement.style.borderRadius = '8px';
-        remoteVideoElement.style.overflow = 'hidden';
-        
-        if (remoteVideoContainerRef.current) {
-          remoteVideoContainerRef.current.appendChild(remoteVideoElement);
-        }
-        
-        user.videoTrack?.play(remoteVideoElement);
-      }
-      
-      if (mediaType === 'audio') {
-        user.audioTrack?.play();
-      }
-    } catch (error) {
-      console.error('Error handling user published:', error);
-      setHasError(true);
+      const result = await getMeetingInfo(meetingId, token!);
+      setMeetingInfo(result.data);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to fetch meeting information');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleUserUnpublished = (user: IAgoraRTCRemoteUser, mediaType: 'audio' | 'video') => {
-    if (mediaType === 'video') {
-      const remoteVideoElement = document.getElementById(`remote-video-${user.uid}`);
-      if (remoteVideoElement && remoteVideoElement.parentNode) {
-        remoteVideoElement.parentNode.removeChild(remoteVideoElement);
-      }
-    }
+  const handleJoinFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setJoinForm(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleUserJoined = (user: IAgoraRTCRemoteUser) => {
-    setMeetingState(prev => ({
-      ...prev,
-      participants: prev.participants + 1
-    }));
-  };
-
-  const handleUserLeft = (user: IAgoraRTCRemoteUser) => {
-    setMeetingState(prev => ({
-      ...prev,
-      participants: Math.max(0, prev.participants - 1)
-    }));
-    
-    const remoteVideoElement = document.getElementById(`remote-video-${user.uid}`);
-    if (remoteVideoElement && remoteVideoElement.parentNode) {
-      remoteVideoElement.parentNode.removeChild(remoteVideoElement);
-    }
-  };
-
-  const handleConnectionStateChange = (curState: ConnectionState) => {
-    setMeetingState(prev => ({
-      ...prev,
-      connectionState: curState
-    }));
-  };
-
-  const joinMeeting = async () => {
-    if (!clientRef.current || !channelName || !finalToken || !finalUid) return;
-
-    // Enhanced App ID validation before joining
-    if (!finalAppId) {
-      console.error('❌ No Agora App ID available');
-      console.error('❌ Sources checked:', {
-        urlAppId: appId,
-        fallbackAppId: fallbackParams.appId,
-        envAppId: process.env.NEXT_PUBLIC_AGORA_APP_ID,
-        allSources: { appId, fallbackParams, env: process.env.NEXT_PUBLIC_AGORA_APP_ID }
-      });
-      
-      Swal.fire({
-        icon: 'error',
-        title: 'Configuration Error',
-        html: `
-          <div style="text-align: left;">
-            <p><strong>Agora App ID is not available.</strong></p>
-            <div style="background: #f8f9fa; padding: 10px; border-radius: 4px; margin-top: 10px; font-size: 12px;">
-              <p><strong>Sources checked:</strong></p>
-              <ul style="margin: 5px 0; padding-left: 15px;">
-                <li>URL Parameter: ${appId || 'Not found'}</li>
-                <li>Fallback Parameter: ${fallbackParams.appId || 'Not found'}</li>
-                <li>Environment Variable: ${process.env.NEXT_PUBLIC_AGORA_APP_ID || 'Not found'}</li>
-              </ul>
-            </div>
-            <p style="margin-top: 10px; font-size: 12px; color: #6c757d;">
-              Please ensure your Agora App ID is properly configured.
-            </p>
-          </div>
-        `,
-        confirmButtonText: 'Refresh Page'
-      }).then(() => {
-        window.location.reload();
-      });
-      return;
-    }
-
-    // Validate App ID format before joining
-    if (finalAppId.length !== 32) {
-      console.error('❌ Invalid App ID length:', finalAppId.length, 'Expected: 32');
-      Swal.fire({
-        icon: 'error',
-        title: 'Invalid App ID',
-        html: `
-          <div style="text-align: left;">
-            <p><strong>App ID length is invalid.</strong></p>
-            <div style="background: #f8f9fa; padding: 10px; border-radius: 4px; margin-top: 10px; font-size: 12px;">
-              <p><strong>Current:</strong> ${finalAppId.length} characters</p>
-              <p><strong>Expected:</strong> 32 characters</p>
-              <p><strong>App ID:</strong> ${finalAppId}</p>
-            </div>
-          </div>
-        `,
-        confirmButtonText: 'OK'
-      });
-      return;
-    }
-
-    if (!/^[a-f0-9]+$/i.test(finalAppId)) {
-      console.error('❌ App ID contains invalid characters:', finalAppId);
-      Swal.fire({
-        icon: 'error',
-        title: 'Invalid App ID Format',
-        html: `
-          <div style="text-align: left;">
-            <p><strong>App ID contains invalid characters.</strong></p>
-            <div style="background: #f8f9fa; padding: 10px; border-radius: 4px; margin-top: 10px; font-size: 12px;">
-              <p><strong>App ID:</strong> ${finalAppId}</p>
-              <p><strong>Expected:</strong> Only hexadecimal characters (0-9, a-f)</p>
-            </div>
-          </div>
-        `,
-        confirmButtonText: 'OK'
-      });
-      return;
-    }
+  const handleJoinMeeting = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsJoining(true);
+    setError(null);
 
     try {
-      setMeetingState(prev => ({ ...prev, isJoined: true }));
-
-      // Join the channel
-      console.log('Joining channel with:', {
-        appId: finalAppId,
-        channelName,
-        token: finalToken ? 'Present' : 'Missing',
-        uid: finalUid,
-        appIdLength: finalAppId.length,
-        appIdValid: finalAppId.length === 32
+      const result = await joinMeeting(meetingId, {
+        joinToken: token!,
+        name: joinForm.name,
+        email: joinForm.email,
       });
+      setJoinResult(result);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to join meeting');
+    } finally {
+      setIsJoining(false);
+    }
+  };
+
+  const initializeAgoraCall = async () => {
+    if (!joinResult?.data.agoraToken) return;
+
+    try {
+      const { agoraToken } = joinResult.data;
       
-      console.log('Attempting to join Agora channel...');
-      console.log('App ID being used:', finalAppId);
-      console.log('App ID type:', typeof finalAppId);
-      console.log('App ID length:', finalAppId.length);
-      console.log('App ID first 8 chars:', finalAppId.substring(0, 8));
-      console.log('App ID last 8 chars:', finalAppId.substring(finalAppId.length - 8));
-      console.log('Channel:', channelName);
-      console.log('Token:', finalToken ? 'Present' : 'Missing');
-      console.log('Token length:', finalToken.length);
-      console.log('UID:', finalUid);
-      console.log('UID type:', typeof finalUid);
+      // Request permissions first
+      try {
+        await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      } catch (permissionError) {
+        console.error('Permission denied:', permissionError);
+        setError('Camera and microphone permissions are required for video calls.');
+        return;
+      }
       
-      await clientRef.current.join(
-        finalAppId,
-        channelName,
-        finalToken,
-        parseInt(finalUid)
-      );
+      // Create Agora client
+      const client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+      clientRef.current = client;
+
+      // Set up event handlers
+      client.on('user-published', handleUserPublished);
+      client.on('user-unpublished', handleUserUnpublished);
+      client.on('user-left', handleUserLeft);
 
       // Create local tracks
       const [audioTrack, videoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks();
-      
       localAudioTrackRef.current = audioTrack;
       localVideoTrackRef.current = videoTrack;
+      
+      console.log('Local tracks created:', {
+        audioTrack: !!audioTrack,
+        videoTrack: !!videoTrack,
+        videoTrackEnabled: videoTrack.enabled
+      });
 
-      // Publish tracks
-      await clientRef.current.publish([audioTrack, videoTrack]);
+      // Join the channel
+      await client.join(agoraToken.appId, agoraToken.channelName, agoraToken.token, agoraToken.account);
+      
+      // Publish local tracks
+      await client.publish([audioTrack, videoTrack]);
 
       // Play local video
       if (localVideoElementRef.current) {
         videoTrack.play(localVideoElementRef.current);
+        console.log('Local video track playing on element:', localVideoElementRef.current);
+      } else {
+        console.error('Local video element not found');
       }
-
-      await Swal.fire({
-        icon: 'success',
-        title: 'Joined Meeting!',
-        text: 'You have successfully joined the meeting.',
-        timer: 2000,
-        showConfirmButton: false
-      });
-
-    } catch (error: any) {
-      console.error('Error joining meeting:', error);
-      setMeetingState(prev => ({ ...prev, isJoined: false }));
       
-      // Check for specific Agora errors
-      let errorMessage = 'Failed to join the meeting. Please try again.';
-      let showAppIdHelp = false;
-      
-      if (error && typeof error === 'object' && 'code' in error) {
-        const agoraError = error as any;
-        console.log('Agora Error Details:', {
-          code: agoraError.code,
-          message: agoraError.message,
-          reason: agoraError.reason,
-          appId: finalAppId,
-          appIdLength: finalAppId.length,
-          appIdValid: finalAppId.length === 32 && /^[a-f0-9]+$/i.test(finalAppId)
-        });
-        
-        if (agoraError.code === 'CAN_NOT_GET_GATEWAY_SERVER') {
-          errorMessage = 'Invalid Agora App ID or configuration. Please check your Agora account settings.';
-          showAppIdHelp = true;
-        } else if (agoraError.code === 'INVALID_VENDOR_KEY') {
-          errorMessage = 'Invalid Agora App ID. Please verify your App ID is correct.';
-          showAppIdHelp = true;
-        } else if (agoraError.code === 'INVALID_TOKEN') {
-          errorMessage = 'Invalid or expired token. Please generate a new meeting link.';
-        } else if (agoraError.code === 'INVALID_CHANNEL_NAME') {
-          errorMessage = 'Invalid channel name. Please check the meeting link.';
-        } else if (agoraError.code === 'TOKEN_EXPIRED') {
-          errorMessage = 'Meeting token has expired. Please request a new meeting link.';
+      // Ensure video is visible after a short delay
+      setTimeout(() => {
+        if (localVideoElementRef.current && videoTrack) {
+          console.log('Retrying local video play...');
+          videoTrack.play(localVideoElementRef.current);
         }
-      }
-      
-      await Swal.fire({
-        icon: 'error',
-        title: 'Failed to Join',
-        html: showAppIdHelp ? `
-          <div style="text-align: left;">
-            <p>${errorMessage}</p>
-            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-top: 15px; font-size: 14px;">
-              <h4 style="margin: 0 0 10px 0; color: #333;">Troubleshooting Steps:</h4>
-              <ol style="margin: 0; padding-left: 20px; color: #666;">
-                <li>Verify your Agora App ID is correct (32 characters, hex format)</li>
-                <li>Check if your Agora account is active and has sufficient credits</li>
-                <li>Ensure the App ID is properly configured in your environment</li>
-                <li>Try refreshing the page to reload the configuration</li>
-              </ol>
-              <div style="margin-top: 10px; padding: 8px; background: #e3f2fd; border-radius: 4px; font-size: 12px;">
-                <strong>Current App ID:</strong> ${finalAppId || 'Not configured'}<br/>
-                <strong>App ID Length:</strong> ${finalAppId ? finalAppId.length : 0}/32<br/>
-                <strong>App ID Valid:</strong> ${finalAppId && finalAppId.length === 32 && /^[a-f0-9]+$/i.test(finalAppId) ? 'Yes' : 'No'}
-              </div>
-            </div>
-          </div>
-        ` : errorMessage,
-        confirmButtonText: 'OK'
-      });
+      }, 1000);
+
+      setIsVideoCallActive(true);
+      console.log('Successfully joined Agora channel:', agoraToken.channelName);
+    } catch (error) {
+      console.error('Failed to initialize Agora call:', error);
+      setError(`Failed to start video call: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
-  const leaveMeeting = async () => {
-    if (!clientRef.current) return;
-
-    try {
-      // Stop and close local tracks
-      if (localAudioTrackRef.current) {
-        localAudioTrackRef.current.stop();
-        localAudioTrackRef.current.close();
-        localAudioTrackRef.current = null;
+  const handleUserPublished = async (user: any, mediaType: 'audio' | 'video') => {
+    await clientRef.current?.subscribe(user, mediaType);
+    
+    if (mediaType === 'video') {
+      // Create container for remote video with name overlay
+      const videoContainer = document.createElement('div');
+      videoContainer.id = `remote-video-container-${user.uid}`;
+      videoContainer.className = 'relative bg-gray-800 rounded-lg overflow-hidden';
+      videoContainer.style.width = '100%';
+      videoContainer.style.height = '256px';
+      
+      // Create video element
+      const remoteVideoElement = document.createElement('div');
+      remoteVideoElement.id = `remote-video-${user.uid}`;
+      remoteVideoElement.className = 'w-full h-full bg-gray-700';
+      remoteVideoElement.style.objectFit = 'cover';
+      
+      // Create name overlay
+      const nameOverlay = document.createElement('div');
+      nameOverlay.id = `remote-name-${user.uid}`;
+      nameOverlay.className = 'absolute bottom-2 left-2 bg-black bg-opacity-50 px-2 py-1 rounded text-sm text-white';
+      nameOverlay.textContent = `Participant ${user.uid}`; // Default name, will be updated if we have the actual name
+      
+      // Assemble the container
+      videoContainer.appendChild(remoteVideoElement);
+      videoContainer.appendChild(nameOverlay);
+      
+      // Add to the grid
+      document.getElementById('remote-videos')?.appendChild(videoContainer);
+      
+      // Play the video
+      user.videoTrack?.play(remoteVideoElement);
+      
+      // Update participant names if we have the user's name
+      if (user.name) {
+        setParticipantNames(prev => ({
+          ...prev,
+          [user.uid]: user.name
+        }));
+        nameOverlay.textContent = user.name;
       }
-
-      if (localVideoTrackRef.current) {
-        localVideoTrackRef.current.stop();
-        localVideoTrackRef.current.close();
-        localVideoTrackRef.current = null;
-      }
-
-
-      // Leave the channel
-      await clientRef.current.leave();
-
-      setMeetingState(prev => ({
-        ...prev,
-        isJoined: false,
-        isMuted: false,
-        isVideoOn: true,
-        participants: 0
-      }));
-
-      // Clear video elements safely
-      if (localVideoElementRef.current) {
-        // Stop any playing tracks first
-        if (localVideoTrackRef.current) {
-          try {
-            (localVideoTrackRef.current as any).stop();
-          } catch (error) {
-            console.warn('Error stopping video track:', error);
-          }
-        }
-        localVideoElementRef.current.innerHTML = '';
-      }
-      if (remoteVideoContainerRef.current) {
-        // Remove all child elements safely
-        while (remoteVideoContainerRef.current.firstChild) {
-          remoteVideoContainerRef.current.removeChild(remoteVideoContainerRef.current.firstChild);
-        }
-      }
-
-    } catch (error) {
-      console.error('Error leaving meeting:', error);
     }
+    
+    if (mediaType === 'audio') {
+      user.audioTrack?.play();
+    }
+    
+    setRemoteUsers(prev => [...prev.filter(u => u.uid !== user.uid), user]);
+  };
+
+  const handleUserUnpublished = (user: any, mediaType: 'audio' | 'video') => {
+    if (mediaType === 'video') {
+      const videoContainer = document.getElementById(`remote-video-container-${user.uid}`);
+      videoContainer?.remove();
+    }
+  };
+
+  const handleUserLeft = (user: any) => {
+    const videoContainer = document.getElementById(`remote-video-container-${user.uid}`);
+    videoContainer?.remove();
+    setRemoteUsers(prev => prev.filter(u => u.uid !== user.uid));
+    setParticipantNames(prev => {
+      const newNames = { ...prev };
+      delete newNames[user.uid];
+      return newNames;
+    });
   };
 
   const toggleMute = async () => {
-    if (!localAudioTrackRef.current) return;
-
-    try {
-      if (meetingState.isMuted) {
-        await localAudioTrackRef.current.setEnabled(true);
-        setMeetingState(prev => ({ ...prev, isMuted: false }));
-      } else {
-        await localAudioTrackRef.current.setEnabled(false);
-        setMeetingState(prev => ({ ...prev, isMuted: true }));
-      }
-    } catch (error) {
-      console.error('Error toggling mute:', error);
+    if (localAudioTrackRef.current) {
+      await localAudioTrackRef.current.setEnabled(isMuted);
+      setIsMuted(!isMuted);
     }
   };
 
   const toggleVideo = async () => {
-    if (!localVideoTrackRef.current) return;
-
-    try {
-      if (meetingState.isVideoOn) {
-        await localVideoTrackRef.current.setEnabled(false);
-        setMeetingState(prev => ({ ...prev, isVideoOn: false }));
-      } else {
-        await localVideoTrackRef.current.setEnabled(true);
-        setMeetingState(prev => ({ ...prev, isVideoOn: true }));
-      }
-    } catch (error) {
-      console.error('Error toggling video:', error);
+    if (localVideoTrackRef.current) {
+      await localVideoTrackRef.current.setEnabled(!isVideoOn);
+      setIsVideoOn(!isVideoOn);
+      console.log('Video toggled:', !isVideoOn);
     }
   };
 
+  const leaveCall = async () => {
+    setIsLeaving(true);
+    
+    try {
+      // Stop local tracks
+      if (localAudioTrackRef.current) {
+        localAudioTrackRef.current.stop();
+        localAudioTrackRef.current.close();
+      }
+      if (localVideoTrackRef.current) {
+        localVideoTrackRef.current.stop();
+        localVideoTrackRef.current.close();
+      }
 
+      // Leave channel
+      if (clientRef.current) {
+        await clientRef.current.leave();
+      }
 
-  // Show loading state
-  if (!isInitialized || !finalAppId) {
+      // Clean up remote video elements
+      const remoteVideosContainer = document.getElementById('remote-videos');
+      if (remoteVideosContainer) {
+        remoteVideosContainer.innerHTML = '';
+      }
+
+      setIsVideoCallActive(false);
+      setRemoteUsers([]);
+      setParticipantNames({});
+    } catch (error) {
+      console.error('Error leaving call:', error);
+    } finally {
+      setIsLeaving(false);
+    }
+  };
+
+  if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-spin">
-            <i className="ri-loader-4-line text-2xl"></i>
-          </div>
-          <h2 className="text-xl font-semibold mb-2">Loading Meeting...</h2>
-          <p className="text-gray-400">
-            {!finalAppId ? 'Loading meeting configuration...' : 'Please wait while we prepare your meeting room.'}
-          </p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading meeting information...</p>
         </div>
       </div>
     );
   }
 
-  // Show error state
-  if (hasError) {
+  if (error) {
     return (
-      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <div className="w-24 h-24 bg-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
-            <i className="ri-error-warning-line text-3xl"></i>
+          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </div>
-          <h2 className="text-2xl font-bold mb-2">Meeting Error</h2>
-          <p className="text-gray-400 mb-6">
-            There was an error with the video meeting. Please try refreshing the page.
-          </p>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Error</h2>
+          <p className="text-gray-600 mb-4">{error}</p>
           <button
-            onClick={() => window.location.reload()}
-            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg text-lg font-semibold transition-colors"
+            onClick={() => window.location.href = '/'}
+            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            Refresh Page
+            Go Home
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (joinResult) {
+    if (isVideoCallActive) {
+      return (
+        <div className="min-h-screen bg-gray-900 text-white">
+          {/* Header */}
+          <div className="bg-gray-800 p-4 flex justify-between items-center">
+            <div>
+              <h1 className="text-xl font-semibold">{joinResult.data.meeting.title}</h1>
+              <p className="text-sm text-gray-400">
+                {joinResult.data.participant.name} • {remoteUsers.length + 1} participants
+              </p>
+            </div>
+            <button
+              onClick={leaveCall}
+              disabled={isLeaving}
+              className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-md disabled:opacity-50"
+            >
+              {isLeaving ? 'Leaving...' : 'Leave Call'}
+            </button>
+          </div>
+
+          {/* Video Grid */}
+          <div className="flex-1 p-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-6xl mx-auto">
+              {/* Local Video */}
+              <div className="relative bg-gray-800 rounded-lg overflow-hidden">
+                <div
+                  ref={localVideoElementRef}
+                  className="w-full h-64 bg-gray-700"
+                  style={{ 
+                    minHeight: '256px',
+                    objectFit: 'cover'
+                  }}
+                />
+                <div className="absolute bottom-2 left-2 bg-black bg-opacity-50 px-2 py-1 rounded text-sm">
+                  {joinResult.data.participant.name} (You)
+                </div>
+                {!isVideoOn && (
+                  <div className="absolute inset-0 bg-gray-600 flex items-center justify-center">
+                    <div className="text-center">
+                      <svg className="w-12 h-12 mx-auto mb-2" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z" />
+                      </svg>
+                      <p className="text-sm">Camera Off</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Remote Videos */}
+              <div id="remote-videos" className="contents" />
+            </div>
+          </div>
+
+          {/* Controls */}
+          <div className="bg-gray-800 p-4">
+            <div className="flex justify-center space-x-4">
+              <button
+                onClick={toggleMute}
+                className={`p-3 rounded-full ${isMuted ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-600 hover:bg-gray-700'}`}
+              >
+                {isMuted ? (
+                  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.617.794L4.617 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.617l3.766-3.794a1 1 0 011.617.794zM14.657 2.929a1 1 0 011.414 0A9.972 9.972 0 0119 10a9.972 9.972 0 01-2.929 7.071 1 1 0 01-1.414-1.414A7.971 7.971 0 0017 10c0-2.21-.894-4.208-2.343-5.657a1 1 0 010-1.414zm-2.829 2.828a1 1 0 011.415 0A5.983 5.983 0 0115 10a5.983 5.983 0 01-1.757 4.243 1 1 0 01-1.415-1.415A3.984 3.984 0 0013 10a3.984 3.984 0 00-1.172-2.828 1 1 0 010-1.415z" clipRule="evenodd" />
+                  </svg>
+                ) : (
+                  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.617.794L4.617 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.617l3.766-3.794a1 1 0 011.617.794zM12.293 7.293a1 1 0 011.414 0L15 8.586l1.293-1.293a1 1 0 111.414 1.414L16.414 10l1.293 1.293a1 1 0 01-1.414 1.414L15 11.414l-1.293 1.293a1 1 0 01-1.414-1.414L13.586 10l-1.293-1.293a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                )}
+              </button>
+
+              <button
+                onClick={toggleVideo}
+                className={`p-3 rounded-full ${!isVideoOn ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-600 hover:bg-gray-700'}`}
+              >
+                {isVideoOn ? (
+                  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z" />
+                  </svg>
+                ) : (
+                  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A10.014 10.014 0 0019.542 10C18.268 5.943 14.478 3 10 3a9.958 9.958 0 00-4.512 1.074l-1.78-1.781zm4.261 4.26l1.514 1.515a2.003 2.003 0 012.45 2.45l1.514 1.514a4 4 0 00-5.478-5.478z" clipRule="evenodd" />
+                    <path d="M12.454 16.697L9.75 13.992a4 4 0 01-3.742-3.741L2.335 6.578A9.98 9.98 0 00.458 10c1.274 4.057 5.065 7 9.542 7 .847 0 1.669-.105 2.454-.303z" />
+                  </svg>
+                )}
+              </button>
+
+              <button
+                onClick={leaveCall}
+                disabled={isLeaving}
+                className="p-3 rounded-full bg-red-600 hover:bg-red-700 disabled:opacity-50"
+              >
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h6a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h4a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="max-w-md w-full bg-white shadow-md rounded-lg p-6">
+          <div className="text-center mb-6">
+            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Successfully Joined!</h2>
+            <p className="text-gray-600">You are now connected to the meeting.</p>
+          </div>
+
+          <div className="space-y-4 mb-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Meeting</label>
+              <p className="text-lg font-semibold text-gray-900">{joinResult.data.meeting.title}</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Your Name</label>
+              <p className="text-gray-900">{joinResult.data.participant.name}</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                {joinResult.data.participant.role}
+              </span>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Current Participants</label>
+              <p className="text-gray-900">{joinResult.data.meeting.currentParticipants}</p>
+            </div>
+          </div>
+
+          <button
+            onClick={initializeAgoraCall}
+            className="w-full bg-blue-600 text-white py-3 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+          >
+            Start Video Call
           </button>
         </div>
       </div>
@@ -736,137 +497,71 @@ const MeetingPage = ({ params }: { params: { meetingId: string } }) => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      {/* Header */}
-      <div className="bg-gray-800 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <h1 className="text-xl font-semibold">Meeting: {channelName}</h1>
-          <div className="flex items-center space-x-2 text-sm text-gray-300">
-            <i className="ri-user-line"></i>
-            <span>{meetingState.participants + (meetingState.isJoined ? 1 : 0)} participants</span>
-          </div>
-          <div className="flex items-center space-x-2 text-sm">
-            <div className={`w-2 h-2 rounded-full ${
-              meetingState.connectionState === 'CONNECTED' ? 'bg-green-500' : 
-              meetingState.connectionState === 'CONNECTING' ? 'bg-yellow-500' : 'bg-red-500'
-            }`}></div>
-            <span className="text-gray-300 capitalize">{meetingState.connectionState.toLowerCase()}</span>
-          </div>
-          {timeRemaining !== null && timeRemaining > 0 && (
-            <div className="flex items-center space-x-2 text-sm text-yellow-400">
-              <i className="ri-timer-line"></i>
-              <span>
-                {Math.floor(timeRemaining / 3600)}h {Math.floor((timeRemaining % 3600) / 60)}m remaining
-              </span>
-            </div>
-          )}
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="max-w-md w-full bg-white shadow-md rounded-lg p-6">
+        <div className="text-center mb-6">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Join Meeting</h1>
+          <p className="text-gray-600">Enter your details to join the meeting</p>
         </div>
-        
-         <div className="flex items-center space-x-3">
-           {meetingState.isJoined && (
-             <button
-               onClick={leaveMeeting}
-               className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm font-medium transition-colors"
-             >
-               <i className="ri-phone-line mr-1"></i>
-               Leave Meeting
-             </button>
-           )}
-         </div>
-      </div>
 
-      {/* Main Content */}
-      <div className="flex-1 p-6">
-        {!meetingState.isJoined ? (
-          // Join Meeting Screen
-          <div className="flex items-center justify-center min-h-[60vh]">
-            <div className="text-center w-full max-w-4xl">
-
-              <div className="mb-8">
-                <div className="w-24 h-24 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <i className="ri-video-line text-3xl"></i>
-                </div>
-                <h2 className="text-2xl font-bold mb-2">Ready to Join?</h2>
-                <p className="text-gray-400 mb-6">
-                  Channel: <span className="font-semibold text-white">{channelName}</span>
-                </p>
-              </div>
-              
-              <button
-                onClick={joinMeeting}
-                className="px-8 py-4 bg-green-600 hover:bg-green-700 rounded-lg text-lg font-semibold transition-colors flex items-center mx-auto"
-              >
-                <i className="ri-video-line mr-2"></i>
-                Join Meeting
-              </button>
-            </div>
-          </div>
-        ) : (
-          // Meeting Interface
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
-            {/* Local Video */}
-            <div className="lg:col-span-2">
-              <div className="bg-gray-800 rounded-lg p-4 mb-4">
-                <h3 className="text-lg font-semibold mb-3">Your Video</h3>
-                <div 
-                  ref={localVideoElementRef}
-                  className="w-full h-64 bg-gray-700 rounded-lg overflow-hidden"
-                ></div>
-              </div>
-
-              {/* Remote Videos */}
-              <div className="bg-gray-800 rounded-lg p-4">
-                <h3 className="text-lg font-semibold mb-3">Participants</h3>
-                <div 
-                  ref={remoteVideoContainerRef}
-                  className="grid grid-cols-1 md:grid-cols-2 gap-4"
-                >
-                  {/* Remote videos will be added here dynamically */}
-                </div>
-              </div>
-            </div>
-
-            {/* Controls Sidebar */}
-            <div className="lg:col-span-1">
-              <div className="bg-gray-800 rounded-lg p-4">
-                <h3 className="text-lg font-semibold mb-4">Controls</h3>
-                
-                <div className="space-y-4">
-                  {/* Audio Control */}
-                  <button
-                    onClick={toggleMute}
-                    className={`w-full flex items-center justify-center px-4 py-3 rounded-lg font-medium transition-colors ${
-                      meetingState.isMuted 
-                        ? 'bg-red-600 hover:bg-red-700' 
-                        : 'bg-gray-700 hover:bg-gray-600'
-                    }`}
-                  >
-                    <i className={`ri-${meetingState.isMuted ? 'mic-off' : 'mic'}-line mr-2`}></i>
-                    {meetingState.isMuted ? 'Unmute' : 'Mute'}
-                  </button>
-
-                  {/* Video Control */}
-                  <button
-                    onClick={toggleVideo}
-                    className={`w-full flex items-center justify-center px-4 py-3 rounded-lg font-medium transition-colors ${
-                      !meetingState.isVideoOn 
-                        ? 'bg-red-600 hover:bg-red-700' 
-                        : 'bg-gray-700 hover:bg-gray-600'
-                    }`}
-                  >
-                    <i className={`ri-${meetingState.isVideoOn ? 'video' : 'video-off'}-line mr-2`}></i>
-                    {meetingState.isVideoOn ? 'Turn Off Video' : 'Turn On Video'}
-                  </button>
-
-
-                </div>
-              </div>
+        {meetingInfo && (
+          <div className="mb-6 p-4 bg-blue-50 rounded-lg">
+            <h3 className="font-semibold text-gray-900 mb-2">{meetingInfo.title}</h3>
+            <div className="flex items-center justify-between text-sm text-gray-600">
+              <span>Status: {meetingInfo.status}</span>
+              <span>Participants: {meetingInfo.currentParticipants}</span>
             </div>
           </div>
         )}
+
+        <form onSubmit={handleJoinMeeting} className="space-y-4">
+          <div>
+            <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
+              Your Name *
+            </label>
+            <input
+              type="text"
+              id="name"
+              name="name"
+              value={joinForm.name}
+              onChange={handleJoinFormChange}
+              required
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Enter your full name"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+              Email Address *
+            </label>
+            <input
+              type="email"
+              id="email"
+              name="email"
+              value={joinForm.email}
+              onChange={handleJoinFormChange}
+              required
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Enter your email address"
+            />
+          </div>
+
+          {error && (
+            <div className="p-4 bg-red-100 border border-red-400 text-red-700 rounded">
+              {error}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={isJoining}
+            className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isJoining ? 'Joining...' : 'Join Meeting'}
+          </button>
+        </form>
       </div>
     </div>
   );
-};
-
-export default MeetingPage;
+}
