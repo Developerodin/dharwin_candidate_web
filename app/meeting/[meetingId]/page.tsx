@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { getMeetingInfo, joinMeeting } from '@/shared/lib/candidates';
+import { convertToIST, formatISTDateTime, getTimeUntilIST, isMeetingInFutureIST } from '@/shared/lib/timezone';
 import AgoraRTC, { IAgoraRTCClient, ICameraVideoTrack, IMicrophoneAudioTrack } from 'agora-rtc-sdk-ng';
 
 interface MeetingInfo {
@@ -91,9 +92,7 @@ export default function MeetingJoinPage() {
     if (!meetingInfo?.scheduledAt) return;
 
     const updateCountdown = () => {
-      const now = new Date();
-      const scheduledTime = new Date(meetingInfo.scheduledAt!);
-      const timeDiff = scheduledTime.getTime() - now.getTime();
+      const timeDiff = getTimeUntilIST(meetingInfo.scheduledAt!);
 
       if (timeDiff > 0) {
         setIsMeetingScheduled(true);
@@ -564,7 +563,7 @@ export default function MeetingJoinPage() {
                     <p className="text-sm font-medium text-yellow-800">Meeting starts in:</p>
                     <p className="text-lg font-bold text-yellow-900">{timeUntilStart}</p>
                     <p className="text-xs text-yellow-700">
-                      Scheduled for: {new Date(meetingInfo.scheduledAt).toLocaleString()}
+                      Scheduled for: {formatISTDateTime(meetingInfo.scheduledAt)}
                     </p>
                   </div>
                 </div>
