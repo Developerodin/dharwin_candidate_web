@@ -176,9 +176,10 @@ export default function MeetingJoinPage() {
     try {
       const { agoraToken } = joinResult.data;
       
-      // Request permissions first
+      // Request permissions first, and immediately stop the temporary stream
       try {
-        await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        const permissionStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        permissionStream.getTracks().forEach((t) => t.stop());
       } catch (permissionError) {
         console.error('Permission denied:', permissionError);
         setError('Camera and microphone permissions are required for video calls.');
@@ -239,41 +240,41 @@ export default function MeetingJoinPage() {
     await clientRef.current?.subscribe(user, mediaType);
     
     if (mediaType === 'video') {
-      // Create container for remote video with name overlay
-      const videoContainer = document.createElement('div');
-      videoContainer.id = `remote-video-container-${user.uid}`;
-      videoContainer.className = 'relative bg-gray-800 rounded-lg overflow-hidden';
-      videoContainer.style.width = '100%';
-      videoContainer.style.height = '256px';
-      
-      // Create video element
+      // Reuse or create a single container per remote user
+      const containerId = `remote-video-container-${user.uid}`;
+      let videoContainer = document.getElementById(containerId) as HTMLDivElement | null;
+      if (!videoContainer) {
+        videoContainer = document.createElement('div');
+        videoContainer.id = containerId;
+        videoContainer.className = 'relative bg-gray-800 rounded-lg overflow-hidden';
+        videoContainer.style.width = '100%';
+        videoContainer.style.height = '256px';
+        document.getElementById('remote-videos')?.appendChild(videoContainer);
+      } else {
+        // Clear any existing placeholder/previous elements
+        videoContainer.innerHTML = '';
+      }
+
+      // Create (or recreate) the target element for video track
       const remoteVideoElement = document.createElement('div');
       remoteVideoElement.id = `remote-video-${user.uid}`;
       remoteVideoElement.className = 'w-full h-full bg-gray-700';
       remoteVideoElement.style.objectFit = 'cover';
-      
-      // Create name overlay
+
+      // Name overlay
       const nameOverlay = document.createElement('div');
       nameOverlay.id = `remote-name-${user.uid}`;
       nameOverlay.className = 'absolute bottom-2 left-2 bg-black bg-opacity-50 px-2 py-1 rounded text-sm text-white';
-      nameOverlay.textContent = `Participant ${user.uid}`; // Default name, will be updated if we have the actual name
-      
-      // Assemble the container
+      nameOverlay.textContent = `Participant ${user.uid}`;
+
+      // Assemble and play
       videoContainer.appendChild(remoteVideoElement);
       videoContainer.appendChild(nameOverlay);
-      
-      // Add to the grid
-      document.getElementById('remote-videos')?.appendChild(videoContainer);
-      
-      // Play the video
       user.videoTrack?.play(remoteVideoElement);
-      
-      // Update participant names if we have the user's name
+
+      // Update display name if available
       if (user.name) {
-        setParticipantNames(prev => ({
-          ...prev,
-          [user.uid]: user.name
-        }));
+        setParticipantNames(prev => ({ ...prev, [user.uid]: user.name }));
         nameOverlay.textContent = user.name;
       }
     }
@@ -288,7 +289,49 @@ export default function MeetingJoinPage() {
   const handleUserUnpublished = (user: any, mediaType: 'audio' | 'video') => {
     if (mediaType === 'video') {
       const videoContainer = document.getElementById(`remote-video-container-${user.uid}`);
-      videoContainer?.remove();
+      if (videoContainer) {
+        // Clear the video element but keep the container
+        const videoElement = document.getElementById(`remote-video-${user.uid}`);
+        if (videoElement) {
+          videoElement.innerHTML = '';
+          
+          // Create placeholder content
+          const placeholder = document.createElement('div');
+          placeholder.className = 'w-full h-full bg-gray-700 flex items-center justify-center';
+          
+          const content = document.createElement('div');
+          content.className = 'text-center text-white';
+          
+          // Avatar icon
+          const avatar = document.createElement('div');
+          avatar.className = 'w-16 h-16 rounded-full bg-gray-600 flex items-center justify-center mx-auto mb-3';
+          const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+          svg.setAttribute('viewBox', '0 0 24 24');
+          svg.setAttribute('fill', 'currentColor');
+          svg.setAttribute('class', 'w-8 h-8 text-gray-300');
+          const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          path.setAttribute('d', 'M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z');
+          svg.appendChild(path);
+          avatar.appendChild(svg);
+          
+          // Participant name
+          const name = document.createElement('div');
+          name.className = 'text-lg font-medium';
+          name.textContent = participantNames[user.uid] || `Participant ${user.uid}`;
+          
+          // Camera off text
+          const status = document.createElement('div');
+          status.className = 'text-sm text-gray-300 mt-1';
+          status.textContent = 'Camera Off';
+          
+          content.appendChild(avatar);
+          content.appendChild(name);
+          content.appendChild(status);
+          placeholder.appendChild(content);
+          
+          videoElement.appendChild(placeholder);
+        }
+      }
     }
   };
 
@@ -324,12 +367,14 @@ export default function MeetingJoinPage() {
     try {
       // Stop local tracks
       if (localAudioTrackRef.current) {
-        localAudioTrackRef.current.stop();
-        localAudioTrackRef.current.close();
+        try { await localAudioTrackRef.current.setEnabled(false); } catch {}
+        try { localAudioTrackRef.current.stop(); } catch {}
+        try { localAudioTrackRef.current.close(); } catch {}
       }
       if (localVideoTrackRef.current) {
-        localVideoTrackRef.current.stop();
-        localVideoTrackRef.current.close();
+        try { await localVideoTrackRef.current.setEnabled(false); } catch {}
+        try { localVideoTrackRef.current.stop(); } catch {}
+        try { localVideoTrackRef.current.close(); } catch {}
       }
 
       // Leave channel
@@ -343,9 +388,19 @@ export default function MeetingJoinPage() {
         remoteVideosContainer.innerHTML = '';
       }
 
+      // Clear local video element
+      if (localVideoElementRef.current) {
+        try { localVideoElementRef.current.innerHTML = ''; } catch {}
+      }
+
       setIsVideoCallActive(false);
       setRemoteUsers([]);
       setParticipantNames({});
+
+      // Null refs so GC can reclaim devices
+      localAudioTrackRef.current = null;
+      localVideoTrackRef.current = null;
+      clientRef.current = null;
     } catch (error) {
       console.error('Error leaving call:', error);
     } finally {
