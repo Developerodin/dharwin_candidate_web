@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { createMeeting } from '@/shared/lib/candidates';
+import { convertIndianTimeToUTC } from '@/shared/lib/timezone';
 
 interface MeetingFormData {
   title: string;
@@ -61,7 +62,13 @@ export default function GenerateMeetingLinkPage() {
     setMeetingResult(null);
 
     try {
-      const result = await createMeeting(formData);
+      // Convert Indian time to UTC before sending to API
+      const meetingData = {
+        ...formData,
+        scheduledAt: formData.scheduledAt ? convertIndianTimeToUTC(formData.scheduledAt) : formData.scheduledAt
+      };
+      
+      const result = await createMeeting(meetingData);
       setMeetingResult(result);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to create meeting');
