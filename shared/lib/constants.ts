@@ -3,6 +3,7 @@ const AUTH_URL = `${BASE_API_URL}/auth`;
 const CANDIDATES_URL = `${BASE_API_URL}/candidates`;
 const DOCUMENTS_URL = `${BASE_API_URL}/upload/multiple`;
 const MEETINGS_URL = `${BASE_API_URL}/meetings`;
+const LOGS_URL = `${BASE_API_URL}/login-logs`;
 
 // Auth API
 export const Login_User_API = `${AUTH_URL}/login`;
@@ -38,3 +39,5 @@ export const Meeting_API = `${MEETINGS_URL}`;
 // join meeting API
 export const Join_Meeting_API = `${MEETINGS_URL}`;
 
+// logs API
+export const Logs_API = `${LOGS_URL}`;

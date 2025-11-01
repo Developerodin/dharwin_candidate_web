@@ -9,6 +9,9 @@ export const loginUser = async (credentials: { email: string; password: string }
 
   if (data?.tokens) {
     localStorage.setItem('token', data.tokens.access.token);
+    if (data.tokens.refresh?.token) {
+      localStorage.setItem('refreshToken', data.tokens.refresh.token);
+    }
   }
   if (data?.user) {
     localStorage.setItem('user', JSON.stringify(data.user));
@@ -28,7 +31,13 @@ export const registerUser = async (userData: any) => {
 
 // Logout user
 export const logoutUser = async () => {
-  const response = await api.post(Logout_User_API);
+  const refreshToken = typeof window !== 'undefined' ? localStorage.getItem('refreshToken') : null;
+  
+  if (!refreshToken) {
+    throw new Error('Refresh token not found');
+  }
+  
+  const response = await api.post(Logout_User_API, { refreshToken });
   // Dispatch custom event to notify components of user change
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('userChanged'));

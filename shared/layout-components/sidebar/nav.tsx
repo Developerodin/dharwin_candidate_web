@@ -6,6 +6,7 @@ const ProfileIcon = <i className="bx bx-user side-menu__icon"></i>;
 const ShareIcon = <i className="bx bx-share side-menu__icon"></i>;
 const TestIcon = <i className="bx bx-right-arrow-alt side-menu__icon"></i>;
 const CalendarIcon = <i className="bx bx-calendar side-menu__icon"></i>;
+const LogIcon = <i className="bx bx-log-in side-menu__icon"></i>;
 
 // Custom hook to get dynamic menu items based on user role
 export const useMenuItems = () => {
@@ -68,6 +69,15 @@ export const useMenuItems = () => {
             path: "/manage-meetings",
             title: "Manage Meetings",
             icon: CalendarIcon,
+            type: "link",
+            active: true,
+            selected: true,
+            dirchange: false,
+          },
+          {
+            path: "/logs",
+            title: "Logs",
+            icon: LogIcon,
             type: "link",
             active: true,
             selected: true,

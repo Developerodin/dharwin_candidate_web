@@ -73,6 +73,7 @@ export function useAuth() {
       console.warn('Logout API failed, clearing local data anyway');
     } finally {
       localStorage.removeItem('token');
+      localStorage.removeItem('refreshToken');
       localStorage.removeItem('user');
       setUser(null);
       setLoading(false);

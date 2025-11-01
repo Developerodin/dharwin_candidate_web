@@ -1,5 +1,5 @@
 import api from './api';
-import { Candidate_SalarySlips_API, Candidates_API, Documents_API, Export_Candidates_API, Fetch_Candidate_Documents_API, Forgot_Password_API, Join_Meeting_API, Meeting_API, Onboard_Candidate_API, Register_User_API, Share_Candidate_API, Verify_Document_API } from './constants';
+import { Candidate_SalarySlips_API, Candidates_API, Documents_API, Export_Candidates_API, Fetch_Candidate_Documents_API, Forgot_Password_API, Join_Meeting_API, Logs_API, Meeting_API, Onboard_Candidate_API, Register_User_API, Share_Candidate_API, Verify_Document_API } from './constants';
 
 // Fetch all leads
 export const fetchAllCandidates = async () => {
@@ -205,5 +205,12 @@ export const endMeeting = async (meetingId: string) => {
 // Get meeting info
 export const getMeetingInfo = async (meetingId: string, token: string) => {
   const response = await api.get(`${Meeting_API}/${meetingId}/info?token=${token}`);
+  return response.data;
+};
+
+
+// Get logs
+export const getLogs = async () => {
+  const response = await api.get(Logs_API);
   return response.data;
 };
