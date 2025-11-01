@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { getMeetingsList, getMeetingById } from '@/shared/lib/candidates';
+import { getMeetingsList, getMeetingById, deleteMeetingById } from '@/shared/lib/candidates';
 import Swal from 'sweetalert2';
 import { Tooltip } from 'react-tooltip';
 
@@ -124,6 +124,42 @@ export default function ManageMeetingsPage() {
     }
   };
 
+  const handleDeleteMeeting = async (meetingId: string, meetingTitle: string) => {
+    const result = await Swal.fire({
+      title: 'Delete Meeting?',
+      text: `Are you sure you want to delete "${meetingTitle}"? This action cannot be undone.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Delete',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#6b7280'
+    });
+
+    if (!result.isConfirmed) return;
+
+    try {
+      await deleteMeetingById(meetingId);
+      setMeetings((prev) => prev.filter((m) => m.meetingId !== meetingId));
+      setTotalResults((prev) => Math.max(0, prev - 1));
+      void Swal.fire({
+        icon: 'success',
+        title: 'Deleted',
+        text: 'Meeting has been deleted successfully.',
+        timer: 1500,
+        showConfirmButton: false,
+        toast: true,
+        position: 'top-end'
+      });
+    } catch (e: any) {
+      void Swal.fire({
+        icon: 'error',
+        title: 'Delete Failed',
+        text: e?.response?.data?.message || e?.message || 'Unable to delete meeting. Please try again.',
+      });
+    }
+  };
+
   const displayedMeetings = !loading
     ? meetings.filter((m) => (statusFilter === 'all' ? true : m.status === statusFilter))
     : meetings;
@@ -191,14 +227,14 @@ export default function ManageMeetingsPage() {
             <tbody className="divide-y divide-gray-200 bg-white">
               {loading && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-6 text-center text-sm text-gray-500">
+                  <td colSpan={6} className="px-4 py-6 text-center text-sm text-gray-500">
                     Loading meetings...
                   </td>
                 </tr>
               )}
               {!loading && displayedMeetings.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-6 text-center text-sm text-gray-500">
+                  <td colSpan={6} className="px-4 py-6 text-center text-sm text-gray-500">
                     No meetings found{statusFilter !== 'all' ? ` for status "${statusFilter}"` : ''}
                   </td>
                 </tr>
@@ -261,6 +297,18 @@ export default function ManageMeetingsPage() {
                         {/* Eye icon */}
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4 text-gray-700">
                           <path d="M12 5c-7.633 0-10 7-10 7s2.367 7 10 7 10-7 10-7-2.367-7-10-7Zm0 12a5 5 0 1 1 0-10 5 5 0 0 1 0 10Zm0-2a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/>
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() => handleDeleteMeeting(m.meetingId, m.title)}
+                        className="inline-flex items-center rounded-md border border-red-300 px-3 py-1.5 text-xs text-red-700 hover:bg-red-50"
+                        title="Delete meeting"
+                        data-tooltip-id="meeting-actions-tip"
+                        data-tooltip-content="Delete meeting"
+                      >
+                        {/* Trash icon */}
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+                          <path d="M9 3a1 1 0 0 0-1 1v1H5a1 1 0 1 0 0 2h14a1 1 0 1 0 0-2h-3V4a1 1 0 0 0-1-1H9Zm2 5a1 1 0 0 0-1 1v8a1 1 0 1 0 2 0V9a1 1 0 0 0-1-1Zm4 0a1 1 0 0 0-1 1v8a1 1 0 1 0 2 0V9a1 1 0 0 0-1-1ZM7 8a1 1 0 0 0-1 1v8a1 1 0 1 0 2 0V9a1 1 0 0 0-1-1Zm-1 13a2 2 0 0 1-2-2V8h16v11a2 2 0 0 1-2 2H6Z"/>
                         </svg>
                       </button>
                     </div>
