@@ -33,11 +33,15 @@ type ApiResponse = {
 
 export default function LogsPage() {
   const [logs, setLogs] = useState<Log[]>([]);
+  const [filteredLogs, setFilteredLogs] = useState<Log[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [totalResults, setTotalResults] = useState<number>(0);
   const [page, setPage] = useState<number>(1);
   const [totalPages, setTotalPages] = useState<number>(1);
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [roleFilter, setRoleFilter] = useState<string>('all');
+  const [searchValue, setSearchValue] = useState<string>('');
 
   const loadLogs = async () => {
     setLoading(true);
@@ -47,6 +51,7 @@ export default function LogsPage() {
       
       if (response?.results) {
         setLogs(response.results);
+        setFilteredLogs(response.results);
         setTotalResults(response.totalResults);
         setPage(response.page);
         setTotalPages(response.totalPages);
@@ -63,6 +68,37 @@ export default function LogsPage() {
   useEffect(() => {
     loadLogs();
   }, []);
+
+  // Apply filters
+  useEffect(() => {
+    let filtered = [...logs];
+
+    // Filter by status (active/inactive)
+    if (statusFilter !== 'all') {
+      const isActive = statusFilter === 'active';
+      filtered = filtered.filter((log) => log.isActive === isActive);
+    }
+
+    // Filter by role
+    if (roleFilter !== 'all') {
+      filtered = filtered.filter((log) => {
+        const role = (log.role || log.user?.role || '').toLowerCase();
+        return role === roleFilter.toLowerCase();
+      });
+    }
+
+    // Filter by search (name or email)
+    if (searchValue.trim()) {
+      const searchTerm = searchValue.toLowerCase().trim();
+      filtered = filtered.filter((log) => {
+        const name = (log.user?.name || '').toLowerCase();
+        const email = (log.email || log.user?.email || '').toLowerCase();
+        return name.includes(searchTerm) || email.includes(searchTerm);
+      });
+    }
+
+    setFilteredLogs(filtered);
+  }, [logs, statusFilter, roleFilter, searchValue]);
 
   const formatDate = (dateString?: string | null) => {
     if (!dateString) return 'N/A';
@@ -86,6 +122,55 @@ export default function LogsPage() {
         </button>
       </div>
 
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-4 rounded-lg border border-gray-200 bg-white px-4 py-3">
+        <div className="flex items-center gap-2">
+          <label htmlFor="statusFilter" className="text-sm font-medium text-gray-700">
+            Status:
+          </label>
+          <select
+            id="statusFilter"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          >
+            <option value="all">All</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <label htmlFor="roleFilter" className="text-sm font-medium text-gray-700">
+            Role:
+          </label>
+          <select
+            id="roleFilter"
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+            className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          >
+            <option value="all">All</option>
+            <option value="user">User</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+
+        <div className="flex items-center gap-2 flex-1 min-w-[250px]">
+          <label htmlFor="searchInput" className="text-sm font-medium text-gray-700 whitespace-nowrap">
+            Search:
+          </label>
+          <input
+            id="searchInput"
+            type="text"
+            placeholder="Search by name or email..."
+            value={searchValue}
+            onChange={(e) => setSearchValue(e.target.value)}
+            className="flex-1 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+        </div>
+      </div>
+
       {error && (
         <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
@@ -95,7 +180,7 @@ export default function LogsPage() {
       <div className="overflow-hidden rounded-lg border border-gray-200">
         <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
           <h2 className="text-sm font-semibold">
-            Logs {(logs.length > 0 || loading) && `(${loading ? '...' : totalResults})`}
+            Logs {loading ? '(...)' : `(${filteredLogs.length}${filteredLogs.length !== logs.length ? ` of ${logs.length}` : ''})`}
           </h2>
           {!loading && totalPages > 1 && (
             <div className="text-xs text-gray-600">
@@ -125,14 +210,21 @@ export default function LogsPage() {
                   </td>
                 </tr>
               )}
-              {!loading && logs.length === 0 && (
+              {!loading && filteredLogs.length === 0 && logs.length > 0 && (
+                <tr>
+                  <td colSpan={8} className="px-4 py-6 text-center text-sm text-gray-500">
+                    No logs match the current filters
+                  </td>
+                </tr>
+              )}
+              {!loading && filteredLogs.length === 0 && logs.length === 0 && (
                 <tr>
                   <td colSpan={8} className="px-4 py-6 text-center text-sm text-gray-500">
                     No logs found
                   </td>
                 </tr>
               )}
-              {!loading && logs.map((log) => (
+              {!loading && filteredLogs.map((log) => (
                 <tr key={log.id} className="hover:bg-gray-50">
                   <td className="px-4 py-2 text-gray-700">
                     {log.user?.name || 'N/A'}
