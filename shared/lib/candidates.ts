@@ -135,6 +135,7 @@ export const createMeeting = async (meetingData: {
   maxParticipants: number;
   allowGuestJoin: boolean;
   requireApproval: boolean;
+  hosts?: { name: string; email: string }[];
 }) => {
   const response = await api.post(Meeting_API, meetingData);
   return response.data;

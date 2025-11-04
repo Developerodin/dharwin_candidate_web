@@ -12,6 +12,7 @@ interface MeetingFormData {
   maxParticipants: number;
   allowGuestJoin: boolean;
   requireApproval: boolean;
+  hosts: { name: string; email: string }[];
 }
 
 interface MeetingResponse {
@@ -36,6 +37,7 @@ export default function GenerateMeetingLinkPage() {
     maxParticipants: 10,
     allowGuestJoin: true,
     requireApproval: false,
+    hosts: [],
   });
 
   const [isLoading, setIsLoading] = useState(false);
@@ -53,6 +55,22 @@ export default function GenerateMeetingLinkPage() {
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));
     }
+  };
+
+  const addHost = () => {
+    setFormData(prev => ({ ...prev, hosts: [...prev.hosts, { name: '', email: '' }] }));
+  };
+
+  const removeHost = (index: number) => {
+    setFormData(prev => ({ ...prev, hosts: prev.hosts.filter((_, i) => i !== index) }));
+  };
+
+  const handleHostChange = (index: number, field: 'name' | 'email', value: string) => {
+    setFormData(prev => {
+      const hosts = [...prev.hosts];
+      hosts[index] = { ...hosts[index], [field]: value } as { name: string; email: string };
+      return { ...prev, hosts };
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -196,6 +214,56 @@ export default function GenerateMeetingLinkPage() {
                   </label>
                 </div>
               </div>
+
+              {/* Hosts section */}
+              <div className="md:col-span-2">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700">Hosts</label>
+                  <button
+                    type="button"
+                    onClick={addHost}
+                    className="inline-flex items-center px-3 py-1.5 rounded-md bg-gray-100 hover:bg-gray-200 text-sm text-gray-800"
+                  >
+                    Add Host
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {formData.hosts.length === 0 && (
+                    <div className="text-xs text-gray-500">Optionally add one or more hosts (name and email).</div>
+                  )}
+                  {formData.hosts.map((host, index) => (
+                    <div key={index} className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+                      <div className="md:col-span-2">
+                        <input
+                          type="text"
+                          value={host.name}
+                          onChange={(e) => handleHostChange(index, 'name', e.target.value)}
+                          placeholder="Host name"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div className="md:col-span-3">
+                        <input
+                          type="email"
+                          value={host.email}
+                          onChange={(e) => handleHostChange(index, 'email', e.target.value)}
+                          placeholder="host@example.com"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div className="md:col-span-5 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => removeHost(index)}
+                          className="px-3 py-1.5 rounded-md bg-red-100 hover:bg-red-200 text-sm text-red-700"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
 
             {error && (
@@ -294,6 +362,7 @@ export default function GenerateMeetingLinkPage() {
                     maxParticipants: 10,
                     allowGuestJoin: true,
                     requireApproval: false,
+                    hosts: [],
                   });
                 }}
                 className="flex-1 bg-gray-600 text-white py-2 px-4 rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500"

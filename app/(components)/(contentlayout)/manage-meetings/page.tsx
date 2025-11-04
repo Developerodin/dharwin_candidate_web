@@ -342,6 +342,21 @@ export default function ManageMeetingsPage() {
               )}
               {!detailLoading && !detailError && selectedMeeting && (
                 <div className="space-y-3">
+                  {Array.isArray(selectedMeeting.hostParticipants) && selectedMeeting.hostParticipants.length > 0 && (
+                    <div>
+                      <div className="text-xs text-gray-500 mb-1">Hosts</div>
+                      <ul className="divide-y divide-gray-200 border border-gray-200 rounded-md">
+                        {selectedMeeting.hostParticipants.map((h: any, idx: number) => (
+                          <li key={idx} className="px-3 py-2 flex items-center justify-between">
+                            <div className="mr-2">
+                              <div className="text-sm font-medium text-gray-900">{h?.name || 'Unnamed Host'}</div>
+                              <div className="text-xs text-gray-600">{h?.email || '-'}</div>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                   <div>
                     <div className="text-xs text-gray-500">Title</div>
                     <div className="font-medium">{selectedMeeting.title}</div>
