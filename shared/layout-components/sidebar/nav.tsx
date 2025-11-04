@@ -7,6 +7,7 @@ const ShareIcon = <i className="bx bx-share side-menu__icon"></i>;
 const TestIcon = <i className="bx bx-right-arrow-alt side-menu__icon"></i>;
 const CalendarIcon = <i className="bx bx-calendar side-menu__icon"></i>;
 const LogIcon = <i className="bx bx-log-in side-menu__icon"></i>;
+const AttendanceIcon = <i className="bx bx-calendar-check side-menu__icon"></i>;
 
 // Custom hook to get dynamic menu items based on user role
 export const useMenuItems = () => {
@@ -44,7 +45,7 @@ export const useMenuItems = () => {
             icon: ProfileGroupIcon,
             type: "link",
             active: true,
-            selected: true,
+            selected: false,
             dirchange: false,
           },
           {
@@ -53,7 +54,16 @@ export const useMenuItems = () => {
             icon: ShareIcon,
             type: "link",
             active: true,
-            selected: true,
+            selected: false,
+            dirchange: false,
+          },
+          {
+            path: "/track-attendance",
+            title: "Track Attendance",
+            icon: AttendanceIcon,
+            type: "link",
+            active: true,
+            selected: false,
             dirchange: false,
           },
           {
@@ -62,7 +72,7 @@ export const useMenuItems = () => {
             icon: TestIcon,
             type: "link",
             active: true,
-            selected: true,
+            selected: false,
             dirchange: false,
           },
           {
@@ -71,7 +81,7 @@ export const useMenuItems = () => {
             icon: CalendarIcon,
             type: "link",
             active: true,
-            selected: true,
+            selected: false,
             dirchange: false,
           },
           {
@@ -80,7 +90,7 @@ export const useMenuItems = () => {
             icon: LogIcon,
             type: "link",
             active: true,
-            selected: true,
+            selected: false,
             dirchange: false,
           }
         );
@@ -88,15 +98,26 @@ export const useMenuItems = () => {
 
       // Show only for normal user
       if (userRole === "user") {
-        items.push({
+        items.push(
+          {
           path: "/profile",
           title: "Profile",
           icon: ProfileIcon,
           type: "link",
           active: true,
-          selected: true,
+          selected: false,
           dirchange: false,
-        });
+        },
+        {
+          path: "/attendance",
+          title: "Attendance",
+          icon: AttendanceIcon,
+          type: "link",
+          active: true,
+          selected: false,
+          dirchange: false,
+        }
+        );
       }
 
       setMenuItems(items);

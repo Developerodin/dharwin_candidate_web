@@ -1,5 +1,5 @@
 import api from './api';
-import { Candidate_SalarySlips_API, Candidates_API, Documents_API, Export_Candidates_API, Fetch_Candidate_Documents_API, Forgot_Password_API, Join_Meeting_API, Logs_API, Meeting_API, Onboard_Candidate_API, Register_User_API, Share_Candidate_API, Verify_Document_API } from './constants';
+import { Attendance_API, Candidate_SalarySlips_API, Candidates_API, Documents_API, Export_Candidates_API, Fetch_Candidate_Documents_API, Forgot_Password_API, Join_Meeting_API, Logs_API, Meeting_API, Onboard_Candidate_API, Register_User_API, Share_Candidate_API, Verify_Document_API } from './constants';
 
 // Fetch all leads
 export const fetchAllCandidates = async () => {
@@ -213,5 +213,47 @@ export const getMeetingInfo = async (meetingId: string, token: string) => {
 // Get logs
 export const getLogs = async () => {
   const response = await api.get(Logs_API);
+  return response.data;
+};
+
+
+// Punch in attendance
+export const punchInAttendance = async (candidateId: string, attendanceData: {
+  punchInTime: string;
+  notes: "Starting shift";
+}) => {
+  const response = await api.post(`${Attendance_API}/punch-in/${candidateId}`, attendanceData);
+  return response.data;
+};
+
+// Punch out attendance
+export const punchOutAttendance = async (candidateId: string, attendanceData: {
+  punchOutTime: string;
+  notes: "Ending shift";
+}) => {
+  const response = await api.post(`${Attendance_API}/punch-out/${candidateId}`, attendanceData);
+  return response.data;
+};
+
+// Get Punch In/Out Status by candidate id
+export const getPunchInOutStatus = async (candidateId: string) => {
+  const response = await api.get(`${Attendance_API}/status/${candidateId}`);
+  return response.data;
+};
+
+// Get Attendance by Candidate
+export const getAttendanceByCandidate = async (candidateId: string) => {
+  const response = await api.get(`${Attendance_API}/candidate/${candidateId}`);
+  return response.data;
+};
+
+// Get Attendance
+export const getAttendance = async (page?: number, limit?: number) => {
+  const params = new URLSearchParams();
+  if (page) params.append('page', page.toString());
+  if (limit) params.append('limit', limit.toString());
+  const queryString = params.toString();
+  const url = `${Attendance_API}${queryString ? `?${queryString}` : ''}`;
+  const response = await api.get(url);
   return response.data;
 };

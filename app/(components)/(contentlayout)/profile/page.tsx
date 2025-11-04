@@ -4,7 +4,7 @@ import Pageheader from '@/shared/layout-components/page-header/pageheader'
 import Seo from '@/shared/layout-components/seo/seo'
 import Link from 'next/link'
 import React, { Fragment, useEffect, useState, useCallback } from 'react'
-import { fetchAllCandidates, shareCandidate } from '@/shared/lib/candidates'
+import { fetchAllCandidates, shareCandidate, punchInAttendance, punchOutAttendance, getPunchInOutStatus } from '@/shared/lib/candidates'
 import PerfectScrollbar from 'react-perfect-scrollbar';
 import 'react-perfect-scrollbar/dist/css/styles.css';
 import { useRouter } from 'next/navigation';
@@ -20,6 +20,9 @@ const profile = () => {
     const [shareEmail, setShareEmail] = useState<string>('');
     const [shareWithDoc, setShareWithDoc] = useState<boolean>(false);
     const [sharingProfile, setSharingProfile] = useState<boolean>(false);
+    const [isPunching, setIsPunching] = useState<boolean>(false);
+    const [punchedIn, setPunchedIn] = useState<boolean>(false);
+    const [punchStatusData, setPunchStatusData] = useState<any>(null);
 
     // Function to check if profile is completed
     const isProfileCompleted = useCallback((profile: any): boolean => {
@@ -391,9 +394,160 @@ const profile = () => {
         }
     };
 
+    // Punch In/Out Handlers (candidate only on own profile)
+    const canPunch = currentUser?.role === 'user' && profileData?.id && String(profileData?.owner) === String(currentUser?.id);
+
+    // Fetch current punch status from API when profile loads or changes
+    useEffect(() => {
+        const fetchStatus = async () => {
+            try {
+                if (!canPunch) return;
+                const res = await getPunchInOutStatus(profileData.id);
+                const activeValue = (res?.isPunchedIn !== undefined) ? res.isPunchedIn : (res?.data?.isActive ?? res?.isActive);
+                const active = activeValue === true;
+                setPunchedIn(active);
+                setPunchStatusData(res?.data || res);
+            } catch (e) {
+                // if status fetch fails, keep existing state
+                console.warn('Failed to fetch punch status', e);
+            }
+        };
+        fetchStatus();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [canPunch, profileData?.id]);
+
+    const handlePunchIn = async () => {
+        if (!canPunch) return;
+        try {
+            setIsPunching(true);
+            const nowIso = new Date().toISOString();
+            const candidateId = profileData.id;
+            const res = await punchInAttendance(candidateId, { punchInTime: nowIso, notes: "Starting shift" as any });
+            setPunchedIn(true);
+            setPunchStatusData(res?.data || res);
+            await Swal.fire({
+                icon: 'success',
+                title: 'Punched In',
+                text: (res && (res.message || res?.data?.message)) || 'Punched in successfully',
+                timer: 1800,
+                showConfirmButton: false
+            });
+            // Refresh status to get updated data
+            const statusRes = await getPunchInOutStatus(candidateId);
+            setPunchStatusData(statusRes?.data || statusRes);
+        } catch (e) {
+            console.error('Punch-in failed', e);
+            await Swal.fire({
+                icon: 'error',
+                title: 'Punch In Failed',
+                text: (e as any)?.response?.data?.message || (e as any)?.message || 'Failed to punch in. Please try again.'
+            });
+        } finally {
+            setIsPunching(false);
+        }
+    };
+
+    const handlePunchOut = async () => {
+        if (!canPunch) return;
+        try {
+            setIsPunching(true);
+            const nowIso = new Date().toISOString();
+            const candidateId = profileData.id;
+            const res = await punchOutAttendance(candidateId, { punchOutTime: nowIso, notes: "Ending shift" as any });
+            setPunchedIn(false);
+            setPunchStatusData(res?.data || res);
+            await Swal.fire({
+                icon: 'success',
+                title: 'Punched Out',
+                text: (res && (res.message || res?.data?.message)) || 'Punched out successfully',
+                timer: 1800,
+                showConfirmButton: false
+            });
+            // Refresh status to get updated data
+            const statusRes = await getPunchInOutStatus(candidateId);
+            setPunchStatusData(statusRes?.data || statusRes);
+        } catch (e) {
+            console.error('Punch-out failed', e);
+            await Swal.fire({
+                icon: 'error',
+                title: 'Punch Out Failed',
+                text: (e as any)?.response?.data?.message || (e as any)?.message || 'Failed to punch out. Please try again.'
+            });
+        } finally {
+            setIsPunching(false);
+        }
+    };
+
     return (
         <Fragment>
             <Seo title={"Profile"} />
+            {canPunch && (
+                <div className="px-4 sm:px-6 mt-2 mb-4">
+                    <div className="box">
+                        <div className="box-body">
+                            <div className="flex flex-wrap items-center gap-3 justify-between">
+                                <div className="flex flex-col gap-1">
+                                    <span className={`inline-flex items-center rounded-sm px-3 py-1 text-xs font-medium ${punchedIn ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                                        {punchedIn ? 'Status: Active (Punched In)' : 'Status: Inactive (Punched Out)'}
+                                    </span>
+                                    {punchStatusData && (
+                                        <div className="text-xs text-gray-600 dark:text-gray-400 flex flex-wrap gap-2 items-center">
+                                            {punchStatusData.day && (
+                                                <span className="inline-flex items-center gap-1">
+                                                    <i className="ri-calendar-line"></i>
+                                                    {punchStatusData.day}
+                                                </span>
+                                            )}
+                                            {punchStatusData.date && (
+                                                <span className="inline-flex items-center gap-1">
+                                                    <i className="ri-calendar-2-line"></i>
+                                                    {new Date(punchStatusData.date).toLocaleDateString()}
+                                                </span>
+                                            )}
+                                            {punchedIn && punchStatusData.punchIn && (
+                                                <span className="inline-flex items-center gap-1">
+                                                    <i className="ri-time-line"></i>
+                                                    Punched In: {new Date(punchStatusData.punchIn).toLocaleTimeString()}
+                                                </span>
+                                            )}
+                                            {!punchedIn && punchStatusData.punchOut && (
+                                                <span className="inline-flex items-center gap-1">
+                                                    <i className="ri-time-line"></i>
+                                                    Punched Out: {new Date(punchStatusData.punchOut).toLocaleTimeString()}
+                                                </span>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                                <div>
+                                    {!punchedIn ? (
+                                        <button
+                                            type="button"
+                                            onClick={handlePunchIn}
+                                            disabled={isPunching}
+                                            className="ti-btn bg-green-600 hover:bg-green-700 text-white !font-medium !gap-1 disabled:opacity-60 shadow-lg shadow-green-500/50 border-2 border-green-400 animate-pulse px-4 py-2"
+                                        >
+                                            {isPunching ? <i className="ri-loader-4-line animate-spin me-1"></i> : <i className="ri-login-circle-line me-1"></i>}
+                                            Punch In
+                                        </button>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={handlePunchOut}
+                                            disabled={isPunching}
+                                            className="ti-btn bg-rose-600 text-white !font-medium !gap-1 disabled:opacity-60"
+                                        >
+                                            {isPunching ? <i className="ri-loader-4-line animate-spin me-1"></i> : <i className="ri-logout-circle-line me-1"></i>}
+                                            Punch Out
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <Pageheader currentpage="Profile" activepage="Pages" mainpage="Profile" />
             <div className="grid grid-cols-12 gap-x-6">
                 <div className="xxl:col-span-4 xl:col-span-12 col-span-12">

@@ -233,7 +233,7 @@ export default function LogsPage() {
                     {log.email || log.user?.email || 'N/A'}
                   </td>
                   <td className="px-4 py-2 text-gray-700">
-                    <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800">
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${log.user?.role === "user" ? 'bg-yellow-100' : 'bg-blue-100'} ${log.user?.role === "user" ? 'text-yellow-800' : 'text-blue-800'}`}>
                       {log.role || log.user?.role || 'N/A'}
                     </span>
                   </td>

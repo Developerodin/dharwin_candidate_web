@@ -6,7 +6,7 @@ const Select = dynamic(() => import("react-select"), {ssr : false});
 import dynamic from 'next/dynamic';
 import Swal from "sweetalert2";
 import { useEffect, useState } from 'react';
-import { fetchAllCandidates, deleteCandidate, addCandidateSalarySlips, uploadDocuments, fetchCandidateDocuments, verifyDocument, shareCandidate } from '@/shared/lib/candidates';
+import { fetchAllCandidates, deleteCandidate, addCandidateSalarySlips, uploadDocuments, fetchCandidateDocuments, verifyDocument, shareCandidate, getAttendanceByCandidate } from '@/shared/lib/candidates';
 
 const Candidates = () => {
     const [canData, setCanData] = useState<any[]>([]);
@@ -34,6 +34,10 @@ const Candidates = () => {
     const [shareEmail, setShareEmail] = useState<string>('');
     const [shareWithDoc, setShareWithDoc] = useState<boolean>(false);
     const [sharingCandidate, setSharingCandidate] = useState<boolean>(false);
+    const [showAttendanceModal, setShowAttendanceModal] = useState<boolean>(false);
+    const [selectedCandidateForAttendance, setSelectedCandidateForAttendance] = useState<any>(null);
+    const [candidateAttendance, setCandidateAttendance] = useState<any[]>([]);
+    const [loadingAttendanceData, setLoadingAttendanceData] = useState<boolean>(false);
 
     const getCandidates = async () => {
         try {
@@ -242,6 +246,101 @@ const Candidates = () => {
         } finally {
             setSharingCandidate(false);
         }
+    };
+
+    // Function to open attendance modal
+    const openAttendanceModal = async (candidate: any) => {
+        setSelectedCandidateForAttendance(candidate);
+        setShowAttendanceModal(true);
+        setLoadingAttendanceData(true);
+        
+        try {
+            const candidateId = candidate?.id || candidate?._id;
+            if (candidateId) {
+                const response: any = await getAttendanceByCandidate(candidateId);
+                const records = response?.data?.results || response?.results || [];
+                setCandidateAttendance(records);
+            }
+        } catch (e: any) {
+            console.error('Failed to load candidate attendance:', e);
+            setCandidateAttendance([]);
+        } finally {
+            setLoadingAttendanceData(false);
+        }
+    };
+
+    // Function to close attendance modal
+    const closeAttendanceModal = () => {
+        setShowAttendanceModal(false);
+        setSelectedCandidateForAttendance(null);
+        setCandidateAttendance([]);
+    };
+
+    // Format duration to hours
+    const formatDurationHours = (milliseconds: number) => {
+        if (!milliseconds || milliseconds === 0) return 0;
+        return Math.round((milliseconds / (1000 * 60 * 60)) * 100) / 100;
+    };
+
+    // Get calendar data for the current month/year
+    const getCalendarData = () => {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth();
+        
+        const firstDay = new Date(year, month, 1);
+        const lastDay = new Date(year, month + 1, 0);
+        const daysInMonth = lastDay.getDate();
+        
+        const attendanceMap = new Map<string, any>();
+        candidateAttendance.forEach(record => {
+            if (record.date) {
+                const recordDate = new Date(record.date);
+                if (recordDate.getFullYear() === year && recordDate.getMonth() === month) {
+                    const dateKey = recordDate.toISOString().split('T')[0];
+                    attendanceMap.set(dateKey, record);
+                }
+            }
+        });
+        
+        const calendarDays: Array<{ day: number; date: Date; attendance: any | null }> = [];
+        
+        const startDayOfWeek = firstDay.getDay();
+        for (let i = 0; i < startDayOfWeek; i++) {
+            calendarDays.push({ day: 0, date: new Date(year, month, -i), attendance: null });
+        }
+        
+        for (let day = 1; day <= daysInMonth; day++) {
+            const date = new Date(year, month, day);
+            const dateKey = date.toISOString().split('T')[0];
+            const attendance = attendanceMap.get(dateKey) || null;
+            calendarDays.push({ day, date, attendance });
+        }
+        
+        return calendarDays;
+    };
+
+    // Calculate statistics for current month only
+    const getMonthStatistics = () => {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth();
+        
+        const currentMonthRecords = candidateAttendance.filter(record => {
+            if (!record.date) return false;
+            const recordDate = new Date(record.date);
+            return recordDate.getFullYear() === year && recordDate.getMonth() === month;
+        });
+        
+        const totalHours = formatDurationHours(
+            currentMonthRecords.reduce((sum, record) => sum + (record.duration || 0), 0)
+        );
+        
+        const presentDays = currentMonthRecords.filter(r => r.punchIn && r.punchOut).length;
+        const daysInCurrentMonth = new Date(year, month + 1, 0).getDate();
+        const absentDays = Math.max(0, daysInCurrentMonth - presentDays);
+        
+        return { totalHours, presentDays, absentDays };
     };
 
     // Function to handle document verification
@@ -670,6 +769,16 @@ const Candidates = () => {
                                                                 title="Share Candidate"
                                                             >
                                                                 <i className="ri-share-line"></i>
+                                                            </button>
+                                                            <button 
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    openAttendanceModal(can);
+                                                                }}
+                                                                className="ti-btn ti-btn-icon ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-purple-500/10 text-purple-500 hover:bg-purple-500 hover:text-white hover:border-purple-500"
+                                                                title="View Attendance"
+                                                            >
+                                                                <i className="ri-calendar-line"></i>
                                                             </button>
 
                                                             <button type="button"
@@ -1669,6 +1778,164 @@ const Candidates = () => {
                                             Share Candidate
                                         </>
                                     )}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Attendance Details Modal */}
+            {showAttendanceModal && selectedCandidateForAttendance && (
+                <div className="fixed inset-0 z-50 overflow-y-auto">
+                    <div className="flex items-center justify-center min-h-screen pt-4 px-2 sm:px-4 pb-20 text-center sm:block sm:p-0">
+                        {/* Background overlay */}
+                        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={closeAttendanceModal}></div>
+
+                        {/* Modal panel */}
+                        <div className="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all w-full max-w-4xl mx-auto sm:my-8 sm:align-middle">
+                            {/* Modal header */}
+                            <div className="bg-white dark:bg-gray-800 px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                                            Attendance Details - {selectedCandidateForAttendance?.fullName || 'N/A'}
+                                        </h3>
+                                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                            {selectedCandidateForAttendance?.email}
+                                        </p>
+                                    </div>
+                                    <button
+                                        onClick={closeAttendanceModal}
+                                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                    >
+                                        <i className="ri-close-line text-2xl"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Modal body */}
+                            <div className="bg-white dark:bg-gray-800 px-4 sm:px-6 py-4 max-h-[70vh] overflow-y-auto">
+                                {loadingAttendanceData ? (
+                                    <div className="text-center py-8">
+                                        <i className="ri-loader-4-line animate-spin text-3xl text-primary mb-2"></i>
+                                        <p className="text-gray-600 dark:text-gray-400">Loading attendance data...</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-6">
+                                        {/* Summary Cards */}
+                                        {(() => {
+                                            const monthStats = getMonthStatistics();
+                                            return (
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                    <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
+                                                        <div className="flex items-center justify-between">
+                                                            <div>
+                                                                <p className="text-sm text-gray-600 dark:text-gray-400">Total Working Hours</p>
+                                                                <p className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1">
+                                                                    {monthStats.totalHours.toFixed(2)}h
+                                                                </p>
+                                                            </div>
+                                                            <i className="ri-time-line text-3xl text-blue-600 dark:text-blue-400"></i>
+                                                        </div>
+                                                    </div>
+                                                    <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
+                                                        <div className="flex items-center justify-between">
+                                                            <div>
+                                                                <p className="text-sm text-gray-600 dark:text-gray-400">Present Days</p>
+                                                                <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">
+                                                                    {monthStats.presentDays}
+                                                                </p>
+                                                            </div>
+                                                            <i className="ri-checkbox-circle-line text-3xl text-green-600 dark:text-green-400"></i>
+                                                        </div>
+                                                    </div>
+                                                    <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-4">
+                                                        <div className="flex items-center justify-between">
+                                                            <div>
+                                                                <p className="text-sm text-gray-600 dark:text-gray-400">Absent Days</p>
+                                                                <p className="text-2xl font-bold text-red-600 dark:text-red-400 mt-1">
+                                                                    {monthStats.absentDays}
+                                                                </p>
+                                                            </div>
+                                                            <i className="ri-close-circle-line text-3xl text-red-600 dark:text-red-400"></i>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
+
+                                        {/* Calendar Layout */}
+                                        <div>
+                                            <h4 className="text-md font-semibold text-gray-900 dark:text-white mb-4">
+                                                Calendar View - {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                                            </h4>
+                                            <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                                                {/* Calendar Header */}
+                                                <div className="grid grid-cols-7 bg-gray-50 dark:bg-gray-700">
+                                                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                                                        <div key={day} className="p-2 text-center text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                            {day}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                                {/* Calendar Grid */}
+                                                <div className="grid grid-cols-7 bg-white dark:bg-gray-800">
+                                                    {getCalendarData().map((item, index) => {
+                                                        const isPresent = item.attendance && item.attendance.punchIn && item.attendance.punchOut;
+                                                        const hours = item.attendance ? formatDurationHours(item.attendance.duration) : 0;
+                                                        
+                                                        return (
+                                                            <div
+                                                                key={index}
+                                                                className={`min-h-[80px] p-2 border border-gray-200 dark:border-gray-700 ${
+                                                                    item.day === 0 
+                                                                        ? 'bg-gray-50 dark:bg-gray-900' 
+                                                                        : isPresent 
+                                                                            ? 'bg-green-50 dark:bg-green-900/20' 
+                                                                            : 'bg-white dark:bg-gray-800'
+                                                                }`}
+                                                            >
+                                                                {item.day > 0 && (
+                                                                    <div className="flex flex-col h-full">
+                                                                        <span className={`text-sm font-medium ${
+                                                                            item.day === 0 
+                                                                                ? 'text-gray-400' 
+                                                                                : isPresent 
+                                                                                    ? 'text-green-700 dark:text-green-400' 
+                                                                                    : 'text-gray-600 dark:text-gray-400'
+                                                                        }`}>
+                                                                            {item.day}
+                                                                        </span>
+                                                                        {isPresent && (
+                                                                            <span className="text-xs text-green-600 dark:text-green-400 mt-1">
+                                                                                {hours.toFixed(1)}h
+                                                                            </span>
+                                                                        )}
+                                                                        {!isPresent && item.day > 0 && (
+                                                                            <span className="text-xs text-red-500 dark:text-red-400 mt-1">
+                                                                                Absent
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Modal footer */}
+                            <div className="bg-gray-50 dark:bg-gray-700 px-4 sm:px-6 py-3 flex justify-end">
+                                <button
+                                    onClick={closeAttendanceModal}
+                                    className="ti-btn ti-btn-primary"
+                                >
+                                    Close
                                 </button>
                             </div>
                         </div>
