@@ -187,7 +187,7 @@ export const joinMeeting = async (meetingId: string, data: {
 export const leaveMeeting = async (meetingId: string, data: {
   email: string;
 }) => {
-  const response = await api.post(`${Meeting_API}/${meetingId}/leave`);
+  const response = await api.post(`${Meeting_API}/${meetingId}/leave`, data);
   return response.data;
 };
 
@@ -206,6 +206,16 @@ export const endMeeting = async (meetingId: string) => {
 // Get meeting info
 export const getMeetingInfo = async (meetingId: string, token: string) => {
   const response = await api.get(`${Meeting_API}/${meetingId}/info?token=${token}`);
+  return response.data;
+};
+
+// Get screen share token for a meeting
+export const getScreenShareToken = async (meetingId: string, data: {
+  joinToken: string;
+  screenShareUid: string | number;
+  email: string;
+}) => {
+  const response = await api.post(`${Meeting_API}/${meetingId}/screen-share-token`, data);
   return response.data;
 };
 

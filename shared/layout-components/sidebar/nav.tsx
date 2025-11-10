@@ -92,7 +92,7 @@ export const useMenuItems = () => {
             active: true,
             selected: false,
             dirchange: false,
-          }
+          },
         );
       }
 

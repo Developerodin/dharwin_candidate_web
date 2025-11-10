@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
-import { getMeetingInfo, joinMeeting } from '@/shared/lib/candidates';
+import { getMeetingInfo, joinMeeting, leaveMeeting, listParticipantsInMeeting, getScreenShareToken } from '@/shared/lib/candidates';
 import { convertToIST, formatISTDateTime, getTimeUntilIST, isMeetingInFutureIST, isUserInIndia, formatUTCForUserRegion, msUntil } from '@/shared/lib/timezone';
 import AgoraRTC, { IAgoraRTCClient, ICameraVideoTrack, IMicrophoneAudioTrack, ILocalVideoTrack } from 'agora-rtc-sdk-ng';
 
@@ -16,6 +16,7 @@ interface MeetingInfo {
   maxParticipants?: number;
   allowGuestJoin?: boolean;
   requireApproval?: boolean;
+  participants?: Participant[];
 }
 
 interface Participant {
@@ -73,15 +74,21 @@ export default function MeetingJoinPage() {
   const [isLeaving, setIsLeaving] = useState(false);
   const [participantNames, setParticipantNames] = useState<{[uid: string]: string}>({});
   const [isStartingScreenShare, setIsStartingScreenShare] = useState(false);
+  const [remoteVideoStates, setRemoteVideoStates] = useState<{[uid: string]: {hasVideo: boolean; hasAudio: boolean; hasScreenShare: boolean}}>({});
+  const remoteVideoRefs = useRef<{[uid: string]: HTMLDivElement | null}>({});
+  const remoteScreenRefs = useRef<{[uid: string]: HTMLDivElement | null}>({});
+  // Track separate video tracks for camera and screen share per user
+  const remoteUsersWithTracks = useRef<{[uid: string]: {cameraTrack?: any; screenTrack?: any; audioTrack?: any}}>({});
 
   // Refs for Agora
   const clientRef = useRef<IAgoraRTCClient | null>(null);
+  const screenShareClientRef = useRef<IAgoraRTCClient | null>(null); // Separate client for screen sharing
   const localVideoTrackRef = useRef<ICameraVideoTrack | null>(null);
   const localAudioTrackRef = useRef<IMicrophoneAudioTrack | null>(null);
   const localScreenTrackRef = useRef<ILocalVideoTrack | null>(null);
   const localVideoElementRef = useRef<HTMLDivElement>(null);
   const localScreenElementRef = useRef<HTMLDivElement>(null);
-  const wasCameraPublishedBeforeShareRef = useRef<boolean>(false);
+  const mainClientUidRef = useRef<string | number | null>(null); // Store main client UID to derive screen share UID
   
   // Responsive layout management
   const headerRef = useRef<HTMLDivElement>(null);
@@ -99,10 +106,10 @@ export default function MeetingJoinPage() {
     if (!badge) {
       badge = document.createElement('div');
       badge.id = `mic-badge-${uid}`;
-      badge.className = 'absolute top-2 right-2 px-2 py-1 rounded text-xs text-white flex items-center gap-1';
+      badge.className = 'absolute top-2 right-2 px-1 py-2 rounded-full text-xs text-white flex items-center gap-1';
       container.appendChild(badge);
     }
-    badge.className = `absolute top-2 right-2 px-2 py-1 rounded text-xs text-white flex items-center gap-1 ${muted ? 'bg-red-600' : 'bg-green-600'}`;
+    badge.className = `absolute top-2 right-2 px-1 py-2 rounded-full text-xs text-white flex items-center gap-1 ${muted ? 'bg-red-600' : 'bg-green-600'}`;
     badge.innerHTML = muted
       ? '<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M9 4a3 3 0 016 0v3a3 3 0 11-6 0V4zm8.707 9.293a1 1 0 10-1.414 1.414l1 1a1 1 0 001.414-1.414l-1-1zM3.293 3.293a1 1 0 011.414 0l12 12a1 1 0 01-1.414 1.414l-2.034-2.034A6.978 6.978 0 0111 16.917V19a1 1 0 11-2 0v-2.083A7.003 7.003 0 013 10a1 1 0 112 0 5 5 0 008.071 3.95l-1.42-1.42A3.001 3.001 0 017 10V8.414L3.293 4.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>'
       : '<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a3 3 0 00-3 3v3a3 3 0 006 0V5a3 3 0 00-3-3z"/><path d="M5 10a5 5 0 0010 0 1 1 0 112 0 7 7 0 01-6 6.917V19a1 1 0 11-2 0v-2.083A7 7 0 013 10a1 1 0 112 0z"/></svg>';
@@ -134,22 +141,39 @@ export default function MeetingJoinPage() {
 
     // Apply tile heights to existing remote containers
     requestAnimationFrame(() => {
-      const showRemotes = Math.max(0, capacity - 1);
+      // Check if screen sharing is active (local or remote)
+      const hasRemoteScreenShare = remoteUsers.some((user: any) => {
+        const uidStr = user.uid?.toString();
+        const isScreenShareUid = uidStr && (
+          (typeof user.uid === 'number' && user.uid > 1000000) ||
+          (typeof uidStr === 'string' && uidStr.includes('-screen'))
+        );
+        const mainUid = mainClientUidRef.current;
+        const isLocalUser = mainUid && (user.uid === mainUid || user.uid?.toString() === mainUid.toString());
+        if (isScreenShareUid || isLocalUser) return false;
+        const videoState = remoteVideoStates[user.uid] || { hasVideo: false, hasAudio: false, hasScreenShare: false };
+        return videoState.hasScreenShare;
+      });
+      const hasAnyScreenShare = isScreenSharing || hasRemoteScreenShare;
+
+      // If screen sharing is active, show all participants
+      const showRemotes = hasAnyScreenShare ? remoteUsers.length : Math.max(0, capacity - 1);
+      
       remoteUsers.forEach((u: any, index: number) => {
         const el = document.getElementById(`remote-video-container-${u.uid}`) as HTMLDivElement | null;
         if (el) {
-          el.style.minWidth = `${minTileW}px`;
           el.style.height = `${computedTileH}px`;
           el.style.display = index < showRemotes ? '' : 'none';
         }
       });
+      
+      // Remove overflow indicator and don't create it if screen sharing is active
       const overflowEl = document.getElementById('overflow-indicator');
       if (overflowEl) overflowEl.remove();
-      if (extra > 0 && gridRef.current) {
+      if (extra > 0 && !hasAnyScreenShare && gridRef.current) {
         const badge = document.createElement('div');
         badge.id = 'overflow-indicator';
         badge.className = 'relative bg-gray-800 rounded-xl overflow-hidden shadow-lg flex items-center justify-center';
-        badge.style.minWidth = `${minTileW}px`;
         badge.style.height = `${computedTileH}px`;
         const inner = document.createElement('div');
         inner.className = 'text-white text-lg font-semibold bg-black/50 px-3 py-2 rounded-full';
@@ -159,7 +183,6 @@ export default function MeetingJoinPage() {
       }
       const localEl = document.getElementById('local-video-container') as HTMLDivElement | null;
       if (localEl) {
-        localEl.style.minWidth = `${minTileW}px`;
         localEl.style.height = `${computedTileH}px`;
       }
     });
@@ -177,6 +200,70 @@ export default function MeetingJoinPage() {
     recomputeLayout();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [remoteUsers.length, isScreenSharing]);
+
+  // Calculate real-time participant count (excluding screen share UIDs and local user)
+  const participantCount = useMemo(() => {
+    const filteredRemoteUsers = remoteUsers.filter((user: any) => {
+      const uidStr = user.uid?.toString();
+      const isScreenShareUid = uidStr && (
+        (typeof user.uid === 'number' && user.uid > 1000000) ||
+        (typeof uidStr === 'string' && uidStr.includes('-screen'))
+      );
+      const mainUid = mainClientUidRef.current;
+      const isLocalUser = mainUid && (user.uid === mainUid || user.uid?.toString() === mainUid.toString());
+      return !isScreenShareUid && !isLocalUser;
+    });
+    return 1 + filteredRemoteUsers.length; // 1 for local user + remote users
+  }, [remoteUsers]);
+
+  // Update participant name displays when participantNames state changes
+  useEffect(() => {
+    remoteUsers.forEach((remoteUser: any) => {
+      const uidStr = remoteUser.uid?.toString();
+      const name = participantNames[uidStr] || participantNames[remoteUser.uid] || participantNames[remoteUser.account];
+      if (name) {
+        const nameOverlay = document.getElementById(`remote-name-${remoteUser.uid}`);
+        if (nameOverlay) {
+          nameOverlay.textContent = name;
+        }
+        const screenLabel = document.getElementById(`remote-screen-label-${remoteUser.uid}`);
+        if (screenLabel) {
+          screenLabel.textContent = `Screen Share - ${name}`;
+        }
+      }
+    });
+  }, [participantNames, remoteUsers]);
+
+  // Attach video tracks to refs when they're ready
+  useEffect(() => {
+    remoteUsers.forEach((user: any) => {
+      const videoState = remoteVideoStates[user.uid];
+      if (!videoState) return;
+
+      const userTracks = remoteUsersWithTracks.current[user.uid];
+      
+      // Play camera track if available
+      if (videoState.hasVideo && userTracks?.cameraTrack) {
+        const videoRef = remoteVideoRefs.current[user.uid];
+        if (videoRef) {
+          userTracks.cameraTrack.play(videoRef);
+        }
+      }
+      
+      // Play screen share track if available
+      if (videoState.hasScreenShare && userTracks?.screenTrack) {
+        const screenRef = remoteScreenRefs.current[user.uid];
+        if (screenRef) {
+          userTracks.screenTrack.play(screenRef);
+        }
+      }
+
+      // Play audio track if available
+      if (userTracks?.audioTrack) {
+        userTracks.audioTrack.play();
+      }
+    });
+  }, [remoteUsers, remoteVideoStates]);
   
   // Ensure local screen share preview attaches when the container mounts
   useEffect(() => {
@@ -235,6 +322,10 @@ export default function MeetingJoinPage() {
       if (clientRef.current) {
         clientRef.current.leave();
       }
+      if (screenShareClientRef.current) {
+        screenShareClientRef.current.leave();
+        screenShareClientRef.current.removeAllListeners();
+      }
       if (localAudioTrackRef.current) {
         localAudioTrackRef.current.close();
       }
@@ -261,6 +352,39 @@ export default function MeetingJoinPage() {
   const handleJoinFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setJoinForm(prev => ({ ...prev, [name]: value }));
+  };
+
+  // Helper function to get the correct participant name
+  // Falls back to form data if backend returns wrong participant data
+  const getParticipantDisplayName = () => {
+    if (!joinResult) return joinForm.name || 'Participant';
+    
+    const backendName = joinResult.data.participant.name;
+    const backendEmail = joinResult.data.participant.email;
+    const userEmail = joinResult.data.agoraToken?.account || joinForm.email;
+    
+    // Check if backend returned the correct participant by matching email
+    if (backendEmail && userEmail && backendEmail.toLowerCase() === userEmail.toLowerCase()) {
+      return backendName || joinForm.name || 'Participant';
+    }
+    
+    // If emails don't match, try to find the correct participant from the participants array
+    const meetingData = joinResult.data.meeting as any;
+    if (meetingData?.participants && Array.isArray(meetingData.participants)) {
+      const correctParticipant = meetingData.participants.find(
+        (p: any) => p.email && userEmail && p.email.toLowerCase() === userEmail.toLowerCase()
+      );
+      if (correctParticipant?.name) {
+        return correctParticipant.name;
+      }
+    }
+    
+    // Fall back to form data if backend returns "Dummy" or wrong data
+    if (!backendName || backendName.toLowerCase() === 'dummy' || backendEmail !== userEmail) {
+      return joinForm.name || 'Participant';
+    }
+    
+    return backendName;
   };
 
   const handleJoinMeeting = async (e: React.FormEvent) => {
@@ -302,10 +426,16 @@ export default function MeetingJoinPage() {
       const client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
       clientRef.current = client;
 
-      // Set up event handlers
-      client.on('user-published', handleUserPublished);
-      client.on('user-unpublished', handleUserUnpublished);
-      client.on('user-left', handleUserLeft);
+      // Set up event handlers with client reference
+      client.on('user-published', (user: any, mediaType: 'audio' | 'video') => {
+        handleUserPublished(user, mediaType, client);
+      });
+      client.on('user-unpublished', (user: any, mediaType: 'audio' | 'video') => {
+        handleUserUnpublished(user, mediaType, client);
+      });
+      client.on('user-left', (user: any) => {
+        handleUserLeft(user, client);
+      });
 
       // Create local tracks
       const [audioTrack, videoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks();
@@ -319,7 +449,8 @@ export default function MeetingJoinPage() {
       });
 
       // Join the channel
-      await client.join(agoraToken.appId, agoraToken.channelName, agoraToken.token, agoraToken.account);
+      const uid = await client.join(agoraToken.appId, agoraToken.channelName, agoraToken.token, agoraToken.account);
+      mainClientUidRef.current = uid; // Store the UID for screen share client
       
       // Publish local tracks
       await client.publish([audioTrack, videoTrack]);
@@ -342,185 +473,346 @@ export default function MeetingJoinPage() {
 
       setIsVideoCallActive(true);
       console.log('Successfully joined Agora channel:', agoraToken.channelName);
+      
+      // Fetch participant names after joining
+      await fetchParticipantNames();
     } catch (error) {
       console.error('Failed to initialize Agora call:', error);
       setError(`Failed to start video call: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
-  const handleUserPublished = async (user: any, mediaType: 'audio' | 'video') => {
-    await clientRef.current?.subscribe(user, mediaType);
+  // Fetch and map participant names from backend
+  const fetchParticipantNames = async () => {
+    try {
+      const participantsData = await listParticipantsInMeeting(meetingId);
+      const participants = participantsData?.data || participantsData || [];
+      
+      // Create a mapping of account/email/uid to participant info
+      const nameMap: {[key: string]: string} = {};
+      participants.forEach((p: any) => {
+        const participantName = p.name || p.email || `Participant`;
+        // Map by account (which might be email) or UID
+        if (p.account) {
+          nameMap[p.account] = participantName;
+        }
+        if (p.uid) {
+          nameMap[p.uid] = participantName;
+        }
+        if (p.email) {
+          nameMap[p.email] = participantName;
+        }
+        // Also map by string UID if it's a number
+        if (p.uid && typeof p.uid === 'number') {
+          nameMap[p.uid.toString()] = participantName;
+        }
+      });
+      
+      // Update participant names state
+      setParticipantNames(prev => {
+        const updated = { ...prev, ...nameMap };
+        return updated;
+      });
+      
+      // Update existing remote user displays after state update
+      setTimeout(() => {
+        setRemoteUsers((currentRemoteUsers: any[]) => {
+          currentRemoteUsers.forEach((remoteUser: any) => {
+            const name = nameMap[remoteUser.uid] || nameMap[remoteUser.uid?.toString()] || nameMap[remoteUser.account];
+            if (name) {
+              const nameOverlay = document.getElementById(`remote-name-${remoteUser.uid}`);
+              if (nameOverlay) {
+                nameOverlay.textContent = name;
+              }
+              const screenLabel = document.getElementById(`remote-screen-label-${remoteUser.uid}`);
+              if (screenLabel) {
+                screenLabel.textContent = `Screen Share - ${name}`;
+              }
+            }
+          });
+          return currentRemoteUsers;
+        });
+      }, 0);
+    } catch (error) {
+      console.error('Failed to fetch participant names:', error);
+    }
+  };
+
+  const handleUserPublished = async (user: any, mediaType: 'audio' | 'video', sourceClient?: IAgoraRTCClient) => {
+    // Declare variables at the top for use throughout the function
+    const uidStr = user.uid?.toString();
+    const isScreenShareUid = uidStr && (
+      (typeof user.uid === 'number' && user.uid > 1000000) ||
+      (typeof uidStr === 'string' && uidStr.includes('-screen'))
+    );
+    
+    // Use the client that triggered the event, or determine based on UID pattern
+    let client: IAgoraRTCClient | null = null;
+    
+    if (sourceClient) {
+      // Use the client that triggered the event
+      client = sourceClient;
+    } else {
+      // Fallback: determine which client to use based on UID pattern
+      client = isScreenShareUid ? screenShareClientRef.current : clientRef.current;
+    }
+    
+    if (!client) return;
+    
+    await client.subscribe(user, mediaType);
+    
+    // Fetch participant names when a new user publishes
+    await fetchParticipantNames();
     
     if (mediaType === 'video') {
-      // Check if this is a screen share (Agora uses different track types)
-      const isScreenShare = user.videoTrack && user.videoTrack.trackLabel && 
-        (user.videoTrack.trackLabel.includes('screen') || user.videoTrack.trackLabel.includes('display'));
+      // Check if this is a screen share by UID pattern or track label
+      const isScreenShare = isScreenShareUid || 
+        (user.videoTrack && user.videoTrack.trackLabel && 
+         (user.videoTrack.trackLabel.includes('screen') || user.videoTrack.trackLabel.includes('display')));
       
       if (isScreenShare) {
-        // Handle screen share
-        const screenContainerId = `remote-screen-container-${user.uid}`;
-        let screenContainer = document.getElementById(screenContainerId) as HTMLDivElement | null;
-        if (!screenContainer) {
-          screenContainer = document.createElement('div');
-          screenContainer.id = screenContainerId;
-          screenContainer.className = 'relative bg-gray-800 rounded-lg overflow-hidden col-span-full';
-          screenContainer.style.width = '100%';
-          screenContainer.style.height = '400px';
-          screenContainer.style.maxWidth = '800px';
-          screenContainer.style.margin = '0 auto';
-          document.getElementById('video-grid')?.appendChild(screenContainer);
-        } else {
-          screenContainer.innerHTML = '';
+        // This is a screen share track - find the corresponding camera UID
+        let cameraUid: string | number | undefined;
+        
+        // Derive camera UID from screen share UID
+        if (typeof user.uid === 'number' && user.uid > 1000000) {
+          cameraUid = user.uid - 1000000;
+        } else if (typeof uidStr === 'string' && uidStr.includes('-screen')) {
+          cameraUid = uidStr.replace('-screen', '');
         }
-
-        // Create screen share element
-        const remoteScreenElement = document.createElement('div');
-        remoteScreenElement.id = `remote-screen-${user.uid}`;
-        remoteScreenElement.className = 'w-full h-full bg-gray-700';
-        remoteScreenElement.style.objectFit = 'contain';
-
-        // Screen share label
-        const screenLabel = document.createElement('div');
-        screenLabel.id = `remote-screen-label-${user.uid}`;
-        screenLabel.className = 'absolute top-2 left-2 bg-red-600 bg-opacity-90 px-2 py-1 rounded text-sm text-white font-medium';
-        screenLabel.textContent = `Screen Share - ${participantNames[user.uid] || `Participant ${user.uid}`}`;
-
-        // Assemble and play
-        screenContainer.appendChild(remoteScreenElement);
-        screenContainer.appendChild(screenLabel);
-        user.videoTrack?.play(remoteScreenElement);
+        
+        if (cameraUid !== undefined) {
+          const cameraUidStr = cameraUid.toString();
+          
+          // Initialize tracks for camera UID if not exists
+          if (!remoteUsersWithTracks.current[cameraUidStr]) {
+            remoteUsersWithTracks.current[cameraUidStr] = {};
+          }
+          
+          // Store screen share track under camera UID
+          remoteUsersWithTracks.current[cameraUidStr].screenTrack = user.videoTrack;
+          
+          // Update state for the camera UID
+          setRemoteVideoStates(prev => ({
+            ...prev,
+            [cameraUidStr]: {
+              ...prev[cameraUidStr] || { hasVideo: false, hasAudio: false, hasScreenShare: false },
+              hasScreenShare: true,
+            }
+          }));
+        } else {
+          // Fallback: treat as standalone screen share
+          if (!remoteUsersWithTracks.current[uidStr]) {
+            remoteUsersWithTracks.current[uidStr] = {};
+          }
+          remoteUsersWithTracks.current[uidStr].screenTrack = user.videoTrack;
+          
+          setRemoteVideoStates(prev => ({
+            ...prev,
+            [uidStr]: {
+              ...prev[uidStr] || { hasVideo: false, hasAudio: false, hasScreenShare: false },
+              hasScreenShare: true,
+            }
+          }));
+        }
       } else {
-        // Handle regular video
-        const containerId = `remote-video-container-${user.uid}`;
-        let videoContainer = document.getElementById(containerId) as HTMLDivElement | null;
-        if (!videoContainer) {
-          videoContainer = document.createElement('div');
-          videoContainer.id = containerId;
-          videoContainer.className = 'relative bg-gray-800 rounded-xl overflow-hidden shadow-lg';
-          videoContainer.style.width = '100%';
-          document.getElementById('video-grid')?.appendChild(videoContainer);
-        } else {
-          // Clear any existing placeholder/previous elements
-          videoContainer.innerHTML = '';
+        // This is a camera track
+        if (!remoteUsersWithTracks.current[uidStr]) {
+          remoteUsersWithTracks.current[uidStr] = {};
         }
-
-        // Create (or recreate) the target element for video track
-        const remoteVideoElement = document.createElement('div');
-        remoteVideoElement.id = `remote-video-${user.uid}`;
-        remoteVideoElement.className = 'w-full h-full bg-gray-700';
-        remoteVideoElement.style.objectFit = 'cover';
-
-        // Name overlay
-        const nameOverlay = document.createElement('div');
-        nameOverlay.id = `remote-name-${user.uid}`;
-        nameOverlay.className = 'absolute bottom-2 left-2 bg-black bg-opacity-50 px-2 py-1 rounded text-sm text-white';
-        nameOverlay.textContent = `Participant ${user.uid}`;
-
-        // Mic badge (initialize from current audio state if available)
-        const micBadge = document.createElement('div');
-        micBadge.id = `mic-badge-${user.uid}`;
-        const isAudioOn = !!user.audioTrack; // best-effort: presence implies unmuted
-        micBadge.className = `absolute top-2 right-2 px-2 py-1 rounded text-xs text-white flex items-center gap-1 ${isAudioOn ? 'bg-green-600' : 'bg-red-600'}`;
-        micBadge.innerHTML = isAudioOn
-          ? '<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a3 3 0 00-3 3v3a3 3 0 006 0V5a3 3 0 00-3-3z"/><path d="M5 10a5 5 0 0010 0 1 1 0 112 0 7 7 0 01-6 6.917V19a1 1 0 11-2 0v-2.083A7 7 0 013 10a1 1 0 112 0z"/></svg>'
-          : '<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M9 4a3 3 0 016 0v3a3 3 0 11-6 0V4zm8.707 9.293a1 1 0 10-1.414 1.414l1 1a1 1 0 001.414-1.414l-1-1zM3.293 3.293a1 1 0 011.414 0l12 12a1 1 0 01-1.414 1.414l-2.034-2.034A6.978 6.978 0 0111 16.917V19a1 1 0 11-2 0v-2.083A7.003 7.003 0 013 10a1 1 0 112 0 5 5 0 008.071 3.95l-1.42-1.42A3.001 3.001 0 017 10V8.414L3.293 4.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>';
-
-        // Assemble and play
-        videoContainer.appendChild(remoteVideoElement);
-        videoContainer.appendChild(nameOverlay);
-        videoContainer.appendChild(micBadge);
-        user.videoTrack?.play(remoteVideoElement);
-
-        // Update display name if available
-        if (user.name) {
-          setParticipantNames(prev => ({ ...prev, [user.uid]: user.name }));
-          nameOverlay.textContent = user.name;
-        }
+        remoteUsersWithTracks.current[uidStr].cameraTrack = user.videoTrack;
+        
+        // Update state
+        setRemoteVideoStates(prev => ({
+          ...prev,
+          [uidStr]: {
+            ...prev[uidStr] || { hasVideo: false, hasAudio: false, hasScreenShare: false },
+            hasVideo: true,
+            hasScreenShare: !!remoteUsersWithTracks.current[uidStr]?.screenTrack,
+            hasAudio: !!remoteUsersWithTracks.current[uidStr]?.audioTrack || !!user.audioTrack,
+          }
+        }));
       }
     }
     
     if (mediaType === 'audio') {
+      // Audio always comes from the main client (camera UID)
+      const uidStr = user.uid?.toString();
+      if (!remoteUsersWithTracks.current[uidStr]) {
+        remoteUsersWithTracks.current[uidStr] = {};
+      }
+      remoteUsersWithTracks.current[uidStr].audioTrack = user.audioTrack;
+      
       user.audioTrack?.play();
       setRemoteMicMuted(user.uid, false);
+      // Update audio state
+      setRemoteVideoStates(prev => ({
+        ...prev,
+        [uidStr]: {
+          ...prev[uidStr] || { hasVideo: false, hasAudio: false, hasScreenShare: false },
+          hasAudio: true,
+        }
+      }));
     }
     
-    setRemoteUsers(prev => [...prev.filter(u => u.uid !== user.uid), user]);
+    // Update remote users list - ensure user exists with latest tracks
+    // Skip screen share UIDs - they're already mapped to camera UIDs
+    // Don't add screen share UIDs to remoteUsers - they're handled via camera UID mapping
+    if (isScreenShareUid) {
+      return;
+    }
+    
+    // Also filter out the local user's own UID
+    const mainUid = mainClientUidRef.current;
+    if (mainUid && (user.uid === mainUid || user.uid?.toString() === mainUid.toString())) {
+      return;
+    }
+    
+    setRemoteUsers(prev => {
+      const existing = prev.find(u => u.uid === user.uid);
+      if (existing) {
+        // Update existing user with latest tracks
+        return prev.map(u => u.uid === user.uid ? { ...u, ...user } : u);
+      } else {
+        // Add new user
+        return [...prev, user];
+      }
+    });
   };
 
-  const handleUserUnpublished = (user: any, mediaType: 'audio' | 'video') => {
+  const handleUserUnpublished = (user: any, mediaType: 'audio' | 'video', sourceClient?: IAgoraRTCClient) => {
     if (mediaType === 'video') {
-      // Check if this was a screen share
-      const screenContainer = document.getElementById(`remote-screen-container-${user.uid}`);
-      if (screenContainer) {
-        // Remove screen share container completely
-        screenContainer.remove();
-        return;
-      }
-
-      // Handle regular video
-      const videoContainer = document.getElementById(`remote-video-container-${user.uid}`);
-      if (videoContainer) {
-        // Clear the video element but keep the container
-        const videoElement = document.getElementById(`remote-video-${user.uid}`);
-        if (videoElement) {
-          videoElement.innerHTML = '';
-          
-          // Create placeholder content
-          const placeholder = document.createElement('div');
-          placeholder.className = 'w-full h-full bg-gray-700 flex items-center justify-center';
-          
-          const content = document.createElement('div');
-          content.className = 'text-center text-white';
-          
-          // Avatar icon
-          const avatar = document.createElement('div');
-          avatar.className = 'w-16 h-16 rounded-full bg-gray-600 flex items-center justify-center mx-auto mb-3';
-          const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-          svg.setAttribute('viewBox', '0 0 24 24');
-          svg.setAttribute('fill', 'currentColor');
-          svg.setAttribute('class', 'w-8 h-8 text-gray-300');
-          const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-          path.setAttribute('d', 'M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z');
-          svg.appendChild(path);
-          avatar.appendChild(svg);
-          
-          // Participant name
-          const name = document.createElement('div');
-          name.className = 'text-lg font-medium';
-          name.textContent = participantNames[user.uid] || `Participant ${user.uid}`;
-          
-          // Camera off text
-          const status = document.createElement('div');
-          status.className = 'text-sm text-gray-300 mt-1';
-          status.textContent = 'Camera Off';
-          
-          content.appendChild(avatar);
-          content.appendChild(name);
-          content.appendChild(status);
-          placeholder.appendChild(content);
-          
-          videoElement.appendChild(placeholder);
+      const uidStr = user.uid?.toString();
+      // Check if this is a screen share UID
+      const isScreenShareUid = uidStr && (
+        (typeof user.uid === 'number' && user.uid > 1000000) ||
+        (typeof uidStr === 'string' && uidStr.includes('-screen'))
+      );
+      
+      if (isScreenShareUid) {
+        // This is a screen share track - find the corresponding camera UID
+        let cameraUid: string | number | undefined;
+        
+        // Derive camera UID from screen share UID
+        if (typeof user.uid === 'number' && user.uid > 1000000) {
+          cameraUid = user.uid - 1000000;
+        } else if (typeof uidStr === 'string' && uidStr.includes('-screen')) {
+          cameraUid = uidStr.replace('-screen', '');
         }
+        
+        if (cameraUid !== undefined) {
+          const cameraUidStr = cameraUid.toString();
+          if (remoteUsersWithTracks.current[cameraUidStr]) {
+            remoteUsersWithTracks.current[cameraUidStr].screenTrack = undefined;
+          }
+          
+          // Update state for camera UID
+          setRemoteVideoStates(prev => ({
+            ...prev,
+            [cameraUidStr]: {
+              ...prev[cameraUidStr] || { hasVideo: false, hasAudio: false, hasScreenShare: false },
+              hasScreenShare: false,
+            }
+          }));
+        } else {
+          // Fallback: treat as standalone screen share
+          if (remoteUsersWithTracks.current[uidStr]) {
+            remoteUsersWithTracks.current[uidStr].screenTrack = undefined;
+          }
+          
+          setRemoteVideoStates(prev => ({
+            ...prev,
+            [uidStr]: {
+              ...prev[uidStr] || { hasVideo: false, hasAudio: false, hasScreenShare: false },
+              hasScreenShare: false,
+            }
+          }));
+        }
+      } else {
+        // This is a camera track
+        if (remoteUsersWithTracks.current[uidStr]) {
+          remoteUsersWithTracks.current[uidStr].cameraTrack = undefined;
+        }
+        
+        // Update state
+        setRemoteVideoStates(prev => ({
+          ...prev,
+          [uidStr]: {
+            ...prev[uidStr] || { hasVideo: false, hasAudio: false, hasScreenShare: false },
+            hasVideo: false,
+          }
+        }));
       }
     }
     if (mediaType === 'audio') {
+      const uidStr = user.uid?.toString();
+      if (remoteUsersWithTracks.current[uidStr]) {
+        remoteUsersWithTracks.current[uidStr].audioTrack = undefined;
+      }
       setRemoteMicMuted(user.uid, true);
+      // Update audio state
+      setRemoteVideoStates(prev => ({
+        ...prev,
+        [uidStr]: {
+          ...prev[uidStr] || { hasVideo: false, hasAudio: false, hasScreenShare: false },
+          hasAudio: false,
+        }
+      }));
     }
   };
 
-  const handleUserLeft = (user: any) => {
-    const videoContainer = document.getElementById(`remote-video-container-${user.uid}`);
-    const screenContainer = document.getElementById(`remote-screen-container-${user.uid}`);
+  const handleUserLeft = (user: any, sourceClient?: IAgoraRTCClient) => {
+    const uidStr = user.uid?.toString();
+    const isScreenShareUid = uidStr && (
+      (typeof user.uid === 'number' && user.uid > 1000000) ||
+      (typeof uidStr === 'string' && uidStr.includes('-screen'))
+    );
     
-    videoContainer?.remove();
-    screenContainer?.remove();
+    // If it's a screen share UID, find the corresponding camera UID and clean up
+    if (isScreenShareUid) {
+      let cameraUid: string | number | undefined;
+      if (typeof user.uid === 'number' && user.uid > 1000000) {
+        cameraUid = user.uid - 1000000;
+      } else if (typeof uidStr === 'string' && uidStr.includes('-screen')) {
+        cameraUid = uidStr.replace('-screen', '');
+      }
+      
+      if (cameraUid !== undefined) {
+        const cameraUidStr = cameraUid.toString();
+        // Remove screen share from camera UID's state
+        setRemoteVideoStates(prev => ({
+          ...prev,
+          [cameraUidStr]: {
+            ...prev[cameraUidStr] || { hasVideo: false, hasAudio: false, hasScreenShare: false },
+            hasScreenShare: false,
+          }
+        }));
+        
+        // Clean up screen share track
+        if (remoteUsersWithTracks.current[cameraUidStr]) {
+          remoteUsersWithTracks.current[cameraUidStr].screenTrack = undefined;
+        }
+        delete remoteScreenRefs.current[cameraUidStr];
+      }
+      return; // Don't remove screen share UID from remoteUsers (it was never added)
+    }
     
+    // For camera UIDs, remove from remoteUsers
     setRemoteUsers(prev => prev.filter(u => u.uid !== user.uid));
     setParticipantNames(prev => {
       const newNames = { ...prev };
       delete newNames[user.uid];
       return newNames;
     });
+    setRemoteVideoStates(prev => {
+      const newStates = { ...prev };
+      delete newStates[user.uid];
+      return newStates;
+    });
+    // Clean up refs and tracks
+    delete remoteVideoRefs.current[user.uid];
+    delete remoteScreenRefs.current[user.uid];
+    delete remoteUsersWithTracks.current[user.uid];
   };
 
   const toggleMute = async () => {
@@ -531,7 +823,7 @@ export default function MeetingJoinPage() {
       const localBadge = document.getElementById('local-mic-badge');
       if (localBadge) {
         const nowMuted = !isMuted;
-        localBadge.className = `absolute top-2 right-2 px-2 py-1 rounded text-xs text-white flex items-center gap-1 ${nowMuted ? 'bg-red-600' : 'bg-green-600'}`;
+        localBadge.className = `absolute top-2 right-2 px-1 py-2 rounded-full text-xs text-white flex items-center gap-1 ${nowMuted ? 'bg-red-600' : 'bg-green-600'}`;
         localBadge.innerHTML = nowMuted
           ? '<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M9 4a3 3 0 016 0v3a3 3 0 11-6 0V4zm8.707 9.293a1 1 0 10-1.414 1.414l1 1a1 1 0 001.414-1.414l-1-1zM3.293 3.293a1 1 0 011.414 0l12 12a1 1 0 01-1.414 1.414l-2.034-2.034A6.978 6.978 0 0111 16.917V19a1 1 0 11-2 0v-2.083A7.003 7.003 0 013 10a1 1 0 112 0 5 5 0 008.071 3.95l-1.42-1.42A3.001 3.001 0 017 10V8.414L3.293 4.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>'
           : '<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a3 3 0 00-3 3v3a3 3 0 006 0V5a3 3 0 00-3-3z"/><path d="M5 10a5 5 0 0010 0 1 1 0 112 0 7 7 0 01-6 6.917V19a1 1 0 11-2 0v-2.083A7 7 0 013 10a1 1 0 112 0z"/></svg>';
@@ -549,11 +841,11 @@ export default function MeetingJoinPage() {
 
   const startScreenShare = async () => {
     try {
-      if (!clientRef.current) return;
+      if (!clientRef.current || !joinResult?.data.agoraToken) return;
       if (isStartingScreenShare) return;
       setIsStartingScreenShare(true);
 
-      // Create screen share track via Agora only (single prompt)
+      // Create screen share track
       const screenTrack = await AgoraRTC.createScreenVideoTrack({
         encoderConfig: {
           width: 1280,
@@ -564,18 +856,65 @@ export default function MeetingJoinPage() {
 
       localScreenTrackRef.current = screenTrack;
 
-      // Unpublish camera video before publishing screen to avoid multiple video tracks
-      if (clientRef.current && localVideoTrackRef.current) {
-        try {
-          await clientRef.current.unpublish(localVideoTrackRef.current);
-          wasCameraPublishedBeforeShareRef.current = true;
-        } catch {}
+      // Create a separate client for screen sharing
+      // Use a different UID as per Agora docs (mainUid + 1000000 for numbers, or append '-screen' for strings)
+      const { agoraToken } = joinResult.data;
+      const mainUid = mainClientUidRef.current;
+      
+      if (!mainUid) {
+        throw new Error('Main client UID not found');
       }
+      
+      // Derive screen share UID: if main UID is a number, add 1000000; if string, append '-screen'
+      const screenShareUid = typeof mainUid === 'number' 
+        ? mainUid + 1000000 
+        : `${mainUid}-screen`;
+      
+      // Request a token for the screen share UID from the backend
+      let screenShareToken: string;
+      try {
+        const screenShareTokenResponse = await getScreenShareToken(meetingId, {
+          joinToken: token!,
+          screenShareUid: screenShareUid,
+          email: joinResult.data.participant.email,
+        });
+        
+        // The response should contain an agoraToken with the token for screen share UID
+        if (screenShareTokenResponse?.data?.agoraToken?.token) {
+          screenShareToken = screenShareTokenResponse.data.agoraToken.token;
+        } else if (screenShareTokenResponse?.agoraToken?.token) {
+          screenShareToken = screenShareTokenResponse.agoraToken.token;
+        } else {
+          // Fallback: try to use the same token (might work if backend generates non-UID-bound tokens)
+          screenShareToken = agoraToken.token;
+          console.warn('Screen share token not found in response, using main token as fallback');
+        }
+      } catch (tokenError: any) {
+        console.error('Failed to get screen share token:', tokenError);
+        // Fallback: try to use the same token (might work if backend generates non-UID-bound tokens)
+        screenShareToken = agoraToken.token;
+        console.warn('Using main token as fallback for screen share');
+      }
+      
+      const screenShareClient = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+      screenShareClientRef.current = screenShareClient;
 
-      // Publish screen share track
-      if (clientRef.current) {
-        await clientRef.current.publish(screenTrack);
-      }
+      // Set up event handlers for screen share client with client reference
+      screenShareClient.on('user-published', (user: any, mediaType: 'audio' | 'video') => {
+        handleUserPublished(user, mediaType, screenShareClient);
+      });
+      screenShareClient.on('user-unpublished', (user: any, mediaType: 'audio' | 'video') => {
+        handleUserUnpublished(user, mediaType, screenShareClient);
+      });
+      screenShareClient.on('user-left', (user: any) => {
+        handleUserLeft(user, screenShareClient);
+      });
+
+      // Join the same channel with the screen share client using different UID and token
+      await screenShareClient.join(agoraToken.appId, agoraToken.channelName, screenShareToken, screenShareUid);
+
+      // Publish screen share track using the separate client
+      await screenShareClient.publish(screenTrack);
 
       // Mark sharing true to mount the preview container, then attach track
       setIsScreenSharing(true);
@@ -593,7 +932,7 @@ export default function MeetingJoinPage() {
         stopScreenShare();
       });
 
-      console.log('Screen sharing started successfully');
+      console.log('Screen sharing started successfully with separate client - camera track remains published');
     } catch (error: any) {
       const cancelled = error?.name === 'NotAllowedError' || error?.code === 'PERMISSION_DENIED' || error?.code === 'OPERATION_ABORTED';
       if (cancelled) {
@@ -602,7 +941,14 @@ export default function MeetingJoinPage() {
         setIsScreenSharing(false);
       } else {
         console.warn('Failed to start screen sharing:', error);
-        setError(`Failed to start screen sharing: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        const errorMessage = error?.message || error?.toString() || 'Unknown error';
+        
+        // Check if it's a token/auth error
+        if (errorMessage.includes('token') || errorMessage.includes('authorized') || errorMessage.includes('CAN_NOT_GET_GATEWAY_SERVER')) {
+          setError(`Failed to start screen sharing: Token authentication failed. The backend may need to generate tokens that support multiple UIDs for screen sharing.`);
+        } else {
+          setError(`Failed to start screen sharing: ${errorMessage}`);
+        }
       }
     } finally {
       setIsStartingScreenShare(false);
@@ -611,9 +957,12 @@ export default function MeetingJoinPage() {
 
   const stopScreenShare = async () => {
     try {
-      if (localScreenTrackRef.current && clientRef.current) {
+      if (localScreenTrackRef.current && screenShareClientRef.current) {
         // Unpublish screen share track
-        await clientRef.current.unpublish(localScreenTrackRef.current);
+        await screenShareClientRef.current.unpublish(localScreenTrackRef.current);
+        
+        // Leave the screen share client channel
+        await screenShareClientRef.current.leave();
         
         // Stop and close the track
         localScreenTrackRef.current.stop();
@@ -621,24 +970,20 @@ export default function MeetingJoinPage() {
         localScreenTrackRef.current = null;
       }
 
+      // Clean up screen share client
+      if (screenShareClientRef.current) {
+        screenShareClientRef.current.removeAllListeners();
+        screenShareClientRef.current = null;
+      }
+
       // Clear screen share element
       if (localScreenElementRef.current) {
         localScreenElementRef.current.innerHTML = '';
       }
 
-      // Re-publish camera video if it was previously published
-      if (clientRef.current && localVideoTrackRef.current && wasCameraPublishedBeforeShareRef.current) {
-        try {
-          await clientRef.current.publish(localVideoTrackRef.current);
-          if (localVideoElementRef.current) {
-            try { localVideoTrackRef.current.play(localVideoElementRef.current); } catch {}
-          }
-        } catch {}
-        wasCameraPublishedBeforeShareRef.current = false;
-      }
-
+      // Camera track remains published on main client - no need to re-publish
       setIsScreenSharing(false);
-      console.log('Screen sharing stopped successfully');
+      console.log('Screen sharing stopped successfully - camera track remains published');
     } catch (error) {
       console.error('Failed to stop screen sharing:', error);
     }
@@ -648,6 +993,18 @@ export default function MeetingJoinPage() {
     setIsLeaving(true);
     
     try {
+      // Call leaveMeeting API
+      if (joinResult?.data?.participant?.email) {
+        try {
+          await leaveMeeting(meetingId, {
+            email: joinResult.data.participant.email,
+          });
+        } catch (apiError) {
+          console.error('Error calling leaveMeeting API:', apiError);
+          // Continue with cleanup even if API call fails
+        }
+      }
+
       // Stop local tracks
       if (localAudioTrackRef.current) {
         try { await localAudioTrackRef.current.setEnabled(false); } catch {}
@@ -664,9 +1021,13 @@ export default function MeetingJoinPage() {
         try { localScreenTrackRef.current.close(); } catch {}
       }
 
-      // Leave channel
+      // Leave channels
       if (clientRef.current) {
         await clientRef.current.leave();
+      }
+      if (screenShareClientRef.current) {
+        await screenShareClientRef.current.leave();
+        screenShareClientRef.current.removeAllListeners();
       }
 
       // Clean up remote video elements
@@ -693,6 +1054,8 @@ export default function MeetingJoinPage() {
       localVideoTrackRef.current = null;
       localScreenTrackRef.current = null;
       clientRef.current = null;
+      screenShareClientRef.current = null;
+      mainClientUidRef.current = null;
     } catch (error) {
       console.error('Error leaving call:', error);
     } finally {
@@ -741,7 +1104,7 @@ export default function MeetingJoinPage() {
           <div ref={headerRef} className="flex items-center justify-between px-6 py-3 bg-gray-800/80 backdrop-blur border-b border-gray-700">
             <div className="min-w-0">
               <h1 className="text-base sm:text-lg font-semibold truncate">{joinResult.data.meeting.title}</h1>
-              <p className="text-xs sm:text-sm text-gray-400 truncate">{joinResult.data.participant.name} • {remoteUsers.length + 1} participants</p>
+              <p className="text-xs sm:text-sm text-gray-400 truncate">{participantCount} {participantCount === 1 ? 'participant' : 'participants'}</p>
             </div>
             <button
               onClick={leaveCall}
@@ -749,75 +1112,192 @@ export default function MeetingJoinPage() {
               className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 px-3 py-2 rounded-md disabled:opacity-50"
             >
               <span className="hidden sm:inline">{isLeaving ? 'Leaving...' : 'Leave Call'}</span>
-              <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h6a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h4a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
-              </svg>
+              <i className='ri-phone-fill text-lg' style={{ transform: 'rotate(135deg)' }}></i>
             </button>
           </div>
 
           {/* Stage */}
-          <div className="flex-1 px-4 sm:px-6 py-4" style={{ height: stageHeight ? `${stageHeight}px` : undefined, overflow: 'hidden' }}>
-            {/* Local Screen Share (optional stage) */}
-            {isScreenSharing && (
-              <div className="relative bg-gray-800 rounded-xl overflow-hidden w-full max-w-none mb-4 shadow-lg">
-                <div
-                  ref={localScreenElementRef}
-                  className="w-full bg-gray-700"
-                  style={{ minHeight: '360px', height: '45vh', objectFit: 'contain' }}
-                />
-                <div className="absolute top-2 left-2 bg-red-600/90 px-2 py-1 rounded text-xs sm:text-sm text-white font-medium">
-                  Your Screen Share
-                </div>
-              </div>
-            )}
+          {(() => {
+            // Check if there are any remote screen shares
+            const hasRemoteScreenShare = remoteUsers.some((user: any) => {
+              const uidStr = user.uid?.toString();
+              const isScreenShareUid = uidStr && (
+                (typeof user.uid === 'number' && user.uid > 1000000) ||
+                (typeof uidStr === 'string' && uidStr.includes('-screen'))
+              );
+              const mainUid = mainClientUidRef.current;
+              const isLocalUser = mainUid && (user.uid === mainUid || user.uid?.toString() === mainUid.toString());
+              if (isScreenShareUid || isLocalUser) return false;
+              const videoState = remoteVideoStates[user.uid] || { hasVideo: false, hasAudio: false, hasScreenShare: false };
+              return videoState.hasScreenShare;
+            });
+            const hasAnyScreenShare = isScreenSharing || hasRemoteScreenShare;
+            
+            return (
+              <div className={`${hasAnyScreenShare && 'md:flex md:gap-4'} flex-1 px-4 sm:px-6 py-4`} style={{ height: stageHeight ? `${stageHeight}px` : undefined, overflow: 'hidden' }}>
+                {/* Screen Shares Section - Show all screen shares (local and remote) */}
+                {(isScreenSharing || hasRemoteScreenShare) && (
+                  <div className={`${hasAnyScreenShare && 'md:w-2/3'} flex flex-col gap-4 mb-4 md:mb-0`}>
+                    {/* Local Screen Share */}
+                    {isScreenSharing && (
+                      <div className="relative bg-gray-800 rounded-xl overflow-hidden w-full h-full shadow-lg">
+                        <div ref={localScreenElementRef} className="w-full h-full bg-gray-700" style={{ objectFit: 'contain' }}/>
+                        <div className="absolute top-2 left-2 bg-red-600/90 px-2 py-1 rounded-lg text-xs sm:text-sm text-white font-medium">
+                          Your Screen Share
+                        </div>
+                      </div>
+                    )}
 
-            {/* Full-width/height responsive grid */}
-            <div className="w-full h-full">
-              <div
-                id="video-grid"
-                ref={gridRef}
-                className="grid gap-4 w-full h-full overflow-hidden"
-                style={{ gridTemplateColumns: `repeat(${gridColumns}, minmax(300px, 1fr))` }}
-              >
-                {/* Local camera tile */}
-                <div id="local-video-container" className="relative bg-gray-800 rounded-xl overflow-hidden shadow-lg aspect-video">
-                  <div
-                    ref={localVideoElementRef}
-                    className="w-full h-full bg-gray-700"
-                    style={{ objectFit: 'cover' }}
-                  />
-                    <div id="local-mic-badge" className={`absolute top-2 right-2 px-2 py-1 rounded text-xs text-white flex items-center gap-1 ${isMuted ? 'bg-red-600' : 'bg-green-600'}`}>
-                      {isMuted ? (
-                        <>
-                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M9 4a3 3 0 016 0v3a3 3 0 11-6 0V4zm8.707 9.293a1 1 0 10-1.414 1.414l1 1a1 1 0 001.414-1.414l-1-1zM3.293 3.293a1 1 0 011.414 0l12 12a1 1 0 01-1.414 1.414l-2.034-2.034A6.978 6.978 0 0111 16.917V19a1 1 0 11-2 0v-2.083A7.003 7.003 0 013 10a1 1 0 112 0 5 5 0 008.071 3.95l-1.42-1.42A3.001 3.001 0 017 10V8.414L3.293 4.707a1 1 0 010-1.414z" clipRule="evenodd"/></svg>
-                          {/* <span>Muted</span> */}
-                        </>
-                      ) : (
-                        <>
-                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a3 3 0 00-3 3v3a3 3 0 006 0V5a3 3 0 00-3-3z"/><path d="M5 10a5 5 0 0010 0 1 1 0 112 0 7 7 0 01-6 6.917V19a1 1 0 11-2 0v-2.083A7 7 0 013 10a1 1 0 112 0z"/></svg>
-                          {/* <span>On</span> */}
-                        </>
+                    {/* Remote Screen Shares */}
+                    {remoteUsers
+                      .filter((user: any) => {
+                        const uidStr = user.uid?.toString();
+                        const isScreenShareUid = uidStr && (
+                          (typeof user.uid === 'number' && user.uid > 1000000) ||
+                          (typeof uidStr === 'string' && uidStr.includes('-screen'))
+                        );
+                        const mainUid = mainClientUidRef.current;
+                        const isLocalUser = mainUid && (user.uid === mainUid || user.uid?.toString() === mainUid.toString());
+                        return !isScreenShareUid && !isLocalUser;
+                      })
+                      .filter((user: any) => {
+                        const videoState = remoteVideoStates[user.uid] || { hasVideo: false, hasAudio: false, hasScreenShare: false };
+                        return videoState.hasScreenShare;
+                      })
+                      .map((user: any) => {
+                        const uidStr = user.uid?.toString();
+                        const videoState = remoteVideoStates[user.uid] || { hasVideo: false, hasAudio: false, hasScreenShare: false };
+                        const participantName = participantNames[uidStr] || participantNames[user.uid] || participantNames[user.account] || `Participant ${user.uid}`;
+                        
+                        return (
+                          <div key={`screen-${user.uid}`} id={`remote-screen-container-${user.uid}`}
+                            className="relative bg-gray-800 rounded-xl overflow-hidden w-full h-full shadow-lg"
+                          >
+                            <div ref={(el) => { remoteScreenRefs.current[user.uid] = el; }}
+                              id={`remote-screen-${user.uid}`} className="w-full h-full bg-gray-700"
+                              style={{ objectFit: 'contain' }}
+                            />
+                            <div id={`remote-screen-label-${user.uid}`}
+                              className="absolute top-2 left-2 bg-red-600/90 px-2 py-1 rounded-lg text-xs sm:text-sm text-white font-medium"
+                            >
+                              Screen Share - {participantName}
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+
+                {/* Video Grid - Only camera feeds */}
+                <div className={`${hasAnyScreenShare && 'md:w-1/3'} flex-1 ${hasAnyScreenShare ? 'overflow-auto' : ''}`}>
+                  <div id="video-grid" ref={gridRef}
+                    className={`md:${hasAnyScreenShare && participantCount > 2 ? 'grid-cols-2' : hasAnyScreenShare ?'grid-cols-1' : participantCount === 1 ? 'grid-cols-1' : participantCount === 3 || participantCount === 6 || participantCount === 5 ? 'grid-cols-3' : participantCount === 7 || participantCount === 8 ? 'grid-cols-4' : 'grid-cols-2'} grid gap-4 w-full`}
+                  >
+                    {/* Local camera tile */}
+                    <div id="local-video-container" className="relative bg-gray-800 rounded-xl overflow-hidden shadow-lg aspect-video w-full max-h-[80vh]">
+                      <div
+                        ref={localVideoElementRef}
+                        className="w-full h-full bg-gray-700"
+                        style={{ objectFit: 'cover' }}
+                      />
+                      <div id="local-mic-badge" className={`absolute top-2 right-2 py-2 px-1 rounded-full text-xs text-white flex items-center gap-1 ${isMuted ? 'bg-red-600' : 'bg-green-600'}`}>
+                        {isMuted ? (
+                          <>
+                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M9 4a3 3 0 016 0v3a3 3 0 11-6 0V4zm8.707 9.293a1 1 0 10-1.414 1.414l1 1a1 1 0 001.414-1.414l-1-1zM3.293 3.293a1 1 0 011.414 0l12 12a1 1 0 01-1.414 1.414l-2.034-2.034A6.978 6.978 0 0111 16.917V19a1 1 0 11-2 0v-2.083A7.003 7.003 0 013 10a1 1 0 112 0 5 5 0 008.071 3.95l-1.42-1.42A3.001 3.001 0 017 10V8.414L3.293 4.707a1 1 0 010-1.414z" clipRule="evenodd"/></svg>
+                            {/* <span>Muted</span> */}
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a3 3 0 00-3 3v3a3 3 0 006 0V5a3 3 0 00-3-3z"/><path d="M5 10a5 5 0 0010 0 1 1 0 112 0 7 7 0 01-6 6.917V19a1 1 0 11-2 0v-2.083A7 7 0 013 10a1 1 0 112 0z"/></svg>
+                            {/* <span>On</span> */}
+                          </>
+                        )}
+                      </div>
+                      <div className="absolute bottom-2 left-2 bg-black/60 px-2 py-1 rounded-lg text-xs sm:text-sm">
+                        {getParticipantDisplayName()} (You)
+                      </div>
+                      {!isVideoOn && (
+                        <div className="absolute inset-0 bg-gray-700 flex items-center justify-center">
+                          <div className="text-center text-gray-200">
+                            <svg className="w-12 h-12 mx-auto mb-2" fill="currentColor" viewBox="0 0 20 20">
+                              <path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z" />
+                            </svg>
+                            <p className="text-sm">Camera Off</p>
+                          </div>
+                        </div>
                       )}
                     </div>
-                  <div className="absolute bottom-2 left-2 bg-black/60 px-2 py-1 rounded text-xs sm:text-sm">
-                    {joinResult.data.participant.name} (You)
-                  </div>
-                  {!isVideoOn && (
-                    <div className="absolute inset-0 bg-gray-700 flex items-center justify-center">
-                      <div className="text-center text-gray-200">
-                        <svg className="w-12 h-12 mx-auto mb-2" fill="currentColor" viewBox="0 0 20 20">
-                          <path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z" />
-                        </svg>
-                        <p className="text-sm">Camera Off</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
 
-                {/* Remote containers appended by handlers */}
+                    {/* Remote camera video containers - only camera feeds, no screen shares */}
+                    {remoteUsers
+                      .filter((user: any) => {
+                        // Filter out screen share UIDs and local user's own UID
+                        const uidStr = user.uid?.toString();
+                        const isScreenShareUid = uidStr && (
+                          (typeof user.uid === 'number' && user.uid > 1000000) ||
+                          (typeof uidStr === 'string' && uidStr.includes('-screen'))
+                        );
+                        const mainUid = mainClientUidRef.current;
+                        const isLocalUser = mainUid && (user.uid === mainUid || user.uid?.toString() === mainUid.toString());
+                        
+                        return !isScreenShareUid && !isLocalUser;
+                      })
+                      .map((user: any) => {
+                        const uidStr = user.uid?.toString();
+                        const videoState = remoteVideoStates[user.uid] || { hasVideo: false, hasAudio: false, hasScreenShare: false };
+                        const participantName = participantNames[uidStr] || participantNames[user.uid] || participantNames[user.account] || `Participant ${user.uid}`;
+                        const isAudioOn = videoState.hasAudio && !remoteUsers.find((u: any) => u.uid === user.uid && !u.audioTrack);
+
+                        return (
+                          <div
+                            key={`video-${user.uid}`} 
+                            id={`remote-video-container-${user.uid}`}
+                            className="relative bg-gray-800 rounded-xl overflow-hidden shadow-lg aspect-video w-full max-h-[80vh]"
+                          >
+                            {videoState.hasVideo ? (
+                              <div ref={(el) => { remoteVideoRefs.current[user.uid] = el; }} id={`remote-video-${user.uid}`}
+                                className="w-full h-full bg-gray-700"
+                              />
+                            ) : (
+                              <div className="w-full h-full bg-gray-700 flex items-center justify-center">
+                                <div className="text-center text-white">
+                                  <div className="w-16 h-16 rounded-full bg-gray-600 flex items-center justify-center mx-auto mb-3">
+                                    <svg className="w-8 h-8 text-gray-300" fill="currentColor" viewBox="0 0 24 24">
+                                      <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+                                    </svg>
+                                  </div>
+                                  <div className="text-lg font-medium">{participantName}</div>
+                                  <div className="text-sm text-gray-300 mt-1">Camera Off</div>
+                                </div>
+                              </div>
+                            )}
+                            <div id={`remote-name-${user.uid}`}
+                              className="absolute bottom-2 left-2 bg-black bg-opacity-50 px-2 py-1 rounded-lg text-xs sm:text-sm text-white"
+                            >
+                              {participantName}
+                            </div>
+                            <div id={`mic-badge-${user.uid}`}
+                              className={`absolute top-2 right-2 px-1 py-2 rounded-full text-xs text-white flex items-center gap-1 ${isAudioOn ? 'bg-green-600' : 'bg-red-600'}`}
+                            >
+                              {isAudioOn ? (
+                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                  <path d="M10 2a3 3 0 00-3 3v3a3 3 0 006 0V5a3 3 0 00-3-3z"/>
+                                  <path d="M5 10a5 5 0 0010 0 1 1 0 112 0 7 7 0 01-6 6.917V19a1 1 0 11-2 0v-2.083A7 7 0 013 10a1 1 0 112 0z"/>
+                                </svg>
+                              ) : (
+                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M9 4a3 3 0 016 0v3a3 3 0 11-6 0V4zm8.707 9.293a1 1 0 10-1.414 1.414l1 1a1 1 0 001.414-1.414l-1-1zM3.293 3.293a1 1 0 011.414 0l12 12a1 1 0 01-1.414 1.414l-2.034-2.034A6.978 6.978 0 0111 16.917V19a1 1 0 11-2 0v-2.083A7.003 7.003 0 013 10a1 1 0 112 0 5 5 0 008.071 3.95l-1.42-1.42A3.001 3.001 0 017 10V8.414L3.293 4.707a1 1 0 010-1.414z" clipRule="evenodd"/>
+                                </svg>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            );
+          })()}
 
           {/* Bottom Controls (Meet-like pill) */}
           <div className="px-4 sm:px-6 pb-6">
@@ -825,7 +1305,7 @@ export default function MeetingJoinPage() {
               <div className="inline-flex items-center gap-3 bg-gray-800/90 border border-gray-700 rounded-full px-3 sm:px-4 py-2 shadow-xl">
                 <button
                   onClick={toggleMute}
-                  className={`p-2 sm:p-3 rounded-full transition ${isMuted ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-700 hover:bg-gray-600'}`}
+                  className={`px-4 py-1.5 rounded-full transition ${isMuted ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-700 hover:bg-gray-600'}`}
                   title={isMuted ? 'Unmute' : 'Mute'}
                 >
                   {isMuted ? (
@@ -841,7 +1321,7 @@ export default function MeetingJoinPage() {
 
                 <button
                   onClick={toggleVideo}
-                  className={`p-2 sm:p-3 rounded-full transition ${!isVideoOn ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-700 hover:bg-gray-600'}`}
+                  className={`px-4 py-1.5 rounded-full transition ${!isVideoOn ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-700 hover:bg-gray-600'}`}
                   title={isVideoOn ? 'Turn off camera' : 'Turn on camera'}
                 >
                   {isVideoOn ? (
@@ -850,8 +1330,8 @@ export default function MeetingJoinPage() {
                     </svg>
                   ) : (
                     <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A10.014 10.014 0 0019.542 10C18.268 5.943 14.478 3 10 3a9.958 9.958 0 00-4.512 1.074l-1.78-1.781zm4.261 4.26l1.514 1.515a2.003 2.003 0 012.45 2.45l1.514 1.514a4 4 0 00-5.478-5.478z" clipRule="evenodd" />
-                      <path d="M12.454 16.697L9.75 13.992a4 4 0 01-3.742-3.741L2.335 6.578A9.98 9.98 0 00.458 10c1.274 4.057 5.065 7 9.542 7 .847 0 1.669-.105 2.454-.303z" />
+                      <path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z" />
+                      <line x1="2" y1="2" x2="18" y2="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                     </svg>
                   )}
                 </button>
@@ -859,7 +1339,7 @@ export default function MeetingJoinPage() {
                 <button
                   onClick={isScreenSharing ? stopScreenShare : startScreenShare}
                   disabled={isStartingScreenShare}
-                  className={`p-2 sm:p-3 rounded-full transition ${isStartingScreenShare ? 'opacity-50 cursor-not-allowed bg-gray-700' : isScreenSharing ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-700 hover:bg-gray-600'}`}
+                  className={`px-4 py-1.5 rounded-full transition ${isStartingScreenShare ? 'opacity-50 cursor-not-allowed bg-gray-700' : isScreenSharing ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-700 hover:bg-gray-600'}`}
                   title={isScreenSharing ? 'Stop presenting' : 'Present now'}
                 >
                   <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="currentColor" viewBox="0 0 20 20">
@@ -867,15 +1347,11 @@ export default function MeetingJoinPage() {
                   </svg>
                 </button>
 
-                <button
-                  onClick={leaveCall}
-                  disabled={isLeaving}
-                  className="p-2 sm:p-3 rounded-full bg-red-600 hover:bg-red-700 disabled:opacity-50"
+                <button onClick={leaveCall} disabled={isLeaving}
+                  className="px-4 py-1.5 rounded-full bg-red-600 hover:bg-red-700 disabled:opacity-50"
                   title="Leave call"
                 >
-                  <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h6a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h4a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
-                  </svg>
+                  <i className='ri-phone-fill text-lg' style={{ transform: 'rotate(135deg)' }}></i>
                 </button>
               </div>
             </div>
@@ -905,7 +1381,7 @@ export default function MeetingJoinPage() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Your Name</label>
-              <p className="text-gray-900">{joinResult.data.participant.name}</p>
+              <p className="text-gray-900">{getParticipantDisplayName()}</p>
             </div>
 
             <div>
