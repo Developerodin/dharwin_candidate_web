@@ -5,6 +5,8 @@ import { useParams, useSearchParams } from 'next/navigation';
 import { getMeetingInfo, joinMeeting, leaveMeeting, listParticipantsInMeeting, getScreenShareToken } from '@/shared/lib/candidates';
 import { convertToIST, formatISTDateTime, getTimeUntilIST, isMeetingInFutureIST, isUserInIndia, formatUTCForUserRegion, msUntil } from '@/shared/lib/timezone';
 import AgoraRTC, { IAgoraRTCClient, ICameraVideoTrack, IMicrophoneAudioTrack, ILocalVideoTrack } from 'agora-rtc-sdk-ng';
+import { useRecording } from '@/shared/hooks/useRecording';
+import Swal from 'sweetalert2';
 
 interface MeetingInfo {
   meetingId: string;
@@ -86,6 +88,42 @@ export default function MeetingJoinPage() {
   const localVideoTrackRef = useRef<ICameraVideoTrack | null>(null);
   const localAudioTrackRef = useRef<IMicrophoneAudioTrack | null>(null);
   const localScreenTrackRef = useRef<ILocalVideoTrack | null>(null);
+
+  // Get remote tracks for recording - update when remote users change
+  const remoteAudioTracks = useMemo(() => {
+    return Object.values(remoteUsersWithTracks.current)
+      .map(user => user.audioTrack)
+      .filter((track): track is IMicrophoneAudioTrack => track !== undefined);
+  }, [remoteUsers.length]); // Update when remote users change
+
+  const remoteVideoTracks = useMemo(() => {
+    return Object.values(remoteUsersWithTracks.current)
+      .map(user => user.cameraTrack || user.screenTrack)
+      .filter((track): track is ICameraVideoTrack | ILocalVideoTrack => track !== undefined);
+  }, [remoteUsers.length]); // Update when remote users change
+
+  // Recording functionality
+  const {
+    recording,
+    loading: recordingLoading,
+    error: recordingError,
+    uploadProgress,
+    isUploading,
+    startRecording: handleStartRecording,
+    stopRecording: handleStopRecording,
+    downloadRecording: handleDownloadRecording,
+  } = useRecording({
+    meetingId,
+    enabled: isVideoCallActive,
+    pollInterval: 5000,
+    agoraClient: clientRef.current,
+    localAudioTrack: localAudioTrackRef.current,
+    localVideoTrack: localVideoTrackRef.current,
+    remoteAudioTracks,
+    remoteVideoTracks,
+    isScreenSharing,
+    screenShareTrack: localScreenTrackRef.current,
+  });
   const localVideoElementRef = useRef<HTMLDivElement>(null);
   const localScreenElementRef = useRef<HTMLDivElement>(null);
   const mainClientUidRef = useRef<string | number | null>(null); // Store main client UID to derive screen share UID
@@ -1102,9 +1140,44 @@ export default function MeetingJoinPage() {
         <div className="min-h-screen bg-gray-900 text-white flex flex-col">
           {/* Top Bar */}
           <div ref={headerRef} className="flex items-center justify-between px-6 py-3 bg-gray-800/80 backdrop-blur border-b border-gray-700">
-            <div className="min-w-0">
-              <h1 className="text-base sm:text-lg font-semibold truncate">{joinResult.data.meeting.title}</h1>
-              <p className="text-xs sm:text-sm text-gray-400 truncate">{participantCount} {participantCount === 1 ? 'participant' : 'participants'}</p>
+            <div className="min-w-0 flex items-center gap-3">
+              <div>
+                <h1 className="text-base sm:text-lg font-semibold truncate">{joinResult.data.meeting.title}</h1>
+                <p className="text-xs sm:text-sm text-gray-400 truncate">{participantCount} {participantCount === 1 ? 'participant' : 'participants'}</p>
+              </div>
+              {/* Recording Indicator */}
+              {recording && (recording.status === 'recording' || recording.status === 'starting' || recording.status === 'stopping') && (
+                <div className="flex items-center gap-2 px-3 py-1 bg-red-600/90 rounded-full">
+                  <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                  <span className="text-xs sm:text-sm font-medium text-white">
+                    {recording.status === 'starting' ? 'Starting...' : recording.status === 'stopping' ? 'Stopping...' : 'Recording'}
+                  </span>
+                </div>
+              )}
+              {isUploading && (
+                <div className="flex items-center gap-2 px-3 py-1 bg-yellow-600/90 rounded-full">
+                  <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                  <span className="text-xs sm:text-sm font-medium text-white">
+                    Uploading... {uploadProgress}%
+                  </span>
+                </div>
+              )}
+              {recording && recording.status === 'completed' && !recording.fileKey && !isUploading && (
+                <div className="flex items-center gap-2 px-3 py-1 bg-yellow-600/90 rounded-full">
+                  <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                  <span className="text-xs sm:text-sm font-medium text-white">Processing...</span>
+                </div>
+              )}
+              {recording && (recording.status === 'failed' || recording.error) && (
+                <div className="flex items-center gap-2 px-3 py-1 bg-red-600/90 rounded-full">
+                  <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                  <span className="text-xs sm:text-sm font-medium text-white">
+                    {recording.status === 'failed' ? 'Recording Failed' : 'Upload Failed'}
+                  </span>
+                </div>
+              )}
             </div>
             <button
               onClick={leaveCall}
@@ -1191,7 +1264,7 @@ export default function MeetingJoinPage() {
                 {/* Video Grid - Only camera feeds */}
                 <div className={`${hasAnyScreenShare && 'md:w-1/3'} flex-1 ${hasAnyScreenShare ? 'overflow-auto' : ''}`}>
                   <div id="video-grid" ref={gridRef}
-                    className={`md:${hasAnyScreenShare && participantCount > 2 ? 'grid-cols-2' : hasAnyScreenShare ?'grid-cols-1' : participantCount === 1 ? 'grid-cols-1' : participantCount === 3 || participantCount === 6 || participantCount === 5 ? 'grid-cols-3' : participantCount === 7 || participantCount === 8 ? 'grid-cols-4' : 'grid-cols-2'} grid gap-4 w-full`}
+                    className={`md:${hasAnyScreenShare && participantCount === 2 ? 'grid-cols-2' : hasAnyScreenShare ?'grid-cols-1' : participantCount === 1 ? 'grid-cols-1' : participantCount === 3 || participantCount === 6 || participantCount === 5 ? 'grid-cols-3' : participantCount === 7 || participantCount === 8 ? 'grid-cols-4' : 'grid-cols-2'} grid gap-4 w-full`}
                   >
                     {/* Local camera tile */}
                     <div id="local-video-container" className="relative bg-gray-800 rounded-xl overflow-hidden shadow-lg aspect-video w-full max-h-[80vh]">
@@ -1346,6 +1419,110 @@ export default function MeetingJoinPage() {
                     <path fillRule="evenodd" d="M2 5a2 2 0 012-2h12a2 2 0 012 2v7a2 2 0 01-2 2h-5v1h3a1 1 0 010 2H6a1 1 0 110-2h3v-1H4a2 2 0 01-2-2V5zm3 1a1 1 0 000 2h10a1 1 0 100-2H5z" clipRule="evenodd" />
                   </svg>
                 </button>
+
+                {/* Recording Controls */}
+                {recording && (
+                  <>
+                    {recording.status === 'idle' && (
+                      <button
+                        onClick={async () => {
+                          try {
+                            await handleStartRecording();
+                          } catch (err: any) {
+                            const errorMessage = err?.message || 'Failed to start recording';
+                            await Swal.fire({
+                              icon: 'error',
+                              title: 'Recording Failed',
+                              text: errorMessage,
+                              confirmButtonText: 'OK',
+                              confirmButtonColor: '#ef4444'
+                            });
+                          }
+                        }}
+                        disabled={recordingLoading}
+                        className={`px-4 py-1.5 rounded-full transition ${recordingLoading ? 'opacity-50 cursor-not-allowed bg-gray-700' : 'bg-gray-700 hover:bg-gray-600'}`}
+                        title="Start recording"
+                      >
+                        <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                        </svg>
+                      </button>
+                    )}
+                    {(recording.status === 'recording' || recording.status === 'starting') && (
+                      <button
+                        onClick={async () => {
+                          try {
+                            await handleStopRecording();
+                          } catch (err: any) {
+                            const errorMessage = err?.message || 'Failed to stop recording';
+                            await Swal.fire({
+                              icon: 'error',
+                              title: 'Stop Recording Failed',
+                              text: errorMessage,
+                              confirmButtonText: 'OK',
+                              confirmButtonColor: '#ef4444'
+                            });
+                          }
+                        }}
+                        disabled={recordingLoading || recording.status === 'starting'}
+                        className={`px-4 py-1.5 rounded-full transition ${recordingLoading || recording.status === 'starting' ? 'opacity-50 cursor-not-allowed bg-red-600' : 'bg-red-600 hover:bg-red-700'}`}
+                        title="Stop recording"
+                      >
+                        <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-sm bg-white"></div>
+                      </button>
+                    )}
+                    {recording.status === 'completed' && recording.fileKey && (
+                      <button
+                        onClick={async () => {
+                          try {
+                            await handleDownloadRecording();
+                          } catch (err: any) {
+                            const errorMessage = err?.message || 'Failed to download recording';
+                            await Swal.fire({
+                              icon: 'error',
+                              title: 'Download Failed',
+                              text: errorMessage,
+                              confirmButtonText: 'OK',
+                              confirmButtonColor: '#ef4444'
+                            });
+                          }
+                        }}
+                        disabled={recordingLoading}
+                        className={`px-4 py-1.5 rounded-full transition ${recordingLoading ? 'opacity-50 cursor-not-allowed bg-gray-700' : 'bg-green-600 hover:bg-green-700'}`}
+                        title="Download recording"
+                      >
+                        <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+                        </svg>
+                      </button>
+                    )}
+                    {recording.status === 'failed' && (
+                      <button
+                        onClick={async () => {
+                          try {
+                            await handleStartRecording();
+                          } catch (err: any) {
+                            const errorMessage = err?.message || 'Failed to start recording';
+                            await Swal.fire({
+                              icon: 'error',
+                              title: 'Recording Failed',
+                              text: errorMessage,
+                              confirmButtonText: 'OK',
+                              confirmButtonColor: '#ef4444'
+                            });
+                          }
+                        }}
+                        disabled={recordingLoading}
+                        className={`px-4 py-1.5 rounded-full transition ${recordingLoading ? 'opacity-50 cursor-not-allowed bg-gray-700' : 'bg-gray-700 hover:bg-gray-600'}`}
+                        title="Retry recording"
+                      >
+                        <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+                        </svg>
+                      </button>
+                    )}
+                  </>
+                )}
 
                 <button onClick={leaveCall} disabled={isLeaving}
                   className="px-4 py-1.5 rounded-full bg-red-600 hover:bg-red-700 disabled:opacity-50"

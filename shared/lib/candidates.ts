@@ -267,3 +267,58 @@ export const getAttendance = async (page?: number, limit?: number) => {
   const response = await api.get(url);
   return response.data;
 };
+
+// Recording API functions
+// Get recording status
+export const getRecordingStatus = async (meetingId: string) => {
+  const response = await api.get(`${Meeting_API}/${meetingId}/recording/status`);
+  return response.data;
+};
+
+// Start recording
+export const startRecording = async (meetingId: string, options?: {
+  format?: 'mp4' | 'webm' | 'm3u8';
+  resolution?: string;
+  fps?: number;
+  bitrate?: number;
+}) => {
+  const response = await api.post(`${Meeting_API}/${meetingId}/recording/start`, options || {});
+  return response.data;
+};
+
+// Stop recording
+export const stopRecording = async (meetingId: string) => {
+  const response = await api.post(`${Meeting_API}/${meetingId}/recording/stop`);
+  return response.data;
+};
+
+// Get recording download URL
+export const getRecordingDownloadUrl = async (meetingId: string) => {
+  const response = await api.get(`${Meeting_API}/${meetingId}/recording/download`);
+  return response.data;
+};
+
+// Retry S3 upload
+export const retryRecordingUpload = async (meetingId: string) => {
+  const response = await api.post(`${Meeting_API}/${meetingId}/recording/retry-upload`);
+  return response.data;
+};
+
+// Upload recording file
+export const uploadRecordingFile = async (meetingId: string, file: File, onProgress?: (progress: number) => void) => {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await api.post(`${Meeting_API}/${meetingId}/recording/upload`, formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+    onUploadProgress: (progressEvent) => {
+      if (onProgress && progressEvent.total) {
+        const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+        onProgress(percentCompleted);
+      }
+    },
+  });
+  return response.data;
+};

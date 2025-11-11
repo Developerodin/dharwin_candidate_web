@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { getMeetingsList, getMeetingById, deleteMeetingById } from '@/shared/lib/candidates';
+import { getMeetingsList, getMeetingById, deleteMeetingById, getRecordingStatus, getRecordingDownloadUrl } from '@/shared/lib/candidates';
 import Swal from 'sweetalert2';
 import { Tooltip } from 'react-tooltip';
 
@@ -47,6 +47,8 @@ export default function ManageMeetingsPage() {
   const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
   const [copiedMeetingId, setCopiedMeetingId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | 'scheduled' | 'active' | 'ended' | 'cancelled'>('all');
+  const [recordingStatuses, setRecordingStatuses] = useState<Record<string, any>>({});
+  const [loadingRecordings, setLoadingRecordings] = useState<Record<string, boolean>>({});
 
   const loadMeetings = async () => {
     setLoading(true);
@@ -56,6 +58,8 @@ export default function ManageMeetingsPage() {
       if (response.success && response.data?.meetings) {
         setMeetings(response.data.meetings);
         setTotalResults(response.data.meetings.length);
+        // Load recording statuses for all meetings
+        loadAllRecordingStatuses(response.data.meetings);
       } else {
         setError('Failed to load meetings');
       }
@@ -64,6 +68,29 @@ export default function ManageMeetingsPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadAllRecordingStatuses = async (meetings: Meeting[]) => {
+    // Load recording statuses for all meetings in parallel
+    const statusPromises = meetings.map(async (meeting) => {
+      try {
+        const response = await getRecordingStatus(meeting.meetingId);
+        if (response?.success && response?.data?.recording) {
+          return { meetingId: meeting.meetingId, recording: response.data.recording };
+        }
+        return { meetingId: meeting.meetingId, recording: null };
+      } catch (e: any) {
+        // Recording might not exist, which is fine
+        return { meetingId: meeting.meetingId, recording: null };
+      }
+    });
+
+    const results = await Promise.all(statusPromises);
+    const statusMap: Record<string, any> = {};
+    results.forEach((result) => {
+      statusMap[result.meetingId] = result.recording;
+    });
+    setRecordingStatuses(statusMap);
   };
 
   useEffect(() => {
@@ -81,6 +108,8 @@ export default function ManageMeetingsPage() {
         // Some APIs return data directly or wrapped; try common shapes
         const meeting = response.data.meeting || response.data;
         setSelectedMeeting(meeting);
+        // Also load recording status
+        loadRecordingStatus(meetingId);
       } else {
         setDetailError(response?.message || 'Failed to load meeting details');
       }
@@ -88,6 +117,60 @@ export default function ManageMeetingsPage() {
       setDetailError(e?.response?.data?.message || e?.message || 'Failed to load meeting details');
     } finally {
       setDetailLoading(false);
+    }
+  };
+
+  const loadRecordingStatus = async (meetingId: string) => {
+    setLoadingRecordings((prev) => ({ ...prev, [meetingId]: true }));
+    try {
+      const response = await getRecordingStatus(meetingId);
+      if (response?.success && response?.data?.recording) {
+        setRecordingStatuses((prev) => ({
+          ...prev,
+          [meetingId]: response.data.recording,
+        }));
+      } else {
+        // No recording found or not started
+        setRecordingStatuses((prev) => ({
+          ...prev,
+          [meetingId]: null,
+        }));
+      }
+    } catch (e: any) {
+      // Recording might not exist, which is fine
+      setRecordingStatuses((prev) => ({
+        ...prev,
+        [meetingId]: null,
+      }));
+    } finally {
+      setLoadingRecordings((prev) => ({ ...prev, [meetingId]: false }));
+    }
+  };
+
+  const handleDownloadRecording = async (meetingId: string) => {
+    try {
+      const response = await getRecordingDownloadUrl(meetingId);
+      if (response?.success && response?.data?.downloadUrl) {
+        // Open download URL in new tab
+        window.open(response.data.downloadUrl, '_blank');
+        void Swal.fire({
+          icon: 'success',
+          title: 'Download started',
+          text: 'Recording download has started.',
+          timer: 1500,
+          showConfirmButton: false,
+          toast: true,
+          position: 'top-end'
+        });
+      } else {
+        throw new Error('Download URL not available');
+      }
+    } catch (e: any) {
+      void Swal.fire({
+        icon: 'error',
+        title: 'Download failed',
+        text: e?.response?.data?.message || e?.message || 'Could not download recording. Please try again.',
+      });
     }
   };
 
@@ -185,7 +268,9 @@ export default function ManageMeetingsPage() {
             </select>
           </div>
           <button
-            onClick={loadMeetings}
+            onClick={() => {
+              loadMeetings();
+            }}
             disabled={loading}
             className="inline-flex items-center rounded-md border border-gray-300 px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-60"
           >
@@ -267,26 +352,50 @@ export default function ManageMeetingsPage() {
                   </td>
                   <td className="px-4 py-2">
                     <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => copyMeetingLink(m.meetingUrl, m.meetingId)}
-                        className="inline-flex items-center rounded-md border border-gray-300 px-3 py-1.5 text-xs hover:bg-gray-50"
-                        title={copiedMeetingId === m.meetingId ? 'Copied' : 'Copy meeting link'}
-                        aria-label={copiedMeetingId === m.meetingId ? 'Copied meeting link' : 'Copy meeting link'}
-                        data-tooltip-id="meeting-actions-tip"
-                        data-tooltip-content={copiedMeetingId === m.meetingId ? 'Copied!' : 'Copy meeting link'}
-                      >
-                        {copiedMeetingId === m.meetingId ? (
-                          // Check icon
-                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4 text-green-600">
-                            <path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
-                          </svg>
-                        ) : (
-                          // Clipboard icon
-                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4 text-gray-700">
-                            <path d="M16 2H8a2 2 0 0 0-2 2v2H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h8v-2H4V8h2v2h12V6a2 2 0 0 0-2-2h-2V4a2 2 0 0 0-2-2h4a2 2 0 0 1 2 2v2h2V4a2 2 0 0 0-2-2Zm-4 4H8V4h4v2Z" />
-                          </svg>
-                        )}
-                      </button>
+                      {(() => {
+                        const recording = recordingStatuses[m.meetingId];
+                        // Only show recording button if a completed recording exists
+                        if (recording && recording.status === 'completed') {
+                          return (
+                            <button
+                              onClick={() => handleDownloadRecording(m.meetingId)}
+                              className="inline-flex items-center rounded-md border border-blue-300 px-3 py-1.5 text-xs text-blue-700 hover:bg-blue-50"
+                              title="View recording"
+                              data-tooltip-id="meeting-actions-tip"
+                              data-tooltip-content="View recording"
+                            >
+                              {/* Video/Recording icon */}
+                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+                                <path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4ZM14 13h-3v3H9v-3H6v-2h3V8h2v3h3v2Z"/>
+                              </svg>
+                            </button>
+                          );
+                        }
+                        // Don't show anything if no recording is available
+                        return null;
+                      })()}
+                      {m.status !== 'ended' && (
+                        <button
+                          onClick={() => copyMeetingLink(m.meetingUrl, m.meetingId)}
+                          className="inline-flex items-center rounded-md border border-gray-300 px-3 py-1.5 text-xs hover:bg-gray-50"
+                          title={copiedMeetingId === m.meetingId ? 'Copied' : 'Copy meeting link'}
+                          aria-label={copiedMeetingId === m.meetingId ? 'Copied meeting link' : 'Copy meeting link'}
+                          data-tooltip-id="meeting-actions-tip"
+                          data-tooltip-content={copiedMeetingId === m.meetingId ? 'Copied!' : 'Copy meeting link'}
+                        >
+                          {copiedMeetingId === m.meetingId ? (
+                            // Check icon
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4 text-green-600">
+                              <path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+                            </svg>
+                          ) : (
+                            // Clipboard icon
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4 text-gray-700">
+                              <path d="M16 2H8a2 2 0 0 0-2 2v2H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h8v-2H4V8h2v2h12V6a2 2 0 0 0-2-2h-2V4a2 2 0 0 0-2-2h4a2 2 0 0 1 2 2v2h2V4a2 2 0 0 0-2-2Zm-4 4H8V4h4v2Z" />
+                            </svg>
+                          )}
+                        </button>
+                      )}
                       <button
                         onClick={() => openDetail(m.meetingId)}
                         className="inline-flex items-center rounded-md border border-gray-300 px-3 py-1.5 text-xs hover:bg-gray-50"
@@ -415,6 +524,96 @@ export default function ManageMeetingsPage() {
                       <div className="text-gray-700">{selectedMeeting.channelName}</div>
                     </div>
                   )}
+                  {/* Recording Section */}
+                  <div className="border-t pt-3 mt-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-xs font-medium text-gray-700">Recording</div>
+                      {loadingRecordings[selectedMeeting.meetingId] && (
+                        <svg className="animate-spin h-4 w-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                      )}
+                    </div>
+                    {(() => {
+                      const recording = recordingStatuses[selectedMeeting.meetingId];
+                      if (loadingRecordings[selectedMeeting.meetingId]) {
+                        return <div className="text-xs text-gray-500">Loading recording status...</div>;
+                      }
+                      if (!recording) {
+                        return (
+                          <div className="text-xs text-gray-500">
+                            No recording available for this meeting.
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="text-xs text-gray-500">Status</div>
+                              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                                recording.status === 'completed'
+                                  ? 'bg-green-100 text-green-800'
+                                  : recording.status === 'recording'
+                                  ? 'bg-red-100 text-red-800'
+                                  : recording.status === 'stopping'
+                                  ? 'bg-yellow-100 text-yellow-800'
+                                  : 'bg-gray-100 text-gray-800'
+                              }`}>
+                                {recording.status}
+                              </span>
+                            </div>
+                            {recording.status === 'completed' && (
+                              <button
+                                onClick={() => handleDownloadRecording(selectedMeeting.meetingId)}
+                                className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-3 w-3">
+                                  <path d="M12 15.577l-3.539-3.538a1 1 0 00-1.414 1.414l4.243 4.243a1 1 0 001.414 0l4.243-4.243a1 1 0 00-1.414-1.414L12 15.577zM12 4v11.577h2V4h-2z"/>
+                                </svg>
+                                Download
+                              </button>
+                            )}
+                          </div>
+                          {recording.startedAt && (
+                            <div>
+                              <div className="text-xs text-gray-500">Started At</div>
+                              <div className="text-xs text-gray-700">{new Date(recording.startedAt).toLocaleString()}</div>
+                            </div>
+                          )}
+                          {recording.stoppedAt && (
+                            <div>
+                              <div className="text-xs text-gray-500">Stopped At</div>
+                              <div className="text-xs text-gray-700">{new Date(recording.stoppedAt).toLocaleString()}</div>
+                            </div>
+                          )}
+                          {recording.duration && (
+                            <div>
+                              <div className="text-xs text-gray-500">Duration</div>
+                              <div className="text-xs text-gray-700">
+                                {Math.floor(recording.duration / 60)}:{(recording.duration % 60).toString().padStart(2, '0')}
+                              </div>
+                            </div>
+                          )}
+                          {recording.fileSize && (
+                            <div>
+                              <div className="text-xs text-gray-500">File Size</div>
+                              <div className="text-xs text-gray-700">
+                                {(recording.fileSize / (1024 * 1024)).toFixed(2)} MB
+                              </div>
+                            </div>
+                          )}
+                          {recording.format && (
+                            <div>
+                              <div className="text-xs text-gray-500">Format</div>
+                              <div className="text-xs text-gray-700 uppercase">{recording.format}</div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
                 </div>
               )}
             </div>
