@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { getMeetingsList, getMeetingById, deleteMeetingById, getRecordingStatus, getRecordingDownloadUrl } from '@/shared/lib/candidates';
 import Swal from 'sweetalert2';
 import { Tooltip } from 'react-tooltip';
+import TranscriptPage from '@/shared/components/transcription/TranscriptPage';
 
 type Meeting = {
   meetingId: string;
@@ -613,6 +614,15 @@ export default function ManageMeetingsPage() {
                         </div>
                       );
                     })()}
+                  </div>
+                  {/* Transcription Section */}
+                  <div className="border-t pt-3 mt-3">
+                    <div className="text-xs font-medium text-gray-700 mb-2">Transcription</div>
+                    {selectedMeeting && (
+                      <div className="mt-2">
+                        <TranscriptPage meetingId={selectedMeeting.meetingId} autoPoll={true} pollInterval={5000} />
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

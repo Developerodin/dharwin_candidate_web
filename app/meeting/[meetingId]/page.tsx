@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
-import { getMeetingInfo, joinMeeting, leaveMeeting, listParticipantsInMeeting, getScreenShareToken } from '@/shared/lib/candidates';
+import { getMeetingInfo, joinMeeting, leaveMeeting, listParticipantsInMeeting, getScreenShareToken, startTranscription, getTranscriptionStatus } from '@/shared/lib/candidates';
 import { convertToIST, formatISTDateTime, getTimeUntilIST, isMeetingInFutureIST, isUserInIndia, formatUTCForUserRegion, msUntil } from '@/shared/lib/timezone';
 import AgoraRTC, { IAgoraRTCClient, ICameraVideoTrack, IMicrophoneAudioTrack, ILocalVideoTrack } from 'agora-rtc-sdk-ng';
 import { useRecording } from '@/shared/hooks/useRecording';
@@ -127,6 +127,7 @@ export default function MeetingJoinPage() {
   const localVideoElementRef = useRef<HTMLDivElement>(null);
   const localScreenElementRef = useRef<HTMLDivElement>(null);
   const mainClientUidRef = useRef<string | number | null>(null); // Store main client UID to derive screen share UID
+  const transcriptionStartedRef = useRef<boolean>(false); // Track if transcription has been auto-started for this recording
   
   // Responsive layout management
   const headerRef = useRef<HTMLDivElement>(null);
@@ -238,6 +239,58 @@ export default function MeetingJoinPage() {
     recomputeLayout();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [remoteUsers.length, isScreenSharing]);
+
+  // Auto-start transcription when recording completes
+  useEffect(() => {
+    // Check if recording is completed and has a file key (uploaded successfully)
+    if (
+      recording &&
+      recording.status === 'completed' &&
+      recording.fileKey &&
+      !transcriptionStartedRef.current &&
+      meetingId
+    ) {
+      // Mark that we've started transcription for this recording (prevent duplicate calls)
+      transcriptionStartedRef.current = true;
+      
+      // Check transcription status first to avoid duplicate starts
+      // The backend might have already started transcription automatically
+      getTranscriptionStatus(meetingId)
+        .then((response) => {
+          const statusData = response?.data?.transcription || response?.transcription;
+          const currentStatus = statusData?.status;
+          
+          // Only start transcription if it's not already started/processing/completed
+          if (!currentStatus || currentStatus === 'idle' || currentStatus === 'failed') {
+            // Start transcription automatically
+            return startTranscription(meetingId, 'en')
+              .then(() => {
+                console.log('Transcription started automatically after recording completion');
+              });
+          } else {
+            console.log('Transcription already started by backend, status:', currentStatus);
+          }
+        })
+        .catch((err: any) => {
+          // If status check fails, try to start transcription anyway
+          console.warn('Failed to check transcription status, attempting to start:', err);
+          return startTranscription(meetingId, 'en')
+            .then(() => {
+              console.log('Transcription started automatically after recording completion');
+            })
+            .catch((startErr: any) => {
+              console.error('Failed to auto-start transcription:', startErr);
+              // Don't show error to user, just log it
+              // The user can manually start transcription if needed
+            });
+        });
+    }
+    
+    // Reset the flag when recording status changes to idle or a new recording starts
+    if (recording && (recording.status === 'idle' || recording.status === 'recording' || recording.status === 'starting')) {
+      transcriptionStartedRef.current = false;
+    }
+  }, [recording?.status, recording?.fileKey, meetingId]);
 
   // Calculate real-time participant count (excluding screen share UIDs and local user)
   const participantCount = useMemo(() => {

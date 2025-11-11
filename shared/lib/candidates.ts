@@ -1,5 +1,5 @@
 import api from './api';
-import { Attendance_API, Candidate_SalarySlips_API, Candidates_API, Documents_API, Export_Candidates_API, Fetch_Candidate_Documents_API, Forgot_Password_API, Join_Meeting_API, Logs_API, Meeting_API, Onboard_Candidate_API, Register_User_API, Share_Candidate_API, Verify_Document_API } from './constants';
+import { Attendance_API, Candidate_SalarySlips_API, Candidates_API, Documents_API, Export_Candidates_API, Fetch_Candidate_Documents_API, Forgot_Password_API, Join_Meeting_API, Logs_API, Meeting_API, Onboard_Candidate_API, Register_User_API, Share_Candidate_API, Transcription_API, Transcription_Download_API, Transcription_Start_API, Transcription_Status_API, Verify_Document_API } from './constants';
 
 // Fetch all leads
 export const fetchAllCandidates = async () => {
@@ -320,5 +320,36 @@ export const uploadRecordingFile = async (meetingId: string, file: File, onProgr
       }
     },
   });
+  return response.data;
+};
+
+// Transcription API functions
+// Start transcription
+export const startTranscription = async (meetingId: string, language: string = 'en') => {
+  const response = await api.post(Transcription_Start_API(meetingId), { language });
+  return response.data;
+};
+
+// Get transcription status
+export const getTranscriptionStatus = async (meetingId: string) => {
+  const response = await api.get(Transcription_Status_API(meetingId));
+  return response.data;
+};
+
+// Get transcript content
+export const getTranscript = async (meetingId: string) => {
+  const response = await api.get(Transcription_API(meetingId));
+  return response.data;
+};
+
+// Update transcript (edit)
+export const updateTranscript = async (meetingId: string, transcript: string) => {
+  const response = await api.patch(Transcription_API(meetingId), { transcript });
+  return response.data;
+};
+
+// Download transcript
+export const downloadTranscript = async (meetingId: string, format: string = 'txt') => {
+  const response = await api.get(Transcription_Download_API(meetingId, format));
   return response.data;
 };

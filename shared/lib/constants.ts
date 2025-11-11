@@ -45,3 +45,9 @@ export const Logs_API = `${LOGS_URL}`;
 
 // attendance API
 export const Attendance_API = `${ATTENDANCE_URL}`;
+
+// Transcription API
+export const Transcription_Start_API = (meetingId: string) => `${MEETINGS_URL}/${meetingId}/transcription/start`;
+export const Transcription_Status_API = (meetingId: string) => `${MEETINGS_URL}/${meetingId}/transcription/status`;
+export const Transcription_API = (meetingId: string) => `${MEETINGS_URL}/${meetingId}/transcription`;
+export const Transcription_Download_API = (meetingId: string, format: string = 'txt') => `${MEETINGS_URL}/${meetingId}/transcription/download?format=${format}`;
