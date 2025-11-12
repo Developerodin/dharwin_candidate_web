@@ -369,6 +369,30 @@ export default function MeetingJoinPage() {
     }
   }, [isScreenSharing]);
 
+  // Sync mic badge state with remoteVideoStates whenever it changes
+  // This ensures badges show correct state even if container wasn't available when audio was first published
+  useEffect(() => {
+    remoteUsers.forEach((user: any) => {
+      const uidStr = user.uid?.toString();
+      const isScreenShareUid = uidStr && (
+        (typeof user.uid === 'number' && user.uid > 1000000) ||
+        (typeof uidStr === 'string' && uidStr.includes('-screen'))
+      );
+      const mainUid = mainClientUidRef.current;
+      const isLocalUser = mainUid && (user.uid === mainUid || user.uid?.toString() === mainUid.toString());
+      
+      // Skip screen share UIDs and local user
+      if (isScreenShareUid || isLocalUser) return;
+      
+      const videoState = remoteVideoStates[user.uid];
+      if (videoState !== undefined) {
+        // Update badge based on actual audio state
+        const hasAudio = videoState.hasAudio;
+        setRemoteMicMuted(user.uid, !hasAudio);
+      }
+    });
+  }, [remoteUsers, remoteVideoStates]);
+
   useEffect(() => {
     if (meetingId && token) {
       fetchMeetingInfo();
@@ -731,6 +755,12 @@ export default function MeetingJoinPage() {
     }
     
     if (mediaType === 'audio') {
+      // Audio should only be handled by the main client, not the screen share client
+      // Ignore audio tracks from the screen share client to prevent echo
+      if (sourceClient === screenShareClientRef.current) {
+        return; // Don't process audio from screen share client
+      }
+      
       // Audio always comes from the main client (camera UID)
       const uidStr = user.uid?.toString();
       if (!remoteUsersWithTracks.current[uidStr]) {
@@ -840,6 +870,12 @@ export default function MeetingJoinPage() {
       }
     }
     if (mediaType === 'audio') {
+      // Audio should only be handled by the main client, not the screen share client
+      // Ignore audio unpublish events from the screen share client to prevent issues
+      if (sourceClient === screenShareClientRef.current) {
+        return; // Don't process audio from screen share client
+      }
+      
       const uidStr = user.uid?.toString();
       if (remoteUsersWithTracks.current[uidStr]) {
         remoteUsersWithTracks.current[uidStr].audioTrack = undefined;
@@ -1342,7 +1378,7 @@ export default function MeetingJoinPage() {
                     className={`md:${hasAnyScreenShare && participantCount === 2 ? 'grid-cols-2' : hasAnyScreenShare ?'grid-cols-1' : participantCount === 1 ? 'grid-cols-1' : participantCount === 3 || participantCount === 6 || participantCount === 5 ? 'grid-cols-3' : participantCount === 7 || participantCount === 8 ? 'grid-cols-4' : 'grid-cols-2'} grid gap-4 w-full`}
                   >
                     {/* Local camera tile */}
-                    <div id="local-video-container" className="relative bg-gray-800 rounded-xl overflow-hidden shadow-lg aspect-video w-full max-h-[80vh]">
+                    <div id="local-video-container" className="relative bg-gray-800 rounded-xl overflow-hidden shadow-lg aspect-video w-full max-h-[70vh]">
                       <div
                         ref={localVideoElementRef}
                         className="w-full h-full bg-gray-700"
@@ -1394,7 +1430,8 @@ export default function MeetingJoinPage() {
                         const uidStr = user.uid?.toString();
                         const videoState = remoteVideoStates[user.uid] || { hasVideo: false, hasAudio: false, hasScreenShare: false };
                         const participantName = participantNames[uidStr] || participantNames[user.uid] || participantNames[user.account] || `Participant ${user.uid}`;
-                        const isAudioOn = videoState.hasAudio && !remoteUsers.find((u: any) => u.uid === user.uid && !u.audioTrack);
+                        // Use videoState.hasAudio as the source of truth for mic state
+                        const isAudioOn = videoState.hasAudio;
 
                         return (
                           <div
