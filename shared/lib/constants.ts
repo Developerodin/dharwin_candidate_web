@@ -51,3 +51,13 @@ export const Transcription_Start_API = (meetingId: string) => `${MEETINGS_URL}/$
 export const Transcription_Status_API = (meetingId: string) => `${MEETINGS_URL}/${meetingId}/transcription/status`;
 export const Transcription_API = (meetingId: string) => `${MEETINGS_URL}/${meetingId}/transcription`;
 export const Transcription_Download_API = (meetingId: string, format: string = 'txt') => `${MEETINGS_URL}/${meetingId}/transcription/download?format=${format}`;
+
+// Chat API
+export const Chat_History_API = (meetingId: string, limit?: number, before?: string) => {
+  const params = new URLSearchParams();
+  if (limit) params.append('limit', limit.toString());
+  if (before) params.append('before', before);
+  const query = params.toString();
+  return `${MEETINGS_URL}/${meetingId}/chat/history${query ? `?${query}` : ''}`;
+};
+export const Chat_Message_API = (meetingId: string, messageId: string) => `${MEETINGS_URL}/${meetingId}/chat/messages/${messageId}`;

@@ -6,6 +6,7 @@ import { getMeetingInfo, joinMeeting, leaveMeeting, listParticipantsInMeeting, g
 import { convertToIST, formatISTDateTime, getTimeUntilIST, isMeetingInFutureIST, isUserInIndia, formatUTCForUserRegion, msUntil } from '@/shared/lib/timezone';
 import AgoraRTC, { IAgoraRTCClient, ICameraVideoTrack, IMicrophoneAudioTrack, ILocalVideoTrack } from 'agora-rtc-sdk-ng';
 import { useRecording } from '@/shared/hooks/useRecording';
+import MeetingChat from '@/shared/components/chat/MeetingChat';
 import Swal from 'sweetalert2';
 
 interface MeetingInfo {
@@ -137,6 +138,9 @@ export default function MeetingJoinPage() {
   const [gridColumns, setGridColumns] = useState<number>(2);
   const [tileHeight, setTileHeight] = useState<number>(220);
   const [overflowCount, setOverflowCount] = useState<number>(0);
+  
+  // Chat state
+  const [showChat, setShowChat] = useState(false);
 
   const setRemoteMicMuted = (uid: string | number, muted: boolean) => {
     const container = document.getElementById(`remote-video-container-${uid}`) as HTMLDivElement | null;
@@ -1189,8 +1193,26 @@ export default function MeetingJoinPage() {
 
   if (joinResult) {
     if (isVideoCallActive) {
+      // Get user email and name for chat
+      const chatUserEmail = joinResult.data.participant.email || joinForm.email;
+      const chatUserName = getParticipantDisplayName();
+      
       return (
-        <div className="min-h-screen bg-gray-900 text-white flex flex-col">
+        <div className="min-h-screen bg-gray-900 text-white flex flex-col relative">
+          {/* Chat Panel - Right Side */}
+          {showChat && (
+            <div className="fixed right-0 top-0 bottom-0 w-full sm:w-96 bg-gray-800 z-50 shadow-2xl flex flex-col border-l border-gray-700">
+              <MeetingChat
+                meetingId={meetingId}
+                userEmail={chatUserEmail}
+                userName={chatUserName}
+                enabled={isVideoCallActive}
+                className="h-full"
+                onClose={() => setShowChat(false)}
+              />
+            </div>
+          )}
+          
           {/* Top Bar */}
           <div ref={headerRef} className="flex items-center justify-between px-6 py-3 bg-gray-800/80 backdrop-blur border-b border-gray-700">
             <div className="min-w-0 flex items-center gap-3">
@@ -1470,6 +1492,16 @@ export default function MeetingJoinPage() {
                 >
                   <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M2 5a2 2 0 012-2h12a2 2 0 012 2v7a2 2 0 01-2 2h-5v1h3a1 1 0 010 2H6a1 1 0 110-2h3v-1H4a2 2 0 01-2-2V5zm3 1a1 1 0 000 2h10a1 1 0 100-2H5z" clipRule="evenodd" />
+                  </svg>
+                </button>
+
+                <button
+                  onClick={() => setShowChat(!showChat)}
+                  className={`px-4 py-1.5 rounded-full transition ${showChat ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-700 hover:bg-gray-600'}`}
+                  title={showChat ? 'Hide chat' : 'Show chat'}
+                >
+                  <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                   </svg>
                 </button>
 
