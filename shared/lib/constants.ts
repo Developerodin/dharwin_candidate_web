@@ -6,6 +6,7 @@ const MEETINGS_URL = `${BASE_API_URL}/meetings`;
 const LOGS_URL = `${BASE_API_URL}/login-logs`;
 const ATTENDANCE_URL = `${BASE_API_URL}/attendance`;
 const PROJECTS_URL = `${BASE_API_URL}/projects`;
+const TASKS_URL = `${BASE_API_URL}/tasks`;
 
 // Auth API
 export const Login_User_API = `${AUTH_URL}/login`;
@@ -67,3 +68,6 @@ export const Chat_Message_API = (meetingId: string, messageId: string) => `${MEE
 
 // Projects API
 export const Projects_API = `${PROJECTS_URL}`;
+
+// Tasks API
+export const Tasks_API = `${TASKS_URL}`;

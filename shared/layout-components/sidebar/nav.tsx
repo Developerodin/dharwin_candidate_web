@@ -148,12 +148,12 @@ export const useMenuItems = () => {
             dirchange: false,
           },
           {
-            path: "/tasks/task-list",
+            path: "/tasks/kanban-board",
             title: "Manage Tasks",
             icon: TaskIcon,
             type: "link",
             active: true,
-            selected: isRouteMatch("/tasks/task-list", pathname ?? ""),
+            selected: isRouteMatch("/tasks/kanban-board", pathname ?? ""),
             dirchange: false,
           },
           {
