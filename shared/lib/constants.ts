@@ -5,6 +5,7 @@ const DOCUMENTS_URL = `${BASE_API_URL}/upload/multiple`;
 const MEETINGS_URL = `${BASE_API_URL}/meetings`;
 const LOGS_URL = `${BASE_API_URL}/login-logs`;
 const ATTENDANCE_URL = `${BASE_API_URL}/attendance`;
+const PROJECTS_URL = `${BASE_API_URL}/projects`;
 
 // Auth API
 export const Login_User_API = `${AUTH_URL}/login`;
@@ -61,3 +62,8 @@ export const Chat_History_API = (meetingId: string, limit?: number, before?: str
   return `${MEETINGS_URL}/${meetingId}/chat/history${query ? `?${query}` : ''}`;
 };
 export const Chat_Message_API = (meetingId: string, messageId: string) => `${MEETINGS_URL}/${meetingId}/chat/messages/${messageId}`;
+
+
+
+// Projects API
+export const Projects_API = `${PROJECTS_URL}`;

@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
+import { usePathname } from "next/navigation";
 
 const ProfileGroupIcon = <i className="bx bx-group side-menu__icon"></i>;
 const ProfileIcon = <i className="bx bx-user side-menu__icon"></i>;
@@ -8,10 +9,58 @@ const TestIcon = <i className="bx bx-right-arrow-alt side-menu__icon"></i>;
 const CalendarIcon = <i className="bx bx-calendar side-menu__icon"></i>;
 const LogIcon = <i className="bx bx-log-in side-menu__icon"></i>;
 const AttendanceIcon = <i className="bx bx-calendar-check side-menu__icon"></i>;
+const ProjectIcon = <i className="bx bx-folder-open side-menu__icon"></i>;
+const TaskIcon = <i className="bx bx-task side-menu__icon"></i>;
+
+// Helper function to normalize paths (remove trailing slashes)
+const normalizePath = (path: string): string => {
+  if (!path) return '';
+  return path.endsWith('/') && path !== '/' ? path.slice(0, -1) : path;
+};
+
+// Helper function to check if a path matches the current route
+const isRouteMatch = (menuPath: string, currentPath: string): boolean => {
+  if (!menuPath || !currentPath) return false;
+  
+  // Normalize both paths (remove trailing slashes)
+  const normalizedMenuPath = normalizePath(menuPath);
+  const normalizedCurrentPath = normalizePath(currentPath);
+  
+  // Exact match
+  if (normalizedMenuPath === normalizedCurrentPath) return true;
+  
+  // For project routes: /projects/project-list should match:
+  // - /projects/project-list (exact)
+  // - /projects/create-project
+  // - /projects/project-overview
+  // - /projects/project-overview/[id]
+  // But NOT /projects alone
+  if (normalizedMenuPath === '/projects/project-list' && normalizedCurrentPath.startsWith('/projects/')) {
+    return true;
+  }
+  
+  // For task routes: /tasks/task-list should match:
+  // - /tasks/task-list (exact)
+  // - /tasks/task-details
+  // - /tasks/task-details/[id]
+  // But NOT /tasks alone
+  if (normalizedMenuPath === '/tasks/task-list' && normalizedCurrentPath.startsWith('/tasks/')) {
+    return true;
+  }
+  
+  // For other routes, check if current path starts with menu path followed by / or is exact match
+  // This handles dynamic routes like /candidates/[id] matching /candidates
+  if (normalizedCurrentPath.startsWith(normalizedMenuPath + '/')) {
+    return true;
+  }
+  
+  return false;
+};
 
 // Custom hook to get dynamic menu items based on user role
 export const useMenuItems = () => {
   const [menuItems, setMenuItems] = useState<any[]>([]);
+  const pathname = usePathname();
 
   useEffect(() => {
     const updateMenuItems = () => {
@@ -30,6 +79,11 @@ export const useMenuItems = () => {
         }
       }
 
+      // Debug: log pathname for troubleshooting
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Current pathname:', pathname);
+      }
+
       const items: any[] = [
         {
           menutitle: "MAIN",
@@ -45,7 +99,7 @@ export const useMenuItems = () => {
             icon: ProfileGroupIcon,
             type: "link",
             active: true,
-            selected: false,
+            selected: isRouteMatch("/candidates", pathname ?? ""),
             dirchange: false,
           },
           {
@@ -54,7 +108,7 @@ export const useMenuItems = () => {
             icon: ShareIcon,
             type: "link",
             active: true,
-            selected: false,
+            selected: isRouteMatch("/share-candidate-form", pathname ?? ""),
             dirchange: false,
           },
           {
@@ -63,7 +117,7 @@ export const useMenuItems = () => {
             icon: AttendanceIcon,
             type: "link",
             active: true,
-            selected: false,
+            selected: isRouteMatch("/track-attendance", pathname ?? ""),
             dirchange: false,
           },
           {
@@ -72,7 +126,7 @@ export const useMenuItems = () => {
             icon: TestIcon,
             type: "link",
             active: true,
-            selected: false,
+            selected: isRouteMatch("/generate-meeting-link", pathname ?? ""),
             dirchange: false,
           },
           {
@@ -81,7 +135,25 @@ export const useMenuItems = () => {
             icon: CalendarIcon,
             type: "link",
             active: true,
-            selected: false,
+            selected: isRouteMatch("/manage-meetings", pathname ?? ""),
+            dirchange: false,
+          },
+          {
+            path: "/projects/project-list",
+            title: "Manage Projects",
+            icon: ProjectIcon,
+            type: "link",
+            active: true,
+            selected: isRouteMatch("/projects/project-list", pathname ?? ""),
+            dirchange: false,
+          },
+          {
+            path: "/tasks/task-list",
+            title: "Manage Tasks",
+            icon: TaskIcon,
+            type: "link",
+            active: true,
+            selected: isRouteMatch("/tasks/task-list", pathname ?? ""),
             dirchange: false,
           },
           {
@@ -90,7 +162,7 @@ export const useMenuItems = () => {
             icon: LogIcon,
             type: "link",
             active: true,
-            selected: false,
+            selected: isRouteMatch("/logs", pathname ?? ""),
             dirchange: false,
           },
         );
@@ -105,7 +177,7 @@ export const useMenuItems = () => {
           icon: ProfileIcon,
           type: "link",
           active: true,
-          selected: false,
+          selected: isRouteMatch("/profile", pathname ?? ""),
           dirchange: false,
         },
         {
@@ -114,7 +186,7 @@ export const useMenuItems = () => {
           icon: AttendanceIcon,
           type: "link",
           active: true,
-          selected: false,
+          selected: isRouteMatch("/attendance", pathname ?? ""),
           dirchange: false,
         }
         );
@@ -145,7 +217,7 @@ export const useMenuItems = () => {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('userChanged', handleUserChange);
     };
-  }, []);
+  }, [pathname]); // Re-run when pathname changes
 
   return menuItems;
 };

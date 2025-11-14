@@ -54,13 +54,18 @@ const defaultContent = `
 </ol>
 `;
 
+interface EditorProps {
+  value?: string;
+  onChange?: (html: string) => void;
+}
+
 interface EditorState {
   editorHtml: string;
   theme: string;
   placeholder?: string;
 }
 
-class Editordata extends Component<{}, EditorState> {
+class Editordata extends Component<EditorProps, EditorState> {
   static modules = {
     toolbar: [
       [{ 'header': '1' }, { 'header': '2' }, { 'font': [] }],
@@ -84,14 +89,23 @@ class Editordata extends Component<{}, EditorState> {
     'link', 'image', 'video'
   ];
 
-  constructor(props: {} | Readonly<{}>) {
+  constructor(props: EditorProps) {
     super(props);
-    this.state = { editorHtml: defaultContent, theme: 'snow' };
+    this.state = { editorHtml: props.value || defaultContent, theme: 'snow' };
     this.handleChange = this.handleChange.bind(this);
+  }
+
+  componentDidUpdate(prevProps: EditorProps) {
+    if (prevProps.value !== this.props.value && this.props.value !== undefined) {
+      this.setState({ editorHtml: this.props.value });
+    }
   }
 
   handleChange(html:any) {
     this.setState({ editorHtml: html });
+    if (this.props.onChange) {
+      this.props.onChange(html);
+    }
   }
 
   handleThemeChange(newTheme:any) {
