@@ -353,16 +353,29 @@ const Taskdetails = () => {
             // Add new attachments to existing ones
             if (newAttachments.length > 0) {
                 const existingAttachments = task.attachments || [];
-                taskData.attachments = [...existingAttachments, ...newAttachments];
+                // Clean existing attachments to remove createdAt and updatedAt
+                const cleanedExistingAttachments = existingAttachments.map((att: any) => {
+                    const { createdAt, updatedAt, ...cleanedAtt } = att;
+                    return cleanedAtt;
+                });
+                taskData.attachments = [...cleanedExistingAttachments, ...newAttachments];
             }
 
             // Add subtasks if any
             if (subTasks.length > 0) {
-                taskData.subTasks = subTasks;
+                // Clean subtasks to remove createdAt and updatedAt
+                const cleanedSubTasks = subTasks.map((subTask: any) => {
+                    const { createdAt, updatedAt, ...cleanedSubTask } = subTask;
+                    return cleanedSubTask;
+                });
+                taskData.subTasks = cleanedSubTasks;
             }
 
+            // Explicitly remove createdAt and updatedAt from taskData if they exist
+            const { createdAt, updatedAt, ...cleanedTaskData } = taskData;
+
             // Update task
-            await updateTask(taskId, taskData);
+            await updateTask(taskId, cleanedTaskData);
             
             // Show success message
             await Swal.fire({

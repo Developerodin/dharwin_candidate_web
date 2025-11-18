@@ -353,3 +353,12 @@ export const downloadTranscript = async (meetingId: string, format: string = 'tx
   const response = await api.get(Transcription_Download_API(meetingId, format));
   return response.data;
 };
+
+// Share meeting invite via email
+export const shareMeeting = async (meetingId: string, shareData: {
+  emails: string[];
+  message?: string;
+}) => {
+  const response = await api.post(`${Meeting_API}/${meetingId}/share`, shareData);
+  return response.data;
+};

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { getMeetingsList, getMeetingById, deleteMeetingById, getRecordingStatus, getRecordingDownloadUrl } from '@/shared/lib/candidates';
+import { getMeetingsList, getMeetingById, deleteMeetingById, getRecordingStatus, getRecordingDownloadUrl, shareMeeting } from '@/shared/lib/candidates';
 import Swal from 'sweetalert2';
 import { Tooltip } from 'react-tooltip';
 import TranscriptPage from '@/shared/components/transcription/TranscriptPage';
@@ -50,6 +50,12 @@ export default function ManageMeetingsPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'scheduled' | 'active' | 'ended' | 'cancelled'>('all');
   const [recordingStatuses, setRecordingStatuses] = useState<Record<string, any>>({});
   const [loadingRecordings, setLoadingRecordings] = useState<Record<string, boolean>>({});
+  const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
+  const [shareMeetingId, setShareMeetingId] = useState<string | null>(null);
+  const [shareEmails, setShareEmails] = useState<string[]>([]);
+  const [shareEmailInput, setShareEmailInput] = useState<string>('');
+  const [shareMessage, setShareMessage] = useState<string>('');
+  const [isSharing, setIsSharing] = useState<boolean>(false);
 
   const loadMeetings = async () => {
     setLoading(true);
@@ -244,6 +250,116 @@ export default function ManageMeetingsPage() {
     }
   };
 
+  const openShareModal = (meetingId: string) => {
+    setShareMeetingId(meetingId);
+    setShareEmails([]);
+    setShareEmailInput('');
+    setShareMessage('');
+    setIsShareModalOpen(true);
+  };
+
+  const closeShareModal = () => {
+    setIsShareModalOpen(false);
+    setShareMeetingId(null);
+    setShareEmails([]);
+    setShareEmailInput('');
+    setShareMessage('');
+  };
+
+  const addEmail = () => {
+    const email = shareEmailInput.trim();
+    if (!email) return;
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      void Swal.fire({
+        icon: 'error',
+        title: 'Invalid Email',
+        text: 'Please enter a valid email address.',
+        timer: 2000,
+        showConfirmButton: false,
+        toast: true,
+        position: 'top-end'
+      });
+      return;
+    }
+
+    // Check for duplicates
+    if (shareEmails.includes(email)) {
+      void Swal.fire({
+        icon: 'warning',
+        title: 'Duplicate Email',
+        text: 'This email has already been added.',
+        timer: 2000,
+        showConfirmButton: false,
+        toast: true,
+        position: 'top-end'
+      });
+      return;
+    }
+
+    setShareEmails([...shareEmails, email]);
+    setShareEmailInput('');
+  };
+
+  const removeEmail = (emailToRemove: string) => {
+    setShareEmails(shareEmails.filter(email => email !== emailToRemove));
+  };
+
+  const handleEmailInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      addEmail();
+    }
+  };
+
+  const handleShareMeeting = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!shareMeetingId) return;
+
+    // Check if there are any emails added
+    if (shareEmails.length === 0) {
+      void Swal.fire({
+        icon: 'error',
+        title: 'Validation Error',
+        text: 'Please add at least one email address.',
+      });
+      return;
+    }
+
+    setIsSharing(true);
+    try {
+      const shareData: { emails: string[]; message?: string } = {
+        emails: shareEmails,
+      };
+      if (shareMessage.trim()) {
+        shareData.message = shareMessage.trim();
+      }
+      
+      await shareMeeting(shareMeetingId, shareData);
+      void Swal.fire({
+        icon: 'success',
+        title: 'Invite Sent',
+        text: `Meeting invite has been sent to ${shareEmails.length} ${shareEmails.length === 1 ? 'email' : 'emails'}.`,
+        timer: 2000,
+        showConfirmButton: false,
+        toast: true,
+        position: 'top-end'
+      });
+      closeShareModal();
+    } catch (e: any) {
+      void Swal.fire({
+        icon: 'error',
+        title: 'Share Failed',
+        text: e?.response?.data?.message || e?.message || 'Unable to share meeting invite. Please try again.',
+      });
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
   const displayedMeetings = !loading
     ? meetings.filter((m) => (statusFilter === 'all' ? true : m.status === statusFilter))
     : meetings;
@@ -397,6 +513,18 @@ export default function ManageMeetingsPage() {
                           )}
                         </button>
                       )}
+                      <button
+                        onClick={() => openShareModal(m.meetingId)}
+                        className="inline-flex items-center rounded-md border border-blue-300 px-3 py-1.5 text-xs text-blue-700 hover:bg-blue-50"
+                        title="Share meeting invite"
+                        data-tooltip-id="meeting-actions-tip"
+                        data-tooltip-content="Share meeting invite"
+                      >
+                        {/* Share/Email icon */}
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+                          <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+                        </svg>
+                      </button>
                       <button
                         onClick={() => openDetail(m.meetingId)}
                         className="inline-flex items-center rounded-md border border-gray-300 px-3 py-1.5 text-xs hover:bg-gray-50"
@@ -630,6 +758,134 @@ export default function ManageMeetingsPage() {
             <div className="flex items-center justify-end gap-2 border-t px-4 py-3">
               <button onClick={closeDetail} className="inline-flex items-center rounded-md border border-gray-300 px-3 py-2 text-xs hover:bg-gray-50">Close</button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* Share Meeting Modal */}
+      {isShareModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={closeShareModal} />
+          <div className="relative z-10 w-full max-w-md rounded-lg bg-white shadow-lg">
+            <div className="flex items-center justify-between border-b px-4 py-3">
+              <h3 className="text-sm font-semibold">Share Meeting Invite</h3>
+              <button 
+                onClick={closeShareModal} 
+                className="rounded-md p-1 hover:bg-gray-100" 
+                aria-label="Close"
+                disabled={isSharing}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5 text-gray-700">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <form onSubmit={handleShareMeeting}>
+              <div className="px-4 py-4 space-y-4">
+                <div>
+                  <label htmlFor="share-emails" className="block text-sm font-medium text-gray-700 mb-1">
+                    Email Addresses <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="email"
+                      id="share-emails"
+                      className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      placeholder="Enter email address"
+                      value={shareEmailInput}
+                      onChange={(e) => setShareEmailInput(e.target.value)}
+                      onKeyDown={handleEmailInputKeyDown}
+                      disabled={isSharing}
+                    />
+                    <button
+                      type="button"
+                      onClick={addEmail}
+                      disabled={isSharing || !shareEmailInput.trim()}
+                      className="inline-flex items-center rounded-md border border-blue-600 bg-blue-600 px-3 py-2 text-xs text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4 mr-1">
+                        <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                      </svg>
+                      Add
+                    </button>
+                  </div>
+                  {shareEmails.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {shareEmails.map((email, index) => (
+                        <span
+                          key={index}
+                          className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-3 py-1 text-xs text-blue-800"
+                        >
+                          {email}
+                          <button
+                            type="button"
+                            onClick={() => removeEmail(email)}
+                            disabled={isSharing}
+                            className="ml-1 rounded-full hover:bg-blue-200 focus:outline-none disabled:opacity-50"
+                            aria-label={`Remove ${email}`}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-3 w-3">
+                              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                            </svg>
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <p className="mt-1 text-xs text-gray-500">
+                    {shareEmails.length === 0 
+                      ? 'Add email addresses one by one. Press Enter or click Add to add each email.'
+                      : `${shareEmails.length} ${shareEmails.length === 1 ? 'email' : 'emails'} added.`
+                    }
+                  </p>
+                </div>
+                <div>
+                  <label htmlFor="share-message" className="block text-sm font-medium text-gray-700 mb-1">
+                    Message (Optional)
+                  </label>
+                  <textarea
+                    id="share-message"
+                    rows={4}
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    placeholder="Looking forward to our discussion!"
+                    value={shareMessage}
+                    onChange={(e) => setShareMessage(e.target.value)}
+                    disabled={isSharing}
+                  />
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-2 border-t px-4 py-3">
+                <button
+                  type="button"
+                  onClick={closeShareModal}
+                  className="inline-flex items-center rounded-md border border-gray-300 px-3 py-2 text-xs hover:bg-gray-50"
+                  disabled={isSharing}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-xs text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={isSharing}
+                >
+                  {isSharing ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4 mr-1">
+                        <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+                      </svg>
+                      Send Invite
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
