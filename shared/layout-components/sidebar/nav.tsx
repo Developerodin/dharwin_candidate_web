@@ -11,6 +11,7 @@ const LogIcon = <i className="bx bx-log-in side-menu__icon"></i>;
 const AttendanceIcon = <i className="bx bx-calendar-check side-menu__icon"></i>;
 const ProjectIcon = <i className="bx bx-folder-open side-menu__icon"></i>;
 const TaskIcon = <i className="bx bx-task side-menu__icon"></i>;
+const DashboardIcon = <i className="bx bx-home side-menu__icon"></i>;
 
 // Helper function to normalize paths (remove trailing slashes)
 const normalizePath = (path: string): string => {
@@ -89,6 +90,21 @@ export const useMenuItems = () => {
           menutitle: "MAIN",
         },
       ];
+
+      // show admin and user
+      if (userRole === "admin" || userRole === "user") {
+        items.push(
+          {
+            path: "/dashboard",
+            title: "Dashboard",
+            icon: DashboardIcon,
+            type: "link",
+            active: true,
+            selected: isRouteMatch("/dashboard", pathname ?? ""),
+            dirchange: false,
+          }
+        );
+      }
 
       // Show only for admin
       if (userRole === "admin") {

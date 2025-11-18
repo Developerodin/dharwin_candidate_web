@@ -7,6 +7,7 @@ const LOGS_URL = `${BASE_API_URL}/login-logs`;
 const ATTENDANCE_URL = `${BASE_API_URL}/attendance`;
 const PROJECTS_URL = `${BASE_API_URL}/projects`;
 const TASKS_URL = `${BASE_API_URL}/tasks`;
+const DASHBOARD_URL = `${BASE_API_URL}/dashboard`;
 
 // Auth API
 export const Login_User_API = `${AUTH_URL}/login`;
@@ -71,3 +72,6 @@ export const Projects_API = `${PROJECTS_URL}`;
 
 // Tasks API
 export const Tasks_API = `${TASKS_URL}`;
+
+// Dashboard API
+export const Dashboard_API = `${DASHBOARD_URL}`;

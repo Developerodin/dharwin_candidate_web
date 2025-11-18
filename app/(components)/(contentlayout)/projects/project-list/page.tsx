@@ -6,6 +6,7 @@ import Link from 'next/link'
 import React, { Fragment, useState, useEffect } from 'react';
 import { getAllProjects, deleteProject } from '@/shared/lib/projects';
 import { fetchAllCandidates } from '@/shared/lib/candidates';
+import { getAllTasks } from '@/shared/lib/tasks';
 import { useRouter } from 'next/navigation';
 import { IStaticMethods } from "preline/preline";
 
@@ -51,6 +52,7 @@ const Projectlist = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [candidatesMap, setCandidatesMap] = useState<Map<string, Candidate>>(new Map());
+    const [taskCounts, setTaskCounts] = useState<Map<string, { total: number; completed: number }>>(new Map());
     
     // Pagination state
     const [page, setPage] = useState(1);
@@ -148,14 +150,50 @@ const Projectlist = () => {
         }
     };
 
+    // Fetch tasks and calculate counts
+    const fetchTaskCounts = async () => {
+        try {
+            const tasksData = await getAllTasks();
+            const tasksList = Array.isArray(tasksData) 
+                ? tasksData 
+                : (tasksData?.results || tasksData?.data || []);
+            
+            // Create a map of project ID to task counts
+            const countsMap = new Map<string, { total: number; completed: number }>();
+            
+            tasksList.forEach((task: any) => {
+                // Get project ID - can be string or object
+                const projectId = typeof task.project === 'string' 
+                    ? task.project 
+                    : (task.project?.id || task.project?._id);
+                
+                if (projectId) {
+                    const current = countsMap.get(projectId) || { total: 0, completed: 0 };
+                    current.total += 1;
+                    if (task.status === 'Completed') {
+                        current.completed += 1;
+                    }
+                    countsMap.set(projectId, current);
+                }
+            });
+            
+            setTaskCounts(countsMap);
+        } catch (err: any) {
+            console.error('Failed to fetch task counts:', err);
+            // Don't show error to user, just log it
+        }
+    };
+
     // Fetch candidates on mount
     useEffect(() => {
         fetchCandidates();
+        fetchTaskCounts();
     }, []);
 
     // Fetch on mount and when filters/pagination change
     useEffect(() => {
         fetchProjects();
+        fetchTaskCounts(); // Refresh task counts when projects change
     }, [page, limit, status, priority, sortBy]);
 
     // Re-initialize Preline dropdowns after projects are loaded
@@ -382,6 +420,17 @@ const Projectlist = () => {
                                             <span className="text-[#8c9097] dark:text-white/50 block text-[0.75rem]">
                                                 Manager: <strong className="text-defaulttextcolor">{project.projectManager}</strong>
                                             </span>
+                                            {(() => {
+                                                const counts = taskCounts.get(project.id);
+                                                if (counts) {
+                                                    return (
+                                                        <span className="text-[#8c9097] dark:text-white/50 block text-[0.75rem] mt-1">
+                                                            Tasks: <strong className="text-defaulttextcolor">{counts.completed}/{counts.total}</strong> completed
+                                                        </span>
+                                                    );
+                                                }
+                                                return null;
+                                            })()}
                                         </div>
                                         <div className="hs-dropdown ti-dropdown">
                                             <button 

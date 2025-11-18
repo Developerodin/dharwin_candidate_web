@@ -29,7 +29,7 @@ export default function Home() {
           timerProgressBar: true,
           showConfirmButton: false
         });
-        router.push('/candidates');
+        router.push('/dashboard');
     } catch (err) {
         console.error('Login failed:', err);
         await Swal.fire({

@@ -513,18 +513,20 @@ export default function ManageMeetingsPage() {
                           )}
                         </button>
                       )}
-                      <button
-                        onClick={() => openShareModal(m.meetingId)}
-                        className="inline-flex items-center rounded-md border border-blue-300 px-3 py-1.5 text-xs text-blue-700 hover:bg-blue-50"
-                        title="Share meeting invite"
-                        data-tooltip-id="meeting-actions-tip"
-                        data-tooltip-content="Share meeting invite"
-                      >
-                        {/* Share/Email icon */}
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
-                          <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
-                        </svg>
-                      </button>
+                      {m.status !== 'ended' && (
+                        <button
+                          onClick={() => openShareModal(m.meetingId)}
+                          className="inline-flex items-center rounded-md border border-blue-300 px-3 py-1.5 text-xs text-blue-700 hover:bg-blue-50"
+                          title="Share meeting invite"
+                          data-tooltip-id="meeting-actions-tip"
+                          data-tooltip-content="Share meeting invite"
+                        >
+                          {/* Share/Email icon */}
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+                            <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+                          </svg>
+                        </button>
+                      )}
                       <button
                         onClick={() => openDetail(m.meetingId)}
                         className="inline-flex items-center rounded-md border border-gray-300 px-3 py-1.5 text-xs hover:bg-gray-50"
