@@ -15,6 +15,8 @@ export const Logout_User_API = `${AUTH_URL}/logout`;
 export const Register_User_API = `${AUTH_URL}/register`;
 export const Onboard_Candidate_API = `${AUTH_URL}/send-candidate-invitation`;
 export const Forgot_Password_API = `${AUTH_URL}/forgot-password`;
+export const REGISTER_SUPERVISOR_API = `${AUTH_URL}/register-supervisor`;
+export const REGISTER_RECRUITER_API = `${AUTH_URL}/register-recruiter`;
 
 // Candidate API
 export const Candidates_API = `${CANDIDATES_URL}`;

@@ -136,6 +136,7 @@ export const createMeeting = async (meetingData: {
   allowGuestJoin: boolean;
   requireApproval: boolean;
   hosts?: { name: string; email: string }[];
+  emailInvites?: string[];
 }) => {
   const response = await api.post(Meeting_API, meetingData);
   return response.data;
@@ -221,8 +222,13 @@ export const getScreenShareToken = async (meetingId: string, data: {
 
 
 // Get logs
-export const getLogs = async () => {
-  const response = await api.get(Logs_API);
+export const getLogs = async (page?: number, limit?: number) => {
+  const params = new URLSearchParams();
+  if (page) params.append('page', page.toString());
+  if (limit) params.append('limit', limit.toString());
+  const queryString = params.toString();
+  const url = `${Logs_API}${queryString ? `?${queryString}` : ''}`;
+  const response = await api.get(url);
   return response.data;
 };
 

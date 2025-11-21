@@ -13,6 +13,7 @@ interface MeetingFormData {
   allowGuestJoin: boolean;
   requireApproval: boolean;
   hosts: { name: string; email: string }[];
+  emailInvites: string[];
 }
 
 interface MeetingResponse {
@@ -38,6 +39,7 @@ export default function GenerateMeetingLinkPage() {
     allowGuestJoin: true,
     requireApproval: false,
     hosts: [],
+    emailInvites: [],
   });
 
   const [isLoading, setIsLoading] = useState(false);
@@ -73,6 +75,27 @@ export default function GenerateMeetingLinkPage() {
     });
   };
 
+  const addEmailInvite = () => {
+    setFormData(prev => ({ ...prev, emailInvites: [...prev.emailInvites, ''] }));
+  };
+
+  const removeEmailInvite = (index: number) => {
+    setFormData(prev => ({ ...prev, emailInvites: prev.emailInvites.filter((_, i) => i !== index) }));
+  };
+
+  const handleEmailInviteChange = (index: number, value: string) => {
+    setFormData(prev => {
+      const emailInvites = [...prev.emailInvites];
+      emailInvites[index] = value;
+      return { ...prev, emailInvites };
+    });
+  };
+
+  const validateEmail = (email: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -80,6 +103,17 @@ export default function GenerateMeetingLinkPage() {
     setMeetingResult(null);
 
     try {
+      // Validate email invites
+      const invalidEmails = formData.emailInvites.filter(email => email && !validateEmail(email));
+      if (invalidEmails.length > 0) {
+        setError('Please enter valid email addresses for all email invites.');
+        setIsLoading(false);
+        return;
+      }
+
+      // Filter out empty email invites
+      const validEmailInvites = formData.emailInvites.filter(email => email.trim() !== '');
+
       // Convert local time to UTC based on user's region
       const scheduledAtUTC = isUserInIndia()
         ? convertIndianTimeToUTC(formData.scheduledAt)      // IST -> UTC
@@ -87,7 +121,8 @@ export default function GenerateMeetingLinkPage() {
       
       const meetingData = {
         ...formData,
-        scheduledAt: scheduledAtUTC
+        scheduledAt: scheduledAtUTC,
+        emailInvites: validEmailInvites
       };
       
       const result = await createMeeting(meetingData);
@@ -264,6 +299,48 @@ export default function GenerateMeetingLinkPage() {
                   ))}
                 </div>
               </div>
+
+              {/* Email Invites section */}
+              <div className="md:col-span-2">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700">Email Invites</label>
+                  <button
+                    type="button"
+                    onClick={addEmailInvite}
+                    className="inline-flex items-center px-3 py-1.5 rounded-md bg-gray-100 hover:bg-gray-200 text-sm text-gray-800"
+                  >
+                    Add Email
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {formData.emailInvites.length === 0 && (
+                    <div className="text-xs text-gray-500">Add email addresses to send meeting invitations.</div>
+                  )}
+                  {formData.emailInvites.map((email, index) => (
+                    <div key={index} className="flex items-center gap-3">
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => handleEmailInviteChange(index, e.target.value)}
+                        placeholder="invitee@example.com"
+                        className={`flex-1 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                          email && !validateEmail(email) ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                        }`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeEmailInvite(index)}
+                        className="px-3 py-1.5 rounded-md bg-red-100 hover:bg-red-200 text-sm text-red-700 whitespace-nowrap"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                  {formData.emailInvites.some(email => email && !validateEmail(email)) && (
+                    <div className="text-xs text-red-600">Please enter valid email addresses.</div>
+                  )}
+                </div>
+              </div>
             </div>
 
             {error && (
@@ -363,6 +440,7 @@ export default function GenerateMeetingLinkPage() {
                     allowGuestJoin: true,
                     requireApproval: false,
                     hosts: [],
+                    emailInvites: [],
                   });
                 }}
                 className="flex-1 bg-gray-600 text-white py-2 px-4 rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500"

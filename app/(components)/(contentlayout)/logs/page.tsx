@@ -38,6 +38,7 @@ export default function LogsPage() {
   const [error, setError] = useState<string | null>(null);
   const [totalResults, setTotalResults] = useState<number>(0);
   const [page, setPage] = useState<number>(1);
+  const [limit, setLimit] = useState<number>(10);
   const [totalPages, setTotalPages] = useState<number>(1);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [roleFilter, setRoleFilter] = useState<string>('all');
@@ -47,14 +48,14 @@ export default function LogsPage() {
     setLoading(true);
     setError(null);
     try {
-      const response: ApiResponse = await getLogs();
+      const response: ApiResponse = await getLogs(page, limit);
       
       if (response?.results) {
         setLogs(response.results);
         setFilteredLogs(response.results);
-        setTotalResults(response.totalResults);
-        setPage(response.page);
-        setTotalPages(response.totalPages);
+        setTotalResults(response.totalResults || 0);
+        setPage(response.page || 1);
+        setTotalPages(response.totalPages || 1);
       } else {
         setError('Failed to load logs');
       }
@@ -67,7 +68,8 @@ export default function LogsPage() {
 
   useEffect(() => {
     loadLogs();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, limit]);
 
   // Apply filters
   useEffect(() => {
@@ -180,7 +182,7 @@ export default function LogsPage() {
       <div className="overflow-hidden rounded-lg border border-gray-200">
         <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
           <h2 className="text-sm font-semibold">
-            Logs {loading ? '(...)' : `(${filteredLogs.length}${filteredLogs.length !== logs.length ? ` of ${logs.length}` : ''})`}
+            Logs {loading ? '(...)' : `(${filteredLogs.length}${filteredLogs.length !== totalResults ? ` of ${totalResults}` : ''})`}
           </h2>
           {!loading && totalPages > 1 && (
             <div className="text-xs text-gray-600">
@@ -265,6 +267,54 @@ export default function LogsPage() {
             </tbody>
           </table>
         </div>
+        
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between border-t border-gray-200 px-4 py-3">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setPage(prev => Math.max(1, prev - 1))}
+                disabled={page === 1 || loading}
+                className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Previous
+              </button>
+              <span className="text-sm text-gray-700">
+                Page {page} of {totalPages}
+              </span>
+              <button
+                onClick={() => setPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={page === totalPages || loading}
+                className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <label htmlFor="limitSelect" className="text-sm text-gray-700">
+                Items per page:
+              </label>
+              <select
+                id="limitSelect"
+                value={limit}
+                onChange={(e) => {
+                  setLimit(Number(e.target.value));
+                  setPage(1); // Reset to first page when changing limit
+                }}
+                disabled={loading}
+                className="rounded-md border border-gray-300 bg-white px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
+              >
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
+            <div className="text-sm text-gray-600">
+              Showing {((page - 1) * limit) + 1} to {Math.min(page * limit, totalResults)} of {totalResults} records
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

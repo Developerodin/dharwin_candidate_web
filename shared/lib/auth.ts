@@ -1,6 +1,6 @@
 "use client";
 import api from './api';
-import { Login_User_API, Logout_User_API, Register_User_API } from './constants';
+import { Login_User_API, Logout_User_API, Register_User_API, REGISTER_SUPERVISOR_API, REGISTER_RECRUITER_API } from './constants';
 
 // Login user
 export const loginUser = async (credentials: { email: string; password: string }) => {
@@ -42,5 +42,18 @@ export const logoutUser = async () => {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('userChanged'));
   }
+  return response.data;
+};
+
+
+// Register supervisor
+export const registerSupervisor = async (supervisorData: any) => {
+  const response = await api.post(REGISTER_SUPERVISOR_API, supervisorData);
+  return response.data;
+};
+
+// Register recruiter
+export const registerRecruiter = async (recruiterData: any) => {
+  const response = await api.post(REGISTER_RECRUITER_API, recruiterData);
   return response.data;
 };
