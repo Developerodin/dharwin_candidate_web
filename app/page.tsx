@@ -16,20 +16,22 @@ export default function Home() {
   const [passwordshow1, setpasswordshow1] = useState(false);
   const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
   const [forgotPasswordResponse, setForgotPasswordResponse] = useState<string | null>(null);
+  const [showForgotPasswordForm, setShowForgotPasswordForm] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); 
     try {
         const res = await login({ email, password });
-        await Swal.fire({
-          icon: 'success',
-          title: 'Login Successful',
-          text: res.message,
-          timer: 1000,
-          timerProgressBar: true,
-          showConfirmButton: false
-        });
-        router.push('/dashboard');
+        if (res && res.user) {
+          router.push('/dashboard');
+        } else {
+          await Swal.fire({
+            icon: 'error',
+            title: 'Login Failed',
+            text: 'Please check your email and password and try again.',
+            confirmButtonText: 'OK'
+          });
+        }
     } catch (err) {
         console.error('Login failed:', err);
         await Swal.fire({
@@ -41,7 +43,13 @@ export default function Home() {
     }
   };
 
-  const handleForgotPassword = async () => {
+  const handleForgotPasswordClick = () => {
+    setShowForgotPasswordForm(true);
+  };
+
+  const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
     if (!email) {
       await Swal.fire({
         icon: 'warning',
@@ -67,6 +75,8 @@ export default function Home() {
         text: 'Please check your email for password reset instructions.',
         confirmButtonText: 'OK'
       });
+      
+      setShowForgotPasswordForm(false);
     } catch (err: any) {
       console.error('Forgot password failed:', err);
       const errorMessage = err?.response?.data?.message || err?.message || 'Failed to send reset email';
@@ -81,6 +91,10 @@ export default function Home() {
     } finally {
       setForgotPasswordLoading(false);
     }
+  };
+
+  const handleCloseForgotPasswordForm = () => {
+    setShowForgotPasswordForm(false);
   };
 
   return (
@@ -113,11 +127,10 @@ export default function Home() {
                           Password
                           <button 
                             type="button"
-                            onClick={handleForgotPassword}
-                            disabled={forgotPasswordLoading}
+                            onClick={handleForgotPasswordClick}
                             className="float-right text-danger bg-transparent border-none cursor-pointer hover:underline"
                           >
-                            {forgotPasswordLoading ? 'Sending...' : 'Forget password ?'}
+                            Forgot password ?
                           </button>
                         </label>
                         <div className="input-group">
@@ -133,24 +146,67 @@ export default function Home() {
                     </div>
                   </form>
 
-                  {/* API Response Display */}
-                  {forgotPasswordResponse && (
-                    <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border">
-                      <h6 className="text-sm font-semibold mb-2 text-gray-700 dark:text-gray-300">
-                        Forgot Password API Response:
-                      </h6>
-                      <pre className="text-xs text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-900 p-3 rounded border overflow-auto max-h-40">
-                        {forgotPasswordResponse}
-                      </pre>
-                    </div>
-                  )}
-
                 </div>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Forgot Password Form Modal */}
+      {showForgotPasswordForm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-default">Forgot Password</h2>
+              <button
+                onClick={handleCloseForgotPasswordForm}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                aria-label="Close"
+              >
+                <i className="ri-close-line text-2xl"></i>
+              </button>
+            </div>
+            
+            <form onSubmit={handleForgotPasswordSubmit}>
+              <div className="mb-4">
+                <label htmlFor="forgot-password-email" className="form-label text-default block mb-2">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  id="forgot-password-email"
+                  name="email"
+                  className="form-control form-control-lg w-full !rounded-md"
+                  value={email}
+                  onChange={(e) => setUsername(e.target.value)}
+                  required
+                  disabled={forgotPasswordLoading}
+                />
+              </div>
+              
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={handleCloseForgotPasswordForm}
+                  className="ti-btn ti-btn-light flex-1"
+                  disabled={forgotPasswordLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="ti-btn ti-btn-primary !bg-primary !text-white !font-medium flex-1"
+                  disabled={forgotPasswordLoading}
+                >
+                  {forgotPasswordLoading ? 'Sending...' : 'Send Reset Link'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       </body>
     </html>
     </>

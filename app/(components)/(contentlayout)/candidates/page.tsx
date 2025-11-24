@@ -735,6 +735,16 @@ const Candidates = () => {
                                                             >
                                                                 <i className="ri-eye-line"></i>
                                                             </button>
+                                                            {/* <button 
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    // Add your user action handler here
+                                                                }}
+                                                                className="ti-btn ti-btn-icon ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500 hover:text-white hover:border-indigo-500"
+                                                                title="Login as user"
+                                                            >
+                                                                <i className="ri-user-line"></i>
+                                                            </button> */}
                                                             <Link aria-label="anchor" href={`/candidates/edit?id=${encodeURIComponent(String(can?.id ?? can?._id))}`} scroll={false} className="ti-btn ti-btn-icon ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-info/10 text-info hover:bg-info hover:text-white hover:border-info">
                                                                 <i className="ri-pencil-line"></i>
                                                             </Link>
