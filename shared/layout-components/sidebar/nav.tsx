@@ -12,6 +12,8 @@ const AttendanceIcon = <i className="bx bx-calendar-check side-menu__icon"></i>;
 const ProjectIcon = <i className="bx bx-folder-open side-menu__icon"></i>;
 const TaskIcon = <i className="bx bx-task side-menu__icon"></i>;
 const DashboardIcon = <i className="bx bx-home side-menu__icon"></i>;
+const JobIcon = <i className="bx bx-briefcase side-menu__icon"></i>;
+const ATSIcon = <i className="bx bx-group side-menu__icon"></i>;
 
 // Helper function to normalize paths (remove trailing slashes)
 const normalizePath = (path: string): string => {
@@ -108,7 +110,50 @@ export const useMenuItems = () => {
 
       // Show only for admin
       if (userRole === "admin") {
+        const jobRoutes = [
+          "/jobs/manage-jobs",
+          "/jobs/create-jobs",
+          "/jobs/update-jobs",
+          "/jobs/update-jobs/",
+        ];
+        const isJobsSectionActive = jobRoutes.some((route) =>
+          isRouteMatch(route, pathname ?? "")
+        );
+
         items.push(
+          {
+            icon: JobIcon,
+            title: "ATS",
+            type: "sub",
+            active: isJobsSectionActive,
+            selected: isJobsSectionActive,
+            children: [
+              {
+                title: "Jobs",
+                type: "sub",
+                active: isJobsSectionActive,
+                selected: isJobsSectionActive,
+                children: [
+                  {
+                    path: "/jobs/manage-jobs",
+                    title: "Manage Jobs",
+                    type: "link",
+                    active: true,
+                    selected: isRouteMatch("/jobs/manage-jobs", pathname ?? ""),
+                    dirchange: false,
+                  },
+                  {
+                    path: "/jobs/create-jobs",
+                    title: "Create Jobs",
+                    type: "link",
+                    active: true,
+                    selected: isRouteMatch("/jobs/create-jobs", pathname ?? ""),
+                    dirchange: false,
+                  },
+                ],
+              },
+            ],
+          },
           {
             path: "/candidates",
             title: "Candidates",

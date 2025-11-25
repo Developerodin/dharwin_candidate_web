@@ -18,6 +18,9 @@ export const Forgot_Password_API = `${AUTH_URL}/forgot-password`;
 export const REGISTER_SUPERVISOR_API = `${AUTH_URL}/register-supervisor`;
 export const REGISTER_RECRUITER_API = `${AUTH_URL}/register-recruiter`;
 
+// Jobs API
+export const Jobs_API = `${BASE_API_URL}/jobs`;
+
 // Candidate API
 export const Candidates_API = `${CANDIDATES_URL}`;
 
