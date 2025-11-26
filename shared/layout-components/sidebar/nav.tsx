@@ -14,6 +14,7 @@ const TaskIcon = <i className="bx bx-task side-menu__icon"></i>;
 const DashboardIcon = <i className="bx bx-home side-menu__icon"></i>;
 const JobIcon = <i className="bx bx-briefcase side-menu__icon"></i>;
 const ATSIcon = <i className="bx bx-group side-menu__icon"></i>;
+const MasterIcon = <i className="bx bx-cog side-menu__icon"></i>;
 
 // Helper function to normalize paths (remove trailing slashes)
 const normalizePath = (path: string): string => {
@@ -120,14 +121,90 @@ export const useMenuItems = () => {
           isRouteMatch(route, pathname ?? "")
         );
 
+        const atsRoutes = [
+          "/candidates",
+          "/share-candidate-form",
+          "/track-attendance",
+          "/jobs/manage-jobs",
+          "/jobs/create-jobs",
+          "/jobs/update-jobs",
+          "/jobs/update-jobs/",
+          "/generate-meeting-link",
+          "/manage-meetings",
+        ];
+        const isATSSectionActive = atsRoutes.some((route) =>
+          isRouteMatch(route, pathname ?? "")
+        );
+
+        const projectManagementRoutes = [
+          "/projects/project-list",
+          "/projects/create-project",
+          "/projects/project-overview",
+          "/tasks/kanban-board",
+          "/tasks/task-list",
+          "/tasks/task-details",
+        ];
+        const isProjectManagementSectionActive = projectManagementRoutes.some((route) =>
+          isRouteMatch(route, pathname ?? "")
+        );
+
+        const masterRoutes = [
+          "/master/jobs/templates",
+          "/master/jobs/create-template",
+        ];
+        const isMasterSectionActive = masterRoutes.some((route) =>
+          isRouteMatch(route, pathname ?? "")
+        );
+        
+        const settingsRoutes = [
+          "/master/jobs/templates",
+          "/master/jobs/create-template",
+          "/logs",
+        ];
+        const isSettingsSectionActive = settingsRoutes.some((route) =>
+          isRouteMatch(route, pathname ?? "")
+        );
+
         items.push(
           {
             icon: JobIcon,
             title: "ATS",
             type: "sub",
-            active: isJobsSectionActive,
-            selected: isJobsSectionActive,
+            active: isATSSectionActive,
+            selected: isATSSectionActive,
             children: [
+              {
+                title: "Candidates",
+                type: "sub",
+                active: isATSSectionActive,
+                selected: isATSSectionActive,
+                children: [
+                  {
+                    path: "/candidates",
+                    title: "Candidates",
+                    type: "link",
+                    active: true,
+                    selected: isRouteMatch("/candidates", pathname ?? ""),
+                    dirchange: false,
+                  },
+                  {
+                    path: "/share-candidate-form",
+                    title: "Share Candidate Form",
+                    type: "link",
+                    active: true,
+                    selected: isRouteMatch("/share-candidate-form", pathname ?? ""),
+                    dirchange: false,
+                  },
+                  {
+                    path: "/track-attendance",
+                    title: "Track Attendance",
+                    type: "link",
+                    active: true,
+                    selected: isRouteMatch("/track-attendance", pathname ?? ""),
+                    dirchange: false,
+                  },
+                ],
+              },
               {
                 title: "Jobs",
                 type: "sub",
@@ -152,79 +229,105 @@ export const useMenuItems = () => {
                   },
                 ],
               },
+              {
+                title: "Interviews",
+                type: "sub",
+                active: isATSSectionActive,
+                selected: isATSSectionActive,
+                children: [
+                  {
+                    path: "/generate-meeting-link",
+                    title: "Generate Meeting Link",
+                    type: "link",
+                    active: true,
+                    selected: isRouteMatch("/generate-meeting-link", pathname ?? ""),
+                    dirchange: false,
+                  },
+                  {
+                    path: "/manage-meetings",
+                    title: "Manage Meetings",
+                    type: "link",
+                    active: true,
+                    selected: isRouteMatch("/manage-meetings", pathname ?? ""),
+                    dirchange: false,
+                  },
+                ],
+              },
             ],
           },
           {
-            path: "/candidates",
-            title: "Candidates",
-            icon: ProfileGroupIcon,
-            type: "link",
-            active: true,
-            selected: isRouteMatch("/candidates", pathname ?? ""),
-            dirchange: false,
+            icon: JobIcon,
+            title: "Project management",
+            type: "sub",
+            active: isProjectManagementSectionActive,
+            selected: isProjectManagementSectionActive,
+            children: [
+              {
+                path: "/projects/project-list",
+                title: "Manage Projects",
+                type: "link",
+                active: true,
+                selected: isRouteMatch("/projects/project-list", pathname ?? ""),
+                dirchange: false,
+              },
+              {
+                path: "/tasks/kanban-board",
+                title: "Manage Tasks",
+                type: "link",
+                active: true,
+                selected: isRouteMatch("/tasks/kanban-board", pathname ?? ""),
+                dirchange: false,
+              },  
+            ],
           },
           {
-            path: "/share-candidate-form",
-            title: "Share Candidate Form",
-            icon: ShareIcon,
-            type: "link",
-            active: true,
-            selected: isRouteMatch("/share-candidate-form", pathname ?? ""),
-            dirchange: false,
-          },
-          {
-            path: "/track-attendance",
-            title: "Track Attendance",
-            icon: AttendanceIcon,
-            type: "link",
-            active: true,
-            selected: isRouteMatch("/track-attendance", pathname ?? ""),
-            dirchange: false,
-          },
-          {
-            path: "/generate-meeting-link",
-            title: "Generate Meeting Link",
-            icon: TestIcon,
-            type: "link",
-            active: true,
-            selected: isRouteMatch("/generate-meeting-link", pathname ?? ""),
-            dirchange: false,
-          },
-          {
-            path: "/manage-meetings",
-            title: "Manage Meetings",
-            icon: CalendarIcon,
-            type: "link",
-            active: true,
-            selected: isRouteMatch("/manage-meetings", pathname ?? ""),
-            dirchange: false,
-          },
-          {
-            path: "/projects/project-list",
-            title: "Manage Projects",
-            icon: ProjectIcon,
-            type: "link",
-            active: true,
-            selected: isRouteMatch("/projects/project-list", pathname ?? ""),
-            dirchange: false,
-          },
-          {
-            path: "/tasks/kanban-board",
-            title: "Manage Tasks",
-            icon: TaskIcon,
-            type: "link",
-            active: true,
-            selected: isRouteMatch("/tasks/kanban-board", pathname ?? ""),
-            dirchange: false,
-          },
-          {
-            path: "/logs",
-            title: "Logs",
-            icon: LogIcon,
-            type: "link",
-            active: true,
-            selected: isRouteMatch("/logs", pathname ?? ""),
-            dirchange: false,
+            icon: MasterIcon,
+            title: "Settings",
+            type: "sub",
+            active: isSettingsSectionActive,
+            selected: isSettingsSectionActive,
+            children: [
+              {
+                title: "Master",
+                type: "sub",
+                active: isMasterSectionActive,
+                selected: isMasterSectionActive,
+                children: [
+                  {
+                    title: "Jobs",
+                    type: "sub",
+                    active: isMasterSectionActive,
+                    selected: isMasterSectionActive,
+                    children: [
+                      {
+                        path: "/master/jobs/templates",
+                        title: "Manage Jobs Templates",
+                        type: "link",
+                        active: true,
+                        selected: isRouteMatch("/master/jobs/templates", pathname ?? ""),
+                        dirchange: false,
+                      },
+                      {
+                        path: "/master/jobs/create-template",
+                        title: "Create Template",
+                        type: "link",
+                        active: true,
+                        selected: isRouteMatch("/master/jobs/create-template", pathname ?? ""),
+                        dirchange: false,
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                path: "/logs",
+                title: "Logs",
+                type: "link",
+                active: true,
+                selected: isRouteMatch("/logs", pathname ?? ""),
+                dirchange: false,
+              },
+            ],
           },
         );
       }

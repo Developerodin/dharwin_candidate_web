@@ -158,3 +158,56 @@ export const updateJobStatus = async (jobId: string, status: string) => {
   return response.data;
 };
 
+// Create a job template
+export const createJobTemplate = async (templateData: {
+  title: string;
+  jobDescription: string;
+}) => {
+  const response = await api.post(`${Jobs_API}/templates`, templateData);
+  return response.data;
+};
+
+// Get all job templates with optional query parameters
+export const getJobTemplates = async (params?: {
+  title?: string;
+  createdBy?: string;
+  sortBy?: string;
+  page?: number;
+  limit?: number;
+}) => {
+  const queryParams = new URLSearchParams();
+  
+  if (params?.title) queryParams.append('title', params.title);
+  if (params?.createdBy) queryParams.append('createdBy', params.createdBy);
+  if (params?.sortBy) queryParams.append('sortBy', params.sortBy);
+  if (params?.page) queryParams.append('page', params.page.toString());
+  if (params?.limit) queryParams.append('limit', params.limit.toString());
+  
+  const queryString = queryParams.toString();
+  const url = queryString ? `${Jobs_API}/templates?${queryString}` : `${Jobs_API}/templates`;
+  
+  const response = await api.get(url);
+  return response.data;
+};
+
+// Get a job template by id
+export const getJobTemplateById = async (templateId: string) => {
+  const response = await api.get(`${Jobs_API}/templates/${templateId}`);
+  return response.data;
+};
+
+// Update a job template
+export const updateJobTemplate = async (templateId: string, templateData: {
+  title?: string;
+  jobDescription?: string;
+}) => {
+  const response = await api.patch(`${Jobs_API}/templates/${templateId}`, templateData);
+  return response.data;
+};
+
+// Delete a job template
+export const deleteJobTemplate = async (templateId: string) => {
+  const response = await api.delete(`${Jobs_API}/templates/${templateId}`);
+  return response.data;
+};
+

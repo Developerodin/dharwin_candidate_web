@@ -1,9 +1,9 @@
 "use client";
-import React, { Fragment, useState } from 'react';
+import React, { Fragment, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Pageheader from '@/shared/layout-components/page-header/pageheader';
 import Seo from '@/shared/layout-components/seo/seo';
-import { createJob } from '@/shared/lib/jobs';
+import { createJob, getJobTemplates, getJobTemplateById } from '@/shared/lib/jobs';
 import Swal from 'sweetalert2';
 import Editordata from '@/shared/data/apps/projects/createprojectdata';
 
@@ -35,11 +35,20 @@ interface JobFormData {
   templateId?: string;
 }
 
+interface Template {
+  id: string;
+  title: string;
+  jobDescription: string;
+}
+
 const CreateJobs = () => {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [skillTagInput, setSkillTagInput] = useState('');
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [isCustomTitle, setIsCustomTitle] = useState(false);
 
   const [formData, setFormData] = useState<JobFormData>({
     title: '',
@@ -119,6 +128,114 @@ const CreateJobs = () => {
     }
   };
 
+  // Fetch job templates on component mount
+  useEffect(() => {
+    const fetchTemplates = async () => {
+      setLoadingTemplates(true);
+      try {
+        const response = await getJobTemplates({ limit: 1000 });
+        if (response && response.results) {
+          setTemplates(response.results);
+        } else if (Array.isArray(response)) {
+          setTemplates(response);
+        }
+      } catch (err: any) {
+        console.error('Failed to fetch templates:', err);
+        // Don't show error to user, just log it
+      } finally {
+        setLoadingTemplates(false);
+      }
+    };
+
+    fetchTemplates();
+  }, []);
+
+  // Handle template selection
+  const handleTemplateChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const templateId = e.target.value;
+    
+    if (!templateId) {
+      // Clear template data if "Select a template" is selected
+      setFormData(prev => ({
+        ...prev,
+        title: '',
+        jobDescription: '',
+        templateId: ''
+      }));
+      setIsCustomTitle(false);
+      return;
+    }
+
+    // Check if "Custom" option is selected
+    if (templateId === 'custom') {
+      setIsCustomTitle(true);
+      setFormData(prev => ({
+        ...prev,
+        title: '',
+        jobDescription: '',
+        templateId: ''
+      }));
+      return;
+    }
+
+    setIsCustomTitle(false);
+
+    try {
+      // Fetch template details
+      const template = await getJobTemplateById(templateId);
+      
+      // Process job description: decode HTML entities and clean malformed HTML
+      const description = template?.jobDescription || '';
+      let formattedDescription = '';
+      
+      if (description && description.trim()) {
+        if (typeof window !== 'undefined') {
+          // Decode HTML entities if they exist (e.g., &lt;p&gt; -> <p>)
+          const textarea = document.createElement('textarea');
+          textarea.innerHTML = description;
+          let decodedDescription = textarea.value;
+          
+          // Clean up malformed HTML (remove nested empty p tags, fix structure)
+          decodedDescription = decodedDescription.replace(/<p>\s*<p>/g, '<p>');
+          decodedDescription = decodedDescription.replace(/<\/p>\s*<\/p>/g, '</p>');
+          
+          // Check if it contains HTML tags
+          if (decodedDescription.includes('<') && decodedDescription.includes('>')) {
+            // It's HTML, use it as-is (ReactQuill will render it as formatted text)
+            formattedDescription = decodedDescription;
+          } else if (decodedDescription.trim()) {
+            // Plain text, wrap in paragraph
+            formattedDescription = `<p>${decodedDescription}</p>`;
+          }
+        } else {
+          // Server-side: basic HTML entity decoding
+          formattedDescription = description
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&amp;/g, '&')
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'");
+        }
+      }
+
+      // Update form data with template data
+      setFormData(prev => ({
+        ...prev,
+        title: template.title || '',
+        jobDescription: formattedDescription || '',
+        templateId: templateId
+      }));
+    } catch (err: any) {
+      console.error('Failed to fetch template details:', err);
+      await Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Failed to load template details. Please try again.',
+        confirmButtonText: 'OK'
+      });
+    }
+  };
+
   const stripHtml = (html: string): string => {
     if (typeof window === 'undefined') return html.replace(/<[^>]*>/g, '').trim();
     const tmp = document.createElement('DIV');
@@ -127,6 +244,11 @@ const CreateJobs = () => {
   };
 
   const validateForm = (): boolean => {
+    // Either template must be selected or custom title must be provided
+    if (!isCustomTitle && !formData.templateId) {
+      setError('Please select a job template or choose custom option');
+      return false;
+    }
     if (!formData.title.trim()) {
       setError('Job title is required');
       return false;
@@ -266,21 +388,62 @@ const CreateJobs = () => {
                   </div>
                 )}
 
-                {/* Job Title */}
+                {/* Job Title from Template or Custom */}
                 <div className="grid grid-cols-12 gap-x-6">
                   <div className="xl:col-span-6 col-span-12">
                     <div className="mb-3">
-                      <label htmlFor="title" className="form-label">Job Title <span className="text-danger">*</span></label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        id="title"
-                        name="title"
-                        value={formData.title}
-                        onChange={handleInputChange}
-                        placeholder="e.g., Senior Software Engineer"
-                        required
-                      />
+                      <label htmlFor="templateId" className="form-label">Job Title <span className="text-danger">*</span></label>
+                      {!isCustomTitle ? (
+                        <>
+                          <select
+                            className="form-control"
+                            id="templateId"
+                            name="templateId"
+                            value={formData.templateId || ''}
+                            onChange={handleTemplateChange}
+                            required
+                            disabled={loadingTemplates}
+                          >
+                            <option value="">Select a template...</option>
+                            {templates.map((template) => (
+                              <option key={template.id} value={template.id}>
+                                {template.title}
+                              </option>
+                            ))}
+                            <option value="custom">Custom (Manual Entry)</option>
+                          </select>
+                          {loadingTemplates && (
+                            <small className="text-muted">Loading templates...</small>
+                          )}
+                        </>
+                      ) : (
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            className="form-control"
+                            id="title"
+                            name="title"
+                            value={formData.title}
+                            onChange={handleInputChange}
+                            placeholder="Enter job title manually"
+                            required
+                          />
+                          <button
+                            type="button"
+                            className="btn btn-light"
+                            onClick={() => {
+                              setIsCustomTitle(false);
+                              setFormData(prev => ({
+                                ...prev,
+                                title: '',
+                                templateId: ''
+                              }));
+                            }}
+                          >
+                            <i className="ri-arrow-go-back-line"></i>
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -385,6 +548,7 @@ const CreateJobs = () => {
                   <label htmlFor="jobDescription" className="form-label">Job Description <span className="text-danger">*</span></label>
                   <div id="job-description-editor">
                     <Editordata 
+                      key={formData.templateId || 'create-job-editor'}
                       value={formData.jobDescription}
                       onChange={(html: string) => {
                         setFormData(prev => ({
