@@ -80,3 +80,6 @@ export const Tasks_API = `${TASKS_URL}`;
 
 // Dashboard API
 export const Dashboard_API = `${DASHBOARD_URL}`;
+
+// Users API (for recruiters, supervisors, etc.)
+export const Users_API = `${BASE_API_URL}/users`;

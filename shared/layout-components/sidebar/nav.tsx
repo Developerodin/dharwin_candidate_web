@@ -121,16 +121,37 @@ export const useMenuItems = () => {
           isRouteMatch(route, pathname ?? "")
         );
 
+        const candidateRoutes = [
+          "/candidates",
+          "/share-candidate-form",
+          "/track-attendance",
+          "/candidates/file-manager",
+        ];
+        const isCandidatesSectionActive = candidateRoutes.some((route) =>
+          isRouteMatch(route, pathname ?? "")
+        );
+
+        const interviewRoutes = [
+          "/generate-meeting-link",
+          "/manage-meetings",
+        ];
+        const isInterviewsSectionActive = interviewRoutes.some((route) =>
+          isRouteMatch(route, pathname ?? "")
+        );
+
         const atsRoutes = [
           "/candidates",
           "/share-candidate-form",
           "/track-attendance",
+          "/candidates/file-manager",
           "/jobs/manage-jobs",
           "/jobs/create-jobs",
           "/jobs/update-jobs",
           "/jobs/update-jobs/",
           "/generate-meeting-link",
           "/manage-meetings",
+          "/recruiters",
+          "/supervisors",
         ];
         const isATSSectionActive = atsRoutes.some((route) =>
           isRouteMatch(route, pathname ?? "")
@@ -176,8 +197,8 @@ export const useMenuItems = () => {
               {
                 title: "Candidates",
                 type: "sub",
-                active: isATSSectionActive,
-                selected: isATSSectionActive,
+                active: isCandidatesSectionActive,
+                selected: isCandidatesSectionActive,
                 children: [
                   {
                     path: "/candidates",
@@ -203,6 +224,14 @@ export const useMenuItems = () => {
                     selected: isRouteMatch("/track-attendance", pathname ?? ""),
                     dirchange: false,
                   },
+                  {
+                    path: "/candidates/file-manager",
+                    title: "File Manager",
+                    type: "link",
+                    active: true,
+                    selected: isRouteMatch("/candidates/file-manager", pathname ?? ""),
+                    dirchange: false,
+                  },
                 ],
               },
               {
@@ -219,21 +248,13 @@ export const useMenuItems = () => {
                     selected: isRouteMatch("/jobs/manage-jobs", pathname ?? ""),
                     dirchange: false,
                   },
-                  {
-                    path: "/jobs/create-jobs",
-                    title: "Create Jobs",
-                    type: "link",
-                    active: true,
-                    selected: isRouteMatch("/jobs/create-jobs", pathname ?? ""),
-                    dirchange: false,
-                  },
                 ],
               },
               {
                 title: "Interviews",
                 type: "sub",
-                active: isATSSectionActive,
-                selected: isATSSectionActive,
+                active: isInterviewsSectionActive,
+                selected: isInterviewsSectionActive,
                 children: [
                   {
                     path: "/generate-meeting-link",
@@ -253,10 +274,26 @@ export const useMenuItems = () => {
                   },
                 ],
               },
+              {
+                path: "/recruiters",
+                title: "Recruiters",
+                type: "link",
+                active: true,
+                selected: isRouteMatch("/recruiters", pathname ?? ""),
+                dirchange: false,
+              },
+              {
+                path: "/supervisors",
+                title: "Supervisors",
+                type: "link",
+                active: true,
+                selected: isRouteMatch("/supervisors", pathname ?? ""),
+                dirchange: false,
+              },
             ],
           },
           {
-            icon: JobIcon,
+            icon: ProjectIcon,
             title: "Project management",
             type: "sub",
             active: isProjectManagementSectionActive,
@@ -305,14 +342,6 @@ export const useMenuItems = () => {
                         type: "link",
                         active: true,
                         selected: isRouteMatch("/master/jobs/templates", pathname ?? ""),
-                        dirchange: false,
-                      },
-                      {
-                        path: "/master/jobs/create-template",
-                        title: "Create Template",
-                        type: "link",
-                        active: true,
-                        selected: isRouteMatch("/master/jobs/create-template", pathname ?? ""),
                         dirchange: false,
                       },
                     ],

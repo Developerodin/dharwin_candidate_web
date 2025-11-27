@@ -1,9 +1,68 @@
 import api from './api';
 import { Attendance_API, Candidate_SalarySlips_API, Candidates_API, Documents_API, Export_Candidates_API, Fetch_Candidate_Documents_API, Forgot_Password_API, Join_Meeting_API, Logs_API, Meeting_API, Onboard_Candidate_API, Register_User_API, Share_Candidate_API, Transcription_API, Transcription_Download_API, Transcription_Start_API, Transcription_Status_API, Verify_Document_API } from './constants';
 
-// Fetch all leads
-export const fetchAllCandidates = async () => {
-  const response = await api.get(Candidates_API);
+// Fetch all leads with optional query parameters
+export const fetchAllCandidates = async (params?: {
+  owner?: string;
+  fullName?: string;
+  email?: string;
+  page?: number;
+  limit?: number;
+  sortBy?: string;
+  skills?: string | string[];
+  skillLevel?: string;
+  skillMatchMode?: 'all' | 'any';
+  experienceLevel?: string;
+  minYearsOfExperience?: number;
+  maxYearsOfExperience?: number;
+  location?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  degree?: string;
+  visaType?: string;
+}) => {
+  const queryParams = new URLSearchParams();
+  
+  if (params?.owner) queryParams.append('owner', params.owner);
+  if (params?.fullName) queryParams.append('fullName', params.fullName);
+  if (params?.email) queryParams.append('email', params.email);
+  if (params?.page) queryParams.append('page', params.page.toString());
+  if (params?.limit) queryParams.append('limit', params.limit.toString());
+  if (params?.sortBy) queryParams.append('sortBy', params.sortBy);
+  
+  // Skills filtering
+  if (params?.skills) {
+    if (Array.isArray(params.skills)) {
+      params.skills.forEach(skill => {
+        queryParams.append('skills', skill);
+      });
+    } else {
+      queryParams.append('skills', params.skills);
+    }
+  }
+  if (params?.skillLevel) queryParams.append('skillLevel', params.skillLevel);
+  if (params?.skillMatchMode) queryParams.append('skillMatchMode', params.skillMatchMode);
+  
+  // Experience filtering
+  if (params?.experienceLevel) queryParams.append('experienceLevel', params.experienceLevel);
+  if (params?.minYearsOfExperience) queryParams.append('minYearsOfExperience', params.minYearsOfExperience.toString());
+  if (params?.maxYearsOfExperience) queryParams.append('maxYearsOfExperience', params.maxYearsOfExperience.toString());
+  
+  // Location filtering
+  if (params?.location) queryParams.append('location', params.location);
+  if (params?.city) queryParams.append('city', params.city);
+  if (params?.state) queryParams.append('state', params.state);
+  if (params?.country) queryParams.append('country', params.country);
+  
+  // Education & Visa filtering
+  if (params?.degree) queryParams.append('degree', params.degree);
+  if (params?.visaType) queryParams.append('visaType', params.visaType);
+  
+  const queryString = queryParams.toString();
+  const url = queryString ? `${Candidates_API}?${queryString}` : Candidates_API;
+  
+  const response = await api.get(url);
   return response.data;
 };
 
@@ -366,5 +425,12 @@ export const shareMeeting = async (meetingId: string, shareData: {
   message?: string;
 }) => {
   const response = await api.post(`${Meeting_API}/${meetingId}/share`, shareData);
+  return response.data;
+};
+
+
+// resend email verification
+export const resendEmailVerification = async (candidateId: string) => {
+  const response = await api.post(`${Candidates_API}/${candidateId}/resend-verification-email`);
   return response.data;
 };

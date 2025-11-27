@@ -5,16 +5,41 @@ import { candidateData } from '@/shared/data/pages/candidates/candidatedata'
 const Select = dynamic(() => import("react-select"), {ssr : false});
 import dynamic from 'next/dynamic';
 import Swal from "sweetalert2";
-import { useEffect, useState } from 'react';
-import { fetchAllCandidates, deleteCandidate, addCandidateSalarySlips, uploadDocuments, fetchCandidateDocuments, verifyDocument, shareCandidate, getAttendanceByCandidate } from '@/shared/lib/candidates';
+import { useEffect, useState, useCallback } from 'react';
+import { fetchAllCandidates, deleteCandidate, addCandidateSalarySlips, uploadDocuments, fetchCandidateDocuments, verifyDocument, shareCandidate, getAttendanceByCandidate, resendEmailVerification } from '@/shared/lib/candidates';
 
 const Candidates = () => {
     const [canData, setCanData] = useState<any[]>([]);
-    const [filteredData, setFilteredData] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    
+    // Basic search filters
     const [searchFilter, setSearchFilter] = useState<string>('name');
     const [searchValue, setSearchValue] = useState<string>('');
+    
+    // Advanced filters
+    const [skills, setSkills] = useState<string>('');
+    const [skillLevel, setSkillLevel] = useState<string>('');
+    const [skillMatchMode, setSkillMatchMode] = useState<'all' | 'any'>('any');
+    const [experienceLevel, setExperienceLevel] = useState<string>('');
+    const [minYearsOfExperience, setMinYearsOfExperience] = useState<string>('');
+    const [maxYearsOfExperience, setMaxYearsOfExperience] = useState<string>('');
+    const [location, setLocation] = useState<string>('');
+    const [city, setCity] = useState<string>('');
+    const [state, setState] = useState<string>('');
+    const [country, setCountry] = useState<string>('');
+    const [degree, setDegree] = useState<string>('');
+    const [visaType, setVisaType] = useState<string>('');
+    
+    // Pagination
+    const [currentPage, setCurrentPage] = useState(1);
+    const [limit] = useState(10);
+    const [totalPages, setTotalPages] = useState(1);
+    const [totalResults, setTotalResults] = useState(0);
+    const [sortBy, setSortBy] = useState<string>('createdAt:desc');
+    
+    // UI state
+    const [showAdvancedFilters, setShowAdvancedFilters] = useState<boolean>(false);
     const [selectedCandidate, setSelectedCandidate] = useState<any>(null);
     const [showModal, setShowModal] = useState<boolean>(false);
     const [activeTab, setActiveTab] = useState<string>('personal');
@@ -39,53 +64,92 @@ const Candidates = () => {
     const [candidateAttendance, setCandidateAttendance] = useState<any[]>([]);
     const [loadingAttendanceData, setLoadingAttendanceData] = useState<boolean>(false);
 
-    const getCandidates = async () => {
+    // Build filter parameters
+    const buildFilterParams = () => {
+        const params: any = {
+            page: currentPage,
+            limit: limit,
+            sortBy: sortBy,
+        };
+
+        // Basic search filters
+        if (searchValue.trim()) {
+            if (searchFilter === 'name') {
+                params.fullName = searchValue.trim();
+            } else if (searchFilter === 'email') {
+                params.email = searchValue.trim();
+            }
+        }
+
+        // Advanced filters
+        if (skills.trim()) {
+            // Split comma-separated skills
+            const skillsArray = skills.split(',').map(s => s.trim()).filter(s => s);
+            if (skillsArray.length > 0) {
+                params.skills = skillsArray;
+            }
+        }
+        if (skillLevel) params.skillLevel = skillLevel;
+        if (skillMatchMode) params.skillMatchMode = skillMatchMode;
+        if (experienceLevel) params.experienceLevel = experienceLevel;
+        if (minYearsOfExperience) params.minYearsOfExperience = parseInt(minYearsOfExperience);
+        if (maxYearsOfExperience) params.maxYearsOfExperience = parseInt(maxYearsOfExperience);
+        if (location.trim()) params.location = location.trim();
+        if (city.trim()) params.city = city.trim();
+        if (state.trim()) params.state = state.trim();
+        if (country.trim()) params.country = country.trim();
+        if (degree.trim()) params.degree = degree.trim();
+        if (visaType.trim()) params.visaType = visaType.trim();
+
+        return params;
+    };
+
+    const getCandidates = useCallback(async () => {
+        setLoading(true);
+        setError(null);
         try {
-            const data = await fetchAllCandidates();
-            const normalized = Array.isArray(data)
-                ? data
-                : (Array.isArray((data as any)?.results)
-                    ? (data as any).results
-                    : (Array.isArray((data as any)?.data) ? (data as any).data : []));
-            setCanData(normalized);
-            setFilteredData(normalized);
-            console.log(data);
+            const params = buildFilterParams();
+            const data = await fetchAllCandidates(params);
+            
+            // Handle API response structure
+            if (data && data.results) {
+                setCanData(data.results);
+                setTotalPages(data.totalPages || 1);
+                setTotalResults(data.totalResults || 0);
+            } else if (Array.isArray(data)) {
+                setCanData(data);
+                setTotalPages(1);
+                setTotalResults(data.length);
+            } else {
+                setCanData([]);
+                setTotalPages(1);
+                setTotalResults(0);
+            }
         } catch (err: any) {
-            setError("Failed to fetch leads");
+            setError(err?.message || "Failed to fetch candidates");
+            setCanData([]);
         } finally {
             setLoading(false);
         }
-    };
+    }, [currentPage, limit, sortBy, searchValue, searchFilter, skills, skillLevel, skillMatchMode, experienceLevel, minYearsOfExperience, maxYearsOfExperience, location, city, state, country, degree, visaType]);
 
-    // Filter function
-    const applyFilter = () => {
-        if (!searchValue.trim()) {
-            setFilteredData(canData);
-            return;
-        }
-
-        const filtered = canData.filter((candidate: any) => {
-            const searchTerm = searchValue.toLowerCase().trim();
-            
-            switch (searchFilter) {
-                case 'name':
-                    return candidate?.fullName?.toLowerCase().includes(searchTerm);
-                case 'email':
-                    return candidate?.email?.toLowerCase().includes(searchTerm);
-                case 'mobile':
-                    return candidate?.phoneNumber?.toLowerCase().includes(searchTerm);
-                default:
-                    return true;
-            }
-        });
-        
-        setFilteredData(filtered);
-    };
-
-    // Apply filter when search value or filter type changes
+    // Fetch candidates when filters change
     useEffect(() => {
-        applyFilter();
-    }, [searchValue, searchFilter, canData]);
+        getCandidates();
+    }, [getCandidates]);
+
+    // Debounce search input
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (currentPage !== 1) {
+                setCurrentPage(1);
+            } else {
+                getCandidates();
+            }
+        }, 500);
+
+        return () => clearTimeout(timer);
+    }, [searchValue, searchFilter]);
 
     // Function to open candidate details modal
     const openCandidateModal = (candidate: any) => {
@@ -101,10 +165,8 @@ const Candidates = () => {
         setActiveTab('personal');
     };
 
+    // Get user role from localStorage
     useEffect(() => {
-        getCandidates();
-        
-        // Get user role from localStorage
         if (typeof window !== 'undefined') {
             const userData = localStorage.getItem('user');
             if (userData) {
@@ -118,6 +180,28 @@ const Candidates = () => {
             }
         }
     }, []);
+
+    // Clear all filters
+    const clearFilters = () => {
+        setSearchValue('');
+        setSkills('');
+        setSkillLevel('');
+        setSkillMatchMode('any');
+        setExperienceLevel('');
+        setMinYearsOfExperience('');
+        setMaxYearsOfExperience('');
+        setLocation('');
+        setCity('');
+        setState('');
+        setCountry('');
+        setDegree('');
+        setVisaType('');
+        setCurrentPage(1);
+    };
+
+    const handlePageChange = (page: number) => {
+        setCurrentPage(page);
+    };
 
     // Function to open salary slip upload modal
     const openSalarySlipModal = (candidate: any) => {
@@ -641,30 +725,39 @@ const Candidates = () => {
                     <div className="box">
                         <div className="box-header justify-between flex-wrap">
                             <div className="box-title">
-                                Candidate List
+                                Candidate List {totalResults > 0 && <span className="text-sm font-normal text-gray-500">({totalResults} candidates)</span>}
                             </div>
                             <div className="flex flex-wrap gap-2">
                                 <div className="me-1">
                                     <select 
                                         className="ti-form-control form-control-sm w-full me-2 !bg-primary !text-white" 
                                         value={searchFilter}
-                                        onChange={(e) => setSearchFilter(e.target.value)}
+                                        onChange={(e) => {
+                                            setSearchFilter(e.target.value);
+                                            setCurrentPage(1);
+                                        }}
                                     >
                                         <option value="name">Search by Name</option>
                                         <option value="email">Search by Email</option>
-                                        <option value="mobile">Search by Mobile</option>
                                     </select>
                                 </div>
                                 <div className="me-3">
                                     <input 
                                         className="ti-form-control form-control-sm" 
                                         type="text" 
-                                        placeholder={`Search ${searchFilter === 'name' ? 'name' : searchFilter === 'email' ? 'email' : 'mobile'} here`}
+                                        placeholder={`Search ${searchFilter === 'name' ? 'name' : 'email'} here`}
                                         value={searchValue}
                                         onChange={(e) => setSearchValue(e.target.value)}
                                         aria-label="Search input"
                                     />
                                 </div>
+                                <button 
+                                    type="button" 
+                                    onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                                    className="ti-btn ti-btn-secondary !bg-secondary !text-white !py-1 !px-2 !text-[0.75rem] !m-0 !gap-0 !font-medium me-2"
+                                >
+                                    <i className={`ri-filter-${showAdvancedFilters ? 'off' : 'line'} font-semibold align-middle`}></i> {showAdvancedFilters ? 'Hide' : 'Advanced'} Filters
+                                </button>
                                 <button 
                                     type="button" 
                                     onClick={exportCandidates}
@@ -677,11 +770,258 @@ const Candidates = () => {
                                 </button>
                             </div>
                         </div>
+                        {/* Advanced Filters Section */}
+                        {showAdvancedFilters && (
+                            <div className="box-body border-b border-defaultborder">
+                                <div className="grid grid-cols-12 gap-4 mb-4">
+                                    <div className="lg:col-span-12 col-span-12">
+                                        <h6 className="text-sm font-semibold mb-3">Advanced Filters</h6>
+                                    </div>
+                                    
+                                    {/* Skills Filter */}
+                                    <div className="lg:col-span-4 md:col-span-6 col-span-12">
+                                        <label className="form-label text-sm">Skills (comma-separated)</label>
+                                        <input
+                                            className="ti-form-control form-control-sm"
+                                            type="text"
+                                            placeholder="e.g., JavaScript, React, Node.js"
+                                            value={skills}
+                                            onChange={(e) => {
+                                                setSkills(e.target.value);
+                                                setCurrentPage(1);
+                                            }}
+                                        />
+                                    </div>
+                                    
+                                    {/* Skill Level */}
+                                    <div className="lg:col-span-2 md:col-span-6 col-span-12">
+                                        <label className="form-label text-sm">Skill Level</label>
+                                        <select
+                                            className="ti-form-control form-control-sm"
+                                            value={skillLevel}
+                                            onChange={(e) => {
+                                                setSkillLevel(e.target.value);
+                                                setCurrentPage(1);
+                                            }}
+                                        >
+                                            <option value="">All Levels</option>
+                                            <option value="Beginner">Beginner</option>
+                                            <option value="Intermediate">Intermediate</option>
+                                            <option value="Advanced">Advanced</option>
+                                            <option value="Expert">Expert</option>
+                                        </select>
+                                    </div>
+                                    
+                                    {/* Skill Match Mode */}
+                                    <div className="lg:col-span-2 md:col-span-6 col-span-12">
+                                        <label className="form-label text-sm">Match Mode</label>
+                                        <select
+                                            className="ti-form-control form-control-sm"
+                                            value={skillMatchMode}
+                                            onChange={(e) => {
+                                                setSkillMatchMode(e.target.value as 'all' | 'any');
+                                                setCurrentPage(1);
+                                            }}
+                                        >
+                                            <option value="any">Any Skill</option>
+                                            <option value="all">All Skills</option>
+                                        </select>
+                                    </div>
+                                    
+                                    {/* Experience Level */}
+                                    <div className="lg:col-span-2 md:col-span-6 col-span-12">
+                                        <label className="form-label text-sm">Experience Level</label>
+                                        <select
+                                            className="ti-form-control form-control-sm"
+                                            value={experienceLevel}
+                                            onChange={(e) => {
+                                                setExperienceLevel(e.target.value);
+                                                setCurrentPage(1);
+                                            }}
+                                        >
+                                            <option value="">All Levels</option>
+                                            <option value="Entry Level">Entry Level</option>
+                                            <option value="Mid Level">Mid Level</option>
+                                            <option value="Senior Level">Senior Level</option>
+                                            <option value="Executive">Executive</option>
+                                        </select>
+                                    </div>
+                                    
+                                    {/* Years of Experience Range */}
+                                    <div className="lg:col-span-2 md:col-span-6 col-span-12">
+                                        <label className="form-label text-sm">Min Years</label>
+                                        <input
+                                            className="ti-form-control form-control-sm"
+                                            type="number"
+                                            placeholder="Min years"
+                                            value={minYearsOfExperience}
+                                            onChange={(e) => {
+                                                setMinYearsOfExperience(e.target.value);
+                                                setCurrentPage(1);
+                                            }}
+                                            min="0"
+                                        />
+                                    </div>
+                                    
+                                    <div className="lg:col-span-2 md:col-span-6 col-span-12">
+                                        <label className="form-label text-sm">Max Years</label>
+                                        <input
+                                            className="ti-form-control form-control-sm"
+                                            type="number"
+                                            placeholder="Max years"
+                                            value={maxYearsOfExperience}
+                                            onChange={(e) => {
+                                                setMaxYearsOfExperience(e.target.value);
+                                                setCurrentPage(1);
+                                            }}
+                                            min="0"
+                                        />
+                                    </div>
+                                    
+                                    {/* Location Filters */}
+                                    <div className="lg:col-span-3 md:col-span-6 col-span-12">
+                                        <label className="form-label text-sm">Location</label>
+                                        <input
+                                            className="ti-form-control form-control-sm"
+                                            type="text"
+                                            placeholder="City, State, or Country"
+                                            value={location}
+                                            onChange={(e) => {
+                                                setLocation(e.target.value);
+                                                setCurrentPage(1);
+                                            }}
+                                        />
+                                    </div>
+                                    
+                                    <div className="lg:col-span-3 md:col-span-6 col-span-12">
+                                        <label className="form-label text-sm">City</label>
+                                        <input
+                                            className="ti-form-control form-control-sm"
+                                            type="text"
+                                            placeholder="City"
+                                            value={city}
+                                            onChange={(e) => {
+                                                setCity(e.target.value);
+                                                setCurrentPage(1);
+                                            }}
+                                        />
+                                    </div>
+                                    
+                                    <div className="lg:col-span-3 md:col-span-6 col-span-12">
+                                        <label className="form-label text-sm">State</label>
+                                        <input
+                                            className="ti-form-control form-control-sm"
+                                            type="text"
+                                            placeholder="State"
+                                            value={state}
+                                            onChange={(e) => {
+                                                setState(e.target.value);
+                                                setCurrentPage(1);
+                                            }}
+                                        />
+                                    </div>
+                                    
+                                    <div className="lg:col-span-3 md:col-span-6 col-span-12">
+                                        <label className="form-label text-sm">Country</label>
+                                        <input
+                                            className="ti-form-control form-control-sm"
+                                            type="text"
+                                            placeholder="Country"
+                                            value={country}
+                                            onChange={(e) => {
+                                                setCountry(e.target.value);
+                                                setCurrentPage(1);
+                                            }}
+                                        />
+                                    </div>
+                                    
+                                    {/* Education & Visa */}
+                                    <div className="lg:col-span-4 md:col-span-6 col-span-12">
+                                        <label className="form-label text-sm">Degree</label>
+                                        <input
+                                            className="ti-form-control form-control-sm"
+                                            type="text"
+                                            placeholder="e.g., Computer Science"
+                                            value={degree}
+                                            onChange={(e) => {
+                                                setDegree(e.target.value);
+                                                setCurrentPage(1);
+                                            }}
+                                        />
+                                    </div>
+                                    
+                                    <div className="lg:col-span-4 md:col-span-6 col-span-12">
+                                        <label className="form-label text-sm">Visa Type</label>
+                                        <input
+                                            className="ti-form-control form-control-sm"
+                                            type="text"
+                                            placeholder="e.g., H1B, Green Card"
+                                            value={visaType}
+                                            onChange={(e) => {
+                                                setVisaType(e.target.value);
+                                                setCurrentPage(1);
+                                            }}
+                                        />
+                                    </div>
+                                    
+                                    {/* Sort By */}
+                                    <div className="lg:col-span-2 md:col-span-6 col-span-12">
+                                        <label className="form-label text-sm">Sort By</label>
+                                        <select
+                                            className="ti-form-control form-control-sm"
+                                            value={sortBy}
+                                            onChange={(e) => {
+                                                setSortBy(e.target.value);
+                                                setCurrentPage(1);
+                                            }}
+                                        >
+                                            <option value="createdAt:desc">Newest First</option>
+                                            <option value="createdAt:asc">Oldest First</option>
+                                            <option value="fullName:asc">Name A-Z</option>
+                                            <option value="fullName:desc">Name Z-A</option>
+                                        </select>
+                                    </div>
+                                    
+                                    {/* Clear Filters Button */}
+                                    <div className="lg:col-span-2 md:col-span-6 col-span-12 flex items-end">
+                                        <button
+                                            type="button"
+                                            onClick={clearFilters}
+                                            className="ti-btn ti-btn-light !bg-light !text-defaulttextcolor !py-1 !px-3 !text-[0.75rem] !m-0 !gap-1 !font-medium w-full"
+                                        >
+                                            <i className="ri-close-line"></i> Clear Filters
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                         <div className="box-body">
                             {loading ? (
-                                <div>Loading leads...</div>
+                                <div className="text-center py-8">
+                                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                                    <p className="mt-2 text-gray-500">Loading candidates...</p>
+                                </div>
                             ) : error ? (
-                                <div className="text-red-500">{error}</div>
+                                <div className="text-center py-8">
+                                    <div className="text-red-500 mb-2">
+                                        <i className="ri-error-warning-line text-4xl"></i>
+                                    </div>
+                                    <p className="text-red-500">{error}</p>
+                                </div>
+                            ) : canData.length === 0 ? (
+                                <div className="text-center py-8">
+                                    <div className="text-gray-400 mb-2">
+                                        <i className="ri-user-search-line text-4xl"></i>
+                                    </div>
+                                    <p className="text-gray-500">No candidates found matching your criteria.</p>
+                                    <button
+                                        type="button"
+                                        onClick={clearFilters}
+                                        className="ti-btn ti-btn-light !bg-light !text-defaulttextcolor !py-1 !px-3 !text-[0.75rem] !m-0 !gap-1 !font-medium mt-3"
+                                    >
+                                        <i className="ri-close-line"></i> Clear Filters
+                                    </button>
+                                </div>
                             ) : (
                                 <div className="table-responsive">
                                     <table className="table table-hover whitespace-nowrap table-bordered min-w-full">
@@ -696,13 +1036,13 @@ const Candidates = () => {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {(Array.isArray(filteredData) ? filteredData : []).map((can, i) => (
+                                            {(Array.isArray(canData) ? canData : []).map((can, i) => (
                                                 <tr 
                                                     className="border border-inherit border-solid hover:bg-gray-100 dark:border-defaultborder/10 dark:hover:bg-light cursor-pointer" 
-                                                    key={Math.random()}
+                                                    key={can?.id || can?._id || Math.random()}
                                                     onClick={() => openCandidateModal(can)}
                                                 >
-                                                    <td>{i+1}</td>
+                                                    <td>{(currentPage - 1) * limit + i + 1}</td>
                                                     <td>{can?.fullName}</td>
                                                     <td>
                                                         <div className="flex items-center leading-none">
@@ -790,6 +1130,33 @@ const Candidates = () => {
                                                             >
                                                                 <i className="ri-calendar-line"></i>
                                                             </button>
+                                                            {!can?.isEmailVerified && (
+                                                                <button 
+                                                                    onClick={async (e) => {
+                                                                        e.stopPropagation();
+                                                                        try {
+                                                                            await resendEmailVerification(String(can?.id ?? can?._id));
+                                                                            await Swal.fire({
+                                                                                icon: 'success',
+                                                                                title: 'Email Sent',
+                                                                                text: 'Verification email has been sent successfully.',
+                                                                                confirmButtonText: 'OK'
+                                                                            });
+                                                                        } catch (error: any) {
+                                                                            await Swal.fire({
+                                                                                icon: 'error',
+                                                                                title: 'Failed to Send Email',
+                                                                                text: error?.response?.data?.message || error?.message || 'Unable to send verification email.',
+                                                                                confirmButtonText: 'OK'
+                                                                            });
+                                                                        }
+                                                                    }}
+                                                                    className="ti-btn ti-btn-icon ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-teal-500/10 text-teal-500 hover:bg-teal-500 hover:text-white hover:border-teal-500"
+                                                                    title="Resend Email Verification"
+                                                                >
+                                                                    <i className="ri-mail-send-line"></i>
+                                                                </button>
+                                                            )}
 
                                                             <button type="button"
                                                                 onClick={(e) => {
@@ -806,8 +1173,8 @@ const Candidates = () => {
                                                                         if (result.isConfirmed) {
                                                                             try {
                                                                                 await deleteCandidate(String(can?.id ?? can?._id));
-                                                                                setCanData((prev) => (Array.isArray(prev) ? prev.filter((c: any) => (c?.id ?? c?._id) !== (can?.id ?? can?._id)) : prev));
-                                                                                setFilteredData((prev) => (Array.isArray(prev) ? prev.filter((c: any) => (c?.id ?? c?._id) !== (can?.id ?? can?._id)) : prev));
+                                                                                // Refresh candidates list after deletion
+                                                                                getCandidates();
                                                                                 await Swal.fire(
                                                                                     "Deleted!",
                                                                                     "The candidate has been deleted.",
@@ -836,31 +1203,61 @@ const Candidates = () => {
                                 </div>
                             )}      
                         </div>
-                        <div className="box-footer">
-                            <div className="sm:flex items-center">
-                                <div className="text-defaulttextcolor/70">
-                                    Showing {canData.length} {canData.length === 1 ? "Entry" : "Entries"}  <i className="bi bi-arrow-right ms-2 font-semibold"></i>
-                                </div>
-                                <div className="ms-auto">
-                                    <nav aria-label="Page navigation" className="pagination-style-4">
-                                        <ul className="ti-pagination mb-0">
-                                            <li className="page-item disabled">
-                                                <Link className="page-link" href="#!" scroll={false}>
-                                                    Prev
-                                                </Link>
-                                            </li>
-                                            <li className="page-item"><Link className="page-link active" href="#!" scroll={false}>1</Link></li>
-                                            {/* <li className="page-item"><Link className="page-link" href="#!" scroll={false}>2</Link></li> */}
-                                            <li className="page-item">
-                                                <Link className="page-link !text-primary" href="#!" scroll={false}>
-                                                    next
-                                                </Link>
-                                            </li>
-                                        </ul>
-                                    </nav>
+                        {totalPages > 1 && (
+                            <div className="box-footer">
+                                <div className="sm:flex items-center">
+                                    <div className="text-defaulttextcolor/70">
+                                        Showing {((currentPage - 1) * limit) + 1} to {Math.min(currentPage * limit, totalResults)} of {totalResults} {totalResults === 1 ? "Entry" : "Entries"}  <i className="bi bi-arrow-right ms-2 font-semibold"></i>
+                                    </div>
+                                    <div className="ms-auto">
+                                        <nav aria-label="Page navigation" className="pagination-style-4">
+                                            <ul className="ti-pagination mb-0">
+                                                <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
+                                                    <button 
+                                                        className="page-link" 
+                                                        onClick={() => handlePageChange(currentPage - 1)}
+                                                        disabled={currentPage === 1}
+                                                    >
+                                                        Prev
+                                                    </button>
+                                                </li>
+                                                {Array.from({ length: Math.min(totalPages, 10) }, (_, i) => {
+                                                    let pageNum;
+                                                    if (totalPages <= 10) {
+                                                        pageNum = i + 1;
+                                                    } else if (currentPage <= 5) {
+                                                        pageNum = i + 1;
+                                                    } else if (currentPage >= totalPages - 4) {
+                                                        pageNum = totalPages - 9 + i;
+                                                    } else {
+                                                        pageNum = currentPage - 5 + i;
+                                                    }
+                                                    return (
+                                                        <li key={pageNum} className={`page-item ${currentPage === pageNum ? 'active' : ''}`}>
+                                                            <button 
+                                                                className="page-link" 
+                                                                onClick={() => handlePageChange(pageNum)}
+                                                            >
+                                                                {pageNum}
+                                                            </button>
+                                                        </li>
+                                                    );
+                                                })}
+                                                <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}>
+                                                    <button 
+                                                        className="page-link !text-primary" 
+                                                        onClick={() => handlePageChange(currentPage + 1)}
+                                                        disabled={currentPage === totalPages}
+                                                    >
+                                                        Next
+                                                    </button>
+                                                </li>
+                                            </ul>
+                                        </nav>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
+                        )}
                     </div>
                 </div>
             </div>
