@@ -10,6 +10,8 @@ import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
 import * as XLSX from 'xlsx';
 import { getAllJobs, deleteJob, exportJobsToExcel, importJobsFromExcel } from '@/shared/lib/jobs';
+import api from '@/shared/lib/api';
+import { Users_API } from '@/shared/lib/constants';
 const ReactApexChart = dynamic(() => import("react-apexcharts"), { ssr: false });
 
 const Jobs = () => {
@@ -40,6 +42,7 @@ const Jobs = () => {
     const [jobs, setJobs] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [userDataMap, setUserDataMap] = useState<Record<string, any>>({});
     const [searchQuery, setSearchQuery] = useState('');
     const [jobTypeFilter, setJobTypeFilter] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
@@ -68,6 +71,57 @@ const Jobs = () => {
         return params;
     };
 
+    // Fetch user data by ID
+    const fetchUserById = async (userId: string): Promise<any> => {
+        try {
+            const response = await api.get(`${Users_API}/${userId}`);
+            return response.data;
+        } catch (err: any) {
+            console.error(`Failed to fetch user ${userId}:`, err);
+            return null;
+        }
+    };
+
+    // Fetch user data for all unique createdBy IDs
+    const fetchUsersForJobs = async (jobsList: any[]) => {
+        // Get unique createdBy IDs
+        const userIdsSet = new Set(
+            jobsList
+                .map(job => job.createdBy)
+                .filter(id => id && typeof id === 'string')
+        );
+        const uniqueUserIds = Array.from(userIdsSet);
+
+        // Fetch user data for each unique ID
+        const userDataPromises = uniqueUserIds.map(async (userId) => {
+            const userData = await fetchUserById(userId);
+            return { userId, userData };
+        });
+
+        const userDataResults = await Promise.all(userDataPromises);
+        
+        // Create a map of userId -> userData
+        const userMap: Record<string, any> = {};
+        userDataResults.forEach(({ userId, userData }) => {
+            if (userData) {
+                userMap[userId] = userData;
+            }
+        });
+
+        setUserDataMap(userMap);
+
+        // Map user data to jobs
+        return jobsList.map(job => {
+            if (job.createdBy && typeof job.createdBy === 'string' && userMap[job.createdBy]) {
+                return {
+                    ...job,
+                    createdBy: userMap[job.createdBy]
+                };
+            }
+            return job;
+        });
+    };
+
     const fetchJobs = useCallback(async () => {
         setLoading(true);
         setError(null);
@@ -83,19 +137,24 @@ const Jobs = () => {
 
             const response = await getAllJobs(params);
             
+            let jobsList: any[] = [];
             if (response && response.results) {
-                setJobs(response.results);
+                jobsList = response.results;
                 setTotalPages(response.totalPages || 1);
                 setTotalResults(response.totalResults || 0);
             } else if (Array.isArray(response)) {
-                setJobs(response);
+                jobsList = response;
                 setTotalPages(1);
                 setTotalResults(response.length);
             } else {
-                setJobs([]);
+                jobsList = [];
                 setTotalPages(1);
                 setTotalResults(0);
             }
+
+            // Fetch user data for createdBy fields
+            const jobsWithUserData = await fetchUsersForJobs(jobsList);
+            setJobs(jobsWithUserData);
         } catch (err: any) {
             setError(err?.message || 'Failed to fetch jobs');
             setJobs([]);
@@ -557,7 +616,7 @@ const Jobs = () => {
                                                     <th scope="col" className="text-start">Experience</th>
                                                     <th scope="col" className="text-start">Salary Range</th>
                                                     <th scope="col" className="text-start">Status</th>
-                                                    <th scope="col" className="text-start">Created</th>
+                                                    <th scope="col" className="text-start">Created By</th>
                                                     <th scope="col" className="text-start">Action</th>
                                                 </tr>
                                             </thead>
@@ -634,12 +693,45 @@ const Jobs = () => {
                                                                 </span>
                                                             </td>
                                                             <td>
-                                                                <div className="text-[0.75rem]">
-                                                                    {formatDate(job.createdAt)}
-                                                                </div>
                                                                 {job.createdBy && (
                                                                     <div className="text-[0.625rem] text-[#8c9097] dark:text-white/50">
-                                                                        by {job.createdBy.name || job.createdBy.email || '-'}
+                                                                        {(() => {
+                                                                            let userData: any = null;
+                                                                            
+                                                                            // If createdBy is already an object with user data
+                                                                            if (typeof job.createdBy === 'object' && job.createdBy !== null) {
+                                                                                userData = job.createdBy;
+                                                                            }
+                                                                            // If createdBy is a string ID, look it up in userDataMap
+                                                                            else if (typeof job.createdBy === 'string') {
+                                                                                userData = userDataMap[job.createdBy];
+                                                                            }
+                                                                            
+                                                                            if (userData) {
+                                                                                const name = userData.name || '';
+                                                                                const email = userData.email || '';
+                                                                                
+                                                                                if (name && email) {
+                                                                                    return (
+                                                                                        <>
+                                                                                            <div className="font-semibold">{name}</div>
+                                                                                            <div>{email}</div>
+                                                                                        </>
+                                                                                    );
+                                                                                } else if (name) {
+                                                                                    return <div className="font-semibold">{name}</div>;
+                                                                                } else if (email) {
+                                                                                    return <div className="font-semibold">{email}</div>;
+                                                                                }
+                                                                            }
+                                                                            
+                                                                            // Fallback: show ID if it's a string, or nothing if not found
+                                                                            if (typeof job.createdBy === 'string') {
+                                                                                return job.createdBy;
+                                                                            }
+                                                                            
+                                                                            return null;
+                                                                        })()}
                                                                     </div>
                                                                 )}
                                                             </td>

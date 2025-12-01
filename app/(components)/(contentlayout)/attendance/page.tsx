@@ -81,8 +81,10 @@ export default function AttendancePage() {
             return byOwner || byEmail;
           });
           
-          if (match?.id) {
-            setCandidateId(match.id);
+          // Handle both id and _id fields
+          const matchedCandidateId = match?.id || match?._id;
+          if (matchedCandidateId) {
+            setCandidateId(matchedCandidateId);
           }
         }
       } catch (e) {
@@ -170,9 +172,11 @@ export default function AttendancePage() {
     }
   };
 
-  const formatDuration = (milliseconds: number) => {
-    if (!milliseconds || milliseconds === 0) return 'N/A';
+  const formatDuration = (duration: number | null | undefined) => {
+    if (duration === null || duration === undefined || duration === 0) return 'N/A';
     
+    // Assume duration is in milliseconds
+    const milliseconds = duration;
     const hours = Math.floor(milliseconds / (1000 * 60 * 60));
     const minutes = Math.floor((milliseconds % (1000 * 60 * 60)) / (1000 * 60));
     
@@ -294,8 +298,8 @@ export default function AttendancePage() {
                     </td>
                   </tr>
                 )}
-                {!loading && filteredAttendance.map((record) => (
-                  <tr key={record.id} className="hover:bg-gray-50">
+                {!loading && filteredAttendance.map((record, index) => (
+                  <tr key={record.id || record.candidate?.id || `record-${index}`} className="hover:bg-gray-50">
                     <td className="px-4 py-2 text-gray-700">
                       {formatDate(record.date)}
                     </td>

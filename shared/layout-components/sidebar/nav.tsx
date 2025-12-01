@@ -181,6 +181,7 @@ export const useMenuItems = () => {
           "/master/jobs/templates",
           "/master/jobs/create-template",
           "/logs",
+          "/logs/recruiter-logs",
         ];
         const isSettingsSectionActive = settingsRoutes.some((route) =>
           isRouteMatch(route, pathname ?? "")
@@ -349,12 +350,131 @@ export const useMenuItems = () => {
                 ],
               },
               {
-                path: "/logs",
                 title: "Logs",
-                type: "link",
-                active: true,
-                selected: isRouteMatch("/logs", pathname ?? ""),
-                dirchange: false,
+                type: "sub",
+                active: isMasterSectionActive,
+                selected: isMasterSectionActive,
+                children: [
+                  {
+                    path: "/logs",
+                    title: "Login Logs",
+                    type: "link",
+                    active: true,
+                    selected: isRouteMatch("/logs", pathname ?? ""),
+                    dirchange: false,
+                  },
+                  {
+                    path: "/logs/recruiter-logs",
+                    title: "Recruiter Logs",
+                    type: "link",
+                    active: true,
+                    selected: isRouteMatch("/logs/recruiter-logs", pathname ?? ""),
+                    dirchange: false,
+                  },
+                ],
+              }
+            ],
+          },
+        );
+      }
+
+      // Show for recruiters
+      if (userRole === "recruiter") {
+        const recruiterCandidateRoutes = [
+          "/candidates",
+        ];
+        const isRecruiterCandidatesSectionActive = recruiterCandidateRoutes.some((route) =>
+          isRouteMatch(route, pathname ?? "")
+        );
+
+        const recruiterJobRoutes = [
+          "/jobs/manage-jobs",
+        ];
+        const isRecruiterJobsSectionActive = recruiterJobRoutes.some((route) =>
+          isRouteMatch(route, pathname ?? "")
+        );
+
+        const recruiterInterviewRoutes = [
+          "/generate-meeting-link",
+          "/manage-meetings",
+        ];
+        const isRecruiterInterviewsSectionActive = recruiterInterviewRoutes.some((route) =>
+          isRouteMatch(route, pathname ?? "")
+        );
+
+        const recruiterATSRoutes = [
+          "/candidates",
+          "/jobs/manage-jobs",
+          "/generate-meeting-link",
+          "/manage-meetings",
+        ];
+        const isRecruiterATSSectionActive = recruiterATSRoutes.some((route) =>
+          isRouteMatch(route, pathname ?? "")
+        );
+
+        items.push(
+          {
+            icon: JobIcon,
+            title: "ATS",
+            type: "sub",
+            active: isRecruiterATSSectionActive,
+            selected: isRecruiterATSSectionActive,
+            children: [
+              {
+                title: "Candidates",
+                type: "sub",
+                active: isRecruiterCandidatesSectionActive,
+                selected: isRecruiterCandidatesSectionActive,
+                children: [
+                  {
+                    path: "/candidates",
+                    title: "Candidates",
+                    type: "link",
+                    active: true,
+                    selected: isRouteMatch("/candidates", pathname ?? ""),
+                    dirchange: false,
+                  },
+                ],
+              },
+              {
+                title: "Jobs",
+                type: "sub",
+                active: isRecruiterJobsSectionActive,
+                selected: isRecruiterJobsSectionActive,
+                children: [
+                  {
+                    path: "/jobs/manage-jobs",
+                    title: "Manage Jobs",
+                    type: "link",
+                    active: true,
+                    selected: isRouteMatch("/jobs/manage-jobs", pathname ?? ""),
+                    dirchange: false,
+                  },
+                ],
+              },
+              {
+                title: "Interviews",
+                type: "sub",
+                active: isRecruiterInterviewsSectionActive,
+                selected: isRecruiterInterviewsSectionActive,
+                children: [
+                  {
+                    path: "/generate-meeting-link",
+                    title: "Generate Meeting Link",
+                    type: "link",
+                    active: true,
+                    selected: isRouteMatch("/generate-meeting-link", pathname ?? ""),
+                    dirchange: false,
+                  },
+                  {
+                    path: "/manage-meetings",
+                    title: "Manage Meetings",
+                    type: "link",
+                    active: true,
+                    selected: isRouteMatch("/manage-meetings", pathname ?? ""),
+                    dirchange: false,
+                  },
+                ],
               },
             ],
           },

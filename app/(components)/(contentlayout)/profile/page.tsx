@@ -395,14 +395,37 @@ const profile = () => {
     };
 
     // Punch In/Out Handlers (candidate only on own profile)
-    const canPunch = currentUser?.role === 'user' && profileData?.id && String(profileData?.owner) === String(currentUser?.id);
+    const candidateId = profileData?.id || profileData?._id;
+    const profileOwner = profileData?.owner;
+    const userId = currentUser?.id;
+    const userEmail = currentUser?.email;
+    const profileEmail = profileData?.email;
+    
+    // Check if user owns the profile by owner ID or email match (fallback)
+    const ownsProfile = profileOwner && String(profileOwner) === String(userId);
+    const emailMatches = userEmail && profileEmail && userEmail.toLowerCase() === profileEmail.toLowerCase();
+    const canPunch = currentUser?.role === 'user' && candidateId && (ownsProfile || emailMatches);
+    
+    // Debug logging (remove in production if needed)
+    if (process.env.NODE_ENV === 'development') {
+        console.log('Punch In/Out Debug:', {
+            userRole: currentUser?.role,
+            candidateId,
+            profileOwner,
+            userId,
+            ownsProfile,
+            emailMatches,
+            canPunch,
+            hasProfileData: !!profileData
+        });
+    }
 
     // Fetch current punch status from API when profile loads or changes
     useEffect(() => {
         const fetchStatus = async () => {
             try {
-                if (!canPunch) return;
-                const res = await getPunchInOutStatus(profileData.id);
+                if (!canPunch || !candidateId) return;
+                const res = await getPunchInOutStatus(candidateId);
                 const activeValue = (res?.isPunchedIn !== undefined) ? res.isPunchedIn : (res?.data?.isActive ?? res?.isActive);
                 const active = activeValue === true;
                 setPunchedIn(active);
@@ -414,14 +437,13 @@ const profile = () => {
         };
         fetchStatus();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [canPunch, profileData?.id]);
+    }, [canPunch, candidateId]);
 
     const handlePunchIn = async () => {
-        if (!canPunch) return;
+        if (!canPunch || !candidateId) return;
         try {
             setIsPunching(true);
             const nowIso = new Date().toISOString();
-            const candidateId = profileData.id;
             const res = await punchInAttendance(candidateId, { punchInTime: nowIso, notes: "Starting shift" as any });
             setPunchedIn(true);
             setPunchStatusData(res?.data || res);
@@ -448,11 +470,10 @@ const profile = () => {
     };
 
     const handlePunchOut = async () => {
-        if (!canPunch) return;
+        if (!canPunch || !candidateId) return;
         try {
             setIsPunching(true);
             const nowIso = new Date().toISOString();
-            const candidateId = profileData.id;
             const res = await punchOutAttendance(candidateId, { punchOutTime: nowIso, notes: "Ending shift" as any });
             setPunchedIn(false);
             setPunchStatusData(res?.data || res);

@@ -448,7 +448,7 @@ const Header = ({ local_varaiable, ThemeChanger }:any) => {
                     {userData?.fullName || userData?.name || userData?.firstName || 'User'}
                   </p>
                   <span className="opacity-[0.7] font-normal text-[#536485] block text-[0.6875rem] ">
-                    {userData?.role === 'admin' ? 'Administrator' : userData?.role === 'user' ? 'Candidate' : 'User'}
+                    {userData?.role === 'admin' ? 'Administrator' : userData?.role === 'user' ? 'Candidate' : userData?.role.charAt(0).toUpperCase() + userData?.role.slice(1)}
                   </span>
                 </div>
                 <div

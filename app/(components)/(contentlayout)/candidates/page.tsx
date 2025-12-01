@@ -6,7 +6,7 @@ const Select = dynamic(() => import("react-select"), {ssr : false});
 import dynamic from 'next/dynamic';
 import Swal from "sweetalert2";
 import { useEffect, useState, useCallback } from 'react';
-import { fetchAllCandidates, deleteCandidate, addCandidateSalarySlips, uploadDocuments, fetchCandidateDocuments, verifyDocument, shareCandidate, getAttendanceByCandidate, resendEmailVerification } from '@/shared/lib/candidates';
+import { fetchAllCandidates, deleteCandidate, addCandidateSalarySlips, uploadDocuments, fetchCandidateDocuments, verifyDocument, shareCandidate, getAttendanceByCandidate, resendEmailVerification, addNoteToCandidate, addFeedbackToCandidate, fetchCandidateById, fetchUserById } from '@/shared/lib/candidates';
 
 const Candidates = () => {
     const [canData, setCanData] = useState<any[]>([]);
@@ -63,6 +63,15 @@ const Candidates = () => {
     const [selectedCandidateForAttendance, setSelectedCandidateForAttendance] = useState<any>(null);
     const [candidateAttendance, setCandidateAttendance] = useState<any[]>([]);
     const [loadingAttendanceData, setLoadingAttendanceData] = useState<boolean>(false);
+    const [showNotesModal, setShowNotesModal] = useState<boolean>(false);
+    const [showFeedbackModal, setShowFeedbackModal] = useState<boolean>(false);
+    const [selectedCandidateForNotes, setSelectedCandidateForNotes] = useState<any>(null);
+    const [noteText, setNoteText] = useState<string>('');
+    const [feedbackText, setFeedbackText] = useState<string>('');
+    const [feedbackRating, setFeedbackRating] = useState<number>(5);
+    const [addingNote, setAddingNote] = useState<boolean>(false);
+    const [addingFeedback, setAddingFeedback] = useState<boolean>(false);
+    const [recruiterDetails, setRecruiterDetails] = useState<Record<string, { name: string; email: string }>>({});
 
     // Build filter parameters
     const buildFilterParams = () => {
@@ -138,6 +147,64 @@ const Candidates = () => {
         getCandidates();
     }, [getCandidates]);
 
+    // Fetch recruiter details for notes
+    useEffect(() => {
+        const fetchRecruiterDetails = async () => {
+            const recruiterIds = new Set<string>();
+            
+            // Collect all unique recruiter IDs from notes
+            canData.forEach((candidate: any) => {
+                if (Array.isArray(candidate.recruiterNotes)) {
+                    candidate.recruiterNotes.forEach((note: any) => {
+                        const recruiterId = typeof note.addedBy === 'string' ? note.addedBy : note.addedBy?.id || note.addedBy?._id;
+                        if (recruiterId) {
+                            recruiterIds.add(recruiterId);
+                        }
+                    });
+                }
+            });
+
+            // Filter out IDs we already have
+            const idsToFetch = Array.from(recruiterIds).filter(id => !recruiterDetails[id]);
+
+            if (idsToFetch.length === 0) return;
+
+            // Fetch details for all unique recruiter IDs
+            const fetchPromises = idsToFetch.map(async (recruiterId) => {
+                try {
+                    const userData = await fetchUserById(recruiterId);
+                    return {
+                        id: recruiterId,
+                        name: userData?.name || userData?.fullName || 'Unknown',
+                        email: userData?.email || 'N/A'
+                    };
+                } catch (error) {
+                    console.warn(`Failed to fetch recruiter ${recruiterId}:`, error);
+                    return {
+                        id: recruiterId,
+                        name: 'Unknown',
+                        email: 'N/A'
+                    };
+                }
+            });
+
+            const results = await Promise.all(fetchPromises);
+            const newRecruiterDetails: Record<string, { name: string; email: string }> = {};
+            results.forEach((result) => {
+                newRecruiterDetails[result.id] = { name: result.name, email: result.email };
+            });
+
+            if (Object.keys(newRecruiterDetails).length > 0) {
+                setRecruiterDetails((prev) => ({ ...prev, ...newRecruiterDetails }));
+            }
+        };
+
+        if (canData.length > 0) {
+            fetchRecruiterDetails();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [canData]);
+
     // Debounce search input
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -152,10 +219,50 @@ const Candidates = () => {
     }, [searchValue, searchFilter]);
 
     // Function to open candidate details modal
-    const openCandidateModal = (candidate: any) => {
+    const openCandidateModal = async (candidate: any) => {
         setSelectedCandidate(candidate);
         setShowModal(true);
         setActiveTab('personal');
+        
+        // Fetch recruiter details for this candidate's notes
+        if (Array.isArray(candidate.recruiterNotes) && candidate.recruiterNotes.length > 0) {
+            const recruiterIds = candidate.recruiterNotes
+                .map((note: any) => {
+                    const recruiterId = typeof note.addedBy === 'string' ? note.addedBy : note.addedBy?.id || note.addedBy?._id;
+                    return recruiterId;
+                })
+                .filter((id: string | undefined) => id && !recruiterDetails[id]);
+            
+            if (recruiterIds.length > 0) {
+                const fetchPromises = recruiterIds.map(async (recruiterId: string) => {
+                    try {
+                        const userData = await fetchUserById(recruiterId);
+                        return {
+                            id: recruiterId,
+                            name: userData?.name || userData?.fullName || 'Unknown',
+                            email: userData?.email || 'N/A'
+                        };
+                    } catch (error) {
+                        console.warn(`Failed to fetch recruiter ${recruiterId}:`, error);
+                        return {
+                            id: recruiterId,
+                            name: 'Unknown',
+                            email: 'N/A'
+                        };
+                    }
+                });
+
+                const results = await Promise.all(fetchPromises);
+                const newRecruiterDetails: Record<string, { name: string; email: string }> = {};
+                results.forEach((result) => {
+                    newRecruiterDetails[result.id] = { name: result.name, email: result.email };
+                });
+
+                if (Object.keys(newRecruiterDetails).length > 0) {
+                    setRecruiterDetails((prev) => ({ ...prev, ...newRecruiterDetails }));
+                }
+            }
+        }
     };
 
     // Function to close modal
@@ -358,6 +465,130 @@ const Candidates = () => {
         setShowAttendanceModal(false);
         setSelectedCandidateForAttendance(null);
         setCandidateAttendance([]);
+    };
+
+    // Function to open notes modal
+    const openNotesModal = (candidate: any) => {
+        setSelectedCandidateForNotes(candidate);
+        setNoteText('');
+        setShowNotesModal(true);
+    };
+
+    // Function to close notes modal
+    const closeNotesModal = () => {
+        setShowNotesModal(false);
+        setSelectedCandidateForNotes(null);
+        setNoteText('');
+    };
+
+    // Function to add note to candidate
+    const handleAddNote = async () => {
+        if (!noteText.trim() || !selectedCandidateForNotes) return;
+
+        try {
+            setAddingNote(true);
+            const candidateId = selectedCandidateForNotes?.id || selectedCandidateForNotes?._id;
+            await addNoteToCandidate(candidateId, noteText.trim());
+            
+            await Swal.fire({
+                icon: 'success',
+                title: 'Note Added!',
+                text: 'Note has been added successfully.',
+                timer: 2000,
+                showConfirmButton: false
+            });
+
+            // Refresh candidate data
+            const updatedCandidate = await fetchCandidateById(candidateId);
+            if (updatedCandidate) {
+                // Update the candidate in the list
+                setCanData((prev) => 
+                    prev.map((c: any) => {
+                        const cId = c?.id || c?._id;
+                        return cId === candidateId ? updatedCandidate : c;
+                    })
+                );
+                // Update selected candidate if modal is open
+                if (selectedCandidate && (selectedCandidate?.id || selectedCandidate?._id) === candidateId) {
+                    setSelectedCandidate(updatedCandidate);
+                }
+            }
+
+            closeNotesModal();
+        } catch (error: any) {
+            console.error('Add note error:', error);
+            await Swal.fire({
+                icon: 'error',
+                title: 'Failed to Add Note',
+                text: error?.response?.data?.message || error?.message || 'Failed to add note. Please try again.',
+                confirmButtonText: 'OK'
+            });
+        } finally {
+            setAddingNote(false);
+        }
+    };
+
+    // Function to open feedback modal
+    const openFeedbackModal = (candidate: any) => {
+        setSelectedCandidateForNotes(candidate);
+        setFeedbackText(candidate?.recruiterFeedback || '');
+        setFeedbackRating(candidate?.recruiterRating || 5);
+        setShowFeedbackModal(true);
+    };
+
+    // Function to close feedback modal
+    const closeFeedbackModal = () => {
+        setShowFeedbackModal(false);
+        setSelectedCandidateForNotes(null);
+        setFeedbackText('');
+        setFeedbackRating(5);
+    };
+
+    // Function to add feedback to candidate
+    const handleAddFeedback = async () => {
+        if (!feedbackText.trim() || !selectedCandidateForNotes) return;
+
+        try {
+            setAddingFeedback(true);
+            const candidateId = selectedCandidateForNotes?.id || selectedCandidateForNotes?._id;
+            await addFeedbackToCandidate(candidateId, feedbackText.trim(), feedbackRating);
+            
+            await Swal.fire({
+                icon: 'success',
+                title: 'Feedback Added!',
+                text: 'Feedback has been added successfully.',
+                timer: 2000,
+                showConfirmButton: false
+            });
+
+            // Refresh candidate data
+            const updatedCandidate = await fetchCandidateById(candidateId);
+            if (updatedCandidate) {
+                // Update the candidate in the list
+                setCanData((prev) => 
+                    prev.map((c: any) => {
+                        const cId = c?.id || c?._id;
+                        return cId === candidateId ? updatedCandidate : c;
+                    })
+                );
+                // Update selected candidate if modal is open
+                if (selectedCandidate && (selectedCandidate?.id || selectedCandidate?._id) === candidateId) {
+                    setSelectedCandidate(updatedCandidate);
+                }
+            }
+
+            closeFeedbackModal();
+        } catch (error: any) {
+            console.error('Add feedback error:', error);
+            await Swal.fire({
+                icon: 'error',
+                title: 'Failed to Add Feedback',
+                text: error?.response?.data?.message || error?.message || 'Failed to add feedback. Please try again.',
+                confirmButtonText: 'OK'
+            });
+        } finally {
+            setAddingFeedback(false);
+        }
     };
 
     // Format duration to hours
@@ -1085,9 +1316,11 @@ const Candidates = () => {
                                                             >
                                                                 <i className="ri-user-line"></i>
                                                             </button> */}
-                                                            <Link aria-label="anchor" href={`/candidates/edit?id=${encodeURIComponent(String(can?.id ?? can?._id))}`} scroll={false} className="ti-btn ti-btn-icon ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-info/10 text-info hover:bg-info hover:text-white hover:border-info">
-                                                                <i className="ri-pencil-line"></i>
-                                                            </Link>
+                                                            {userRole === 'admin' && (
+                                                                <Link aria-label="anchor" href={`/candidates/edit?id=${encodeURIComponent(String(can?.id ?? can?._id))}`} scroll={false} className="ti-btn ti-btn-icon ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-info/10 text-info hover:bg-info hover:text-white hover:border-info">
+                                                                    <i className="ri-pencil-line"></i>
+                                                                </Link>
+                                                            )}
                                                             <button 
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
@@ -1110,16 +1343,18 @@ const Candidates = () => {
                                                                     <i className="ri-file-add-line"></i>
                                                                 </button>
                                                             )}
-                                                            <button 
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    openShareModal(can);
-                                                                }}
-                                                                className="ti-btn ti-btn-icon ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-primary/10 text-primary hover:bg-primary hover:text-white hover:border-primary"
-                                                                title="Share Candidate"
-                                                            >
-                                                                <i className="ri-share-line"></i>
-                                                            </button>
+                                                            {userRole === 'admin' && (
+                                                                <button 
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        openShareModal(can);
+                                                                    }}
+                                                                    className="ti-btn ti-btn-icon ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-primary/10 text-primary hover:bg-primary hover:text-white hover:border-primary"
+                                                                    title="Share Candidate"
+                                                                >
+                                                                    <i className="ri-share-line"></i>
+                                                                </button>
+                                                            )}
                                                             <button 
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
@@ -1158,42 +1393,69 @@ const Candidates = () => {
                                                                 </button>
                                                             )}
 
-                                                            <button type="button"
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    Swal.fire({
-                                                                        title: "Are you sure?",
-                                                                        text: "You won't be able to revert this!",
-                                                                        icon: "warning",
-                                                                        showCancelButton: true,
-                                                                        confirmButtonColor: "#3085d6",
-                                                                        cancelButtonColor: "#d33",
-                                                                        confirmButtonText: "Yes, delete it!",
-                                                                    }).then(async (result) => {
-                                                                        if (result.isConfirmed) {
-                                                                            try {
-                                                                                await deleteCandidate(String(can?.id ?? can?._id));
-                                                                                // Refresh candidates list after deletion
-                                                                                getCandidates();
-                                                                                await Swal.fire(
-                                                                                    "Deleted!",
-                                                                                    "The candidate has been deleted.",
-                                                                                    "success"
-                                                                                );
-                                                                            } catch (e: any) {
-                                                                                await Swal.fire(
-                                                                                    "Delete failed",
-                                                                                    e?.message || "Unable to delete candidate.",
-                                                                                    "error"
-                                                                                );
+                                                            {(userRole === 'admin' || userRole === 'recruiter') && (
+                                                                <>
+                                                                    <button 
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            openNotesModal(can);
+                                                                        }}
+                                                                        className="ti-btn ti-btn-icon ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500 hover:text-white hover:border-indigo-500"
+                                                                        title="Add Note"
+                                                                    >
+                                                                        <i className="ri-file-text-line"></i>
+                                                                    </button>
+                                                                    <button 
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            openFeedbackModal(can);
+                                                                        }}
+                                                                        className="ti-btn ti-btn-icon ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-amber-500/10 text-amber-500 hover:bg-amber-500 hover:text-white hover:border-amber-500"
+                                                                        title="Add Feedback"
+                                                                    >
+                                                                        <i className="ri-feedback-line"></i>
+                                                                    </button>
+                                                                </>
+                                                            )}
+
+                                                            {userRole === 'admin' && (
+                                                                <button type="button"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        Swal.fire({
+                                                                            title: "Are you sure?",
+                                                                            text: "You won't be able to revert this!",
+                                                                            icon: "warning",
+                                                                            showCancelButton: true,
+                                                                            confirmButtonColor: "#3085d6",
+                                                                            cancelButtonColor: "#d33",
+                                                                            confirmButtonText: "Yes, delete it!",
+                                                                        }).then(async (result) => {
+                                                                            if (result.isConfirmed) {
+                                                                                try {
+                                                                                    await deleteCandidate(String(can?.id ?? can?._id));
+                                                                                    // Refresh candidates list after deletion
+                                                                                    getCandidates();
+                                                                                    await Swal.fire(
+                                                                                        "Deleted!",
+                                                                                        "The candidate has been deleted.",
+                                                                                        "success"
+                                                                                    );
+                                                                                } catch (e: any) {
+                                                                                    await Swal.fire(
+                                                                                        "Delete failed",
+                                                                                        e?.message || "Unable to delete candidate.",
+                                                                                        "error"
+                                                                                    );
+                                                                                }
                                                                             }
-                                                                        }
-                                                                    });
-                                                                }}
-                                                                className="ti-btn ti-btn-icon ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-danger/10 text-danger hover:bg-danger hover:text-white hover:border-danger"
-                                                            >
-                                                                <i className="ri-delete-bin-line"></i>
-                                                            </button>
+                                                                        });
+                                                                    }}
+                                                                    className="ti-btn ti-btn-icon ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-danger/10 text-danger hover:bg-danger hover:text-white hover:border-danger"
+                                                                >
+                                                                    <i className="ri-delete-bin-line"></i>
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -1325,7 +1587,8 @@ const Candidates = () => {
                                             { id: 'skills', label: 'Skills', icon: 'ri-tools-line' },
                                             { id: 'documents', label: 'Documents', icon: 'ri-file-line' },
                                             { id: 'salary', label: 'Salary Slips', icon: 'ri-money-dollar-box-line' },
-                                            { id: 'social', label: 'Social Links', icon: 'ri-links-line' }
+                                            { id: 'social', label: 'Social Links', icon: 'ri-links-line' },
+                                            ...((userRole === 'admin' || userRole === 'recruiter') ? [{ id: 'notes', label: 'Notes & Feedback', icon: 'ri-file-text-line' }] : [])
                                         ].map((tab) => (
                                             <button
                                                 key={tab.id}
@@ -1700,6 +1963,107 @@ const Candidates = () => {
                                         </div>
                                     )}
 
+                                    {activeTab === 'notes' && (userRole === 'admin' || userRole === 'recruiter') && (
+                                        <div className="space-y-4">
+                                            <div className="flex items-center justify-between mb-4">
+                                                <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Notes & Feedback</h4>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => openNotesModal(selectedCandidate)}
+                                                        className="ti-btn ti-btn-primary !bg-primary !text-white !py-1 !px-2 !text-[0.75rem] !m-0 !gap-0 !font-medium"
+                                                    >
+                                                        <i className="ri-file-text-line me-1"></i>
+                                                        Add Note
+                                                    </button>
+                                                    <button
+                                                        onClick={() => openFeedbackModal(selectedCandidate)}
+                                                        className="ti-btn ti-btn-primary !bg-primary !text-white !py-1 !px-2 !text-[0.75rem] !m-0 !gap-0 !font-medium"
+                                                    >
+                                                        <i className="ri-feedback-line me-1"></i>
+                                                        Add Feedback
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {/* Recruiter Notes */}
+                                            <div className="mb-6">
+                                                <h5 className="text-md font-semibold text-gray-900 dark:text-white mb-3">Recruiter Notes</h5>
+                                                {Array.isArray(selectedCandidate?.recruiterNotes) && selectedCandidate.recruiterNotes.length > 0 ? (
+                                                    <div className="space-y-3">
+                                                        {selectedCandidate.recruiterNotes.map((note: any, index: number) => {
+                                                            // Get recruiter details - handle both string ID and object
+                                                            const recruiterId = typeof note.addedBy === 'string' ? note.addedBy : note.addedBy?.id || note.addedBy?._id;
+                                                            const recruiterInfo = recruiterId && recruiterDetails[recruiterId] 
+                                                                ? recruiterDetails[recruiterId]
+                                                                : (typeof note.addedBy === 'object' && note.addedBy?.name 
+                                                                    ? { name: note.addedBy.name, email: note.addedBy.email || 'N/A' }
+                                                                    : { name: 'Unknown', email: 'N/A' });
+                                                            
+                                                            return (
+                                                                <div key={index} className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800">
+                                                                    <p className="text-sm text-gray-900 dark:text-white mb-3 whitespace-pre-wrap">{note.note}</p>
+                                                                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 pt-2">
+                                                                        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                                                                            <span className="flex items-center">
+                                                                                <i className="ri-user-line me-1"></i>
+                                                                                <span className="font-medium">{recruiterInfo.name}</span>
+                                                                            </span>
+                                                                            <span className="flex items-center">
+                                                                                <i className="ri-mail-line me-1"></i>
+                                                                                {recruiterInfo.email}
+                                                                            </span>
+                                                                        </div>
+                                                                        <span className="flex items-center">
+                                                                            <i className="ri-time-line me-1"></i>
+                                                                            {note.addedAt ? new Date(note.addedAt).toLocaleString() : 'N/A'}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                ) : (
+                                                    <div className="text-center py-8 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800">
+                                                        <i className="ri-file-text-line text-4xl text-gray-400 dark:text-gray-500 mb-2"></i>
+                                                        <p className="text-gray-500 dark:text-gray-400">No notes added yet</p>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Recruiter Feedback */}
+                                            <div>
+                                                <h5 className="text-md font-semibold text-gray-900 dark:text-white mb-3">Recruiter Feedback</h5>
+                                                {selectedCandidate?.recruiterFeedback ? (
+                                                    <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg bg-amber-50 dark:bg-amber-900/20">
+                                                        <div className="flex items-start justify-between mb-2">
+                                                            <div className="flex-1">
+                                                                {selectedCandidate.recruiterRating && (
+                                                                    <div className="flex items-center mb-2">
+                                                                        {[1, 2, 3, 4, 5].map((rating) => (
+                                                                            <i
+                                                                                key={rating}
+                                                                                className={`ri-star-${rating <= selectedCandidate.recruiterRating ? 'fill' : 'line'} text-amber-500`}
+                                                                            ></i>
+                                                                        ))}
+                                                                        <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">
+                                                                            ({selectedCandidate.recruiterRating}/5)
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+                                                                <p className="text-sm text-gray-900 dark:text-white whitespace-pre-wrap">{selectedCandidate.recruiterFeedback}</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="text-center py-8 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800">
+                                                        <i className="ri-feedback-line text-4xl text-gray-400 dark:text-gray-500 mb-2"></i>
+                                                        <p className="text-gray-500 dark:text-gray-400">No feedback added yet</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {activeTab === 'social' && (
                                         <div className="space-y-4">
                                             <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Social Links</h4>
@@ -1780,13 +2144,15 @@ const Candidates = () => {
                                 >
                                     Close
                                 </button>
-                                <Link
-                                    href={`/candidates/edit?id=${encodeURIComponent(String(selectedCandidate?.id ?? selectedCandidate?._id))}`}
-                                    className="ti-btn ti-btn-primary w-full sm:w-auto"
-                                >
-                                    <i className="ri-edit-line me-1"></i>
-                                    Edit Profile
-                                </Link>
+                                {userRole === 'admin' && (
+                                    <Link
+                                        href={`/candidates/edit?id=${encodeURIComponent(String(selectedCandidate?.id ?? selectedCandidate?._id))}`}
+                                        className="ti-btn ti-btn-primary w-full sm:w-auto"
+                                    >
+                                        <i className="ri-edit-line me-1"></i>
+                                        Edit Profile
+                                    </Link>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -2343,6 +2709,204 @@ const Candidates = () => {
                                     className="ti-btn ti-btn-primary"
                                 >
                                     Close
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Add Note Modal */}
+            {showNotesModal && selectedCandidateForNotes && (
+                <div className="fixed inset-0 z-50 overflow-y-auto">
+                    <div className="flex items-center justify-center min-h-screen pt-4 px-2 sm:px-4 pb-20 text-center sm:block sm:p-0">
+                        {/* Background overlay */}
+                        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={closeNotesModal}></div>
+
+                        {/* Modal panel */}
+                        <div className="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all w-full max-w-md mx-auto sm:max-w-lg sm:my-8 sm:align-middle">
+                            {/* Modal header */}
+                            <div className="bg-white dark:bg-gray-800 px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center min-w-0 flex-1">
+                                        <div className="avatar avatar-md avatar-rounded me-3 flex-shrink-0">
+                                            <img src={selectedCandidateForNotes?.src || selectedCandidateForNotes?.profilePicture?.url || "/assets/images/faces/1.jpg"} alt="Candidate" />
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white truncate">
+                                                Add Note
+                                            </h3>
+                                            <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate">
+                                                {selectedCandidateForNotes?.fullName}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={closeNotesModal}
+                                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex-shrink-0 ml-2"
+                                    >
+                                        <i className="ri-close-line text-xl"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Modal body */}
+                            <div className="bg-white dark:bg-gray-800 px-4 sm:px-6 py-4">
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                            Note <span className="text-red-500">*</span>
+                                        </label>
+                                        <textarea
+                                            value={noteText}
+                                            onChange={(e) => setNoteText(e.target.value)}
+                                            className="form-control w-full min-h-[120px]"
+                                            placeholder="Enter your note about this candidate..."
+                                            required
+                                            rows={5}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Modal footer */}
+                            <div className="bg-gray-50 dark:bg-gray-700 px-4 sm:px-6 py-3 flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3">
+                                <button
+                                    onClick={closeNotesModal}
+                                    className="ti-btn ti-btn-light w-full sm:w-auto"
+                                    disabled={addingNote}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleAddNote}
+                                    disabled={addingNote || !noteText.trim()}
+                                    className="ti-btn ti-btn-primary w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {addingNote ? (
+                                        <>
+                                            <i className="ri-loader-4-line animate-spin me-1"></i>
+                                            Adding...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <i className="ri-file-text-line me-1"></i>
+                                            Add Note
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Add Feedback Modal */}
+            {showFeedbackModal && selectedCandidateForNotes && (
+                <div className="fixed inset-0 z-50 overflow-y-auto">
+                    <div className="flex items-center justify-center min-h-screen pt-4 px-2 sm:px-4 pb-20 text-center sm:block sm:p-0">
+                        {/* Background overlay */}
+                        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={closeFeedbackModal}></div>
+
+                        {/* Modal panel */}
+                        <div className="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all w-full max-w-md mx-auto sm:max-w-lg sm:my-8 sm:align-middle">
+                            {/* Modal header */}
+                            <div className="bg-white dark:bg-gray-800 px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center min-w-0 flex-1">
+                                        <div className="avatar avatar-md avatar-rounded me-3 flex-shrink-0">
+                                            <img src={selectedCandidateForNotes?.src || selectedCandidateForNotes?.profilePicture?.url || "/assets/images/faces/1.jpg"} alt="Candidate" />
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white truncate">
+                                                Add Feedback
+                                            </h3>
+                                            <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate">
+                                                {selectedCandidateForNotes?.fullName}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={closeFeedbackModal}
+                                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex-shrink-0 ml-2"
+                                    >
+                                        <i className="ri-close-line text-xl"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Modal body */}
+                            <div className="bg-white dark:bg-gray-800 px-4 sm:px-6 py-4">
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                            Feedback <span className="text-red-500">*</span>
+                                        </label>
+                                        <textarea
+                                            value={feedbackText}
+                                            onChange={(e) => setFeedbackText(e.target.value)}
+                                            className="form-control w-full min-h-[120px]"
+                                            placeholder="Enter your feedback about this candidate..."
+                                            required
+                                            rows={5}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                            Rating (Optional)
+                                        </label>
+                                        <div className="flex items-center gap-2">
+                                            {[1, 2, 3, 4, 5].map((rating) => (
+                                                <button
+                                                    key={rating}
+                                                    type="button"
+                                                    onClick={() => setFeedbackRating(rating)}
+                                                    className={`w-10 h-10 rounded-full flex items-center justify-center text-lg transition-colors ${
+                                                        feedbackRating >= rating
+                                                            ? 'bg-amber-500 text-white'
+                                                            : 'bg-gray-200 dark:bg-gray-700 text-gray-400 hover:bg-gray-300 dark:hover:bg-gray-600'
+                                                    }`}
+                                                >
+                                                    <i className="ri-star-fill"></i>
+                                                </button>
+                                            ))}
+                                            <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">
+                                                {feedbackRating === 1 && 'Poor'}
+                                                {feedbackRating === 2 && 'Fair'}
+                                                {feedbackRating === 3 && 'Good'}
+                                                {feedbackRating === 4 && 'Very Good'}
+                                                {feedbackRating === 5 && 'Excellent'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Modal footer */}
+                            <div className="bg-gray-50 dark:bg-gray-700 px-4 sm:px-6 py-3 flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3">
+                                <button
+                                    onClick={closeFeedbackModal}
+                                    className="ti-btn ti-btn-light w-full sm:w-auto"
+                                    disabled={addingFeedback}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleAddFeedback}
+                                    disabled={addingFeedback || !feedbackText.trim()}
+                                    className="ti-btn ti-btn-primary w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {addingFeedback ? (
+                                        <>
+                                            <i className="ri-loader-4-line animate-spin me-1"></i>
+                                            Adding...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <i className="ri-feedback-line me-1"></i>
+                                            Add Feedback
+                                        </>
+                                    )}
                                 </button>
                             </div>
                         </div>

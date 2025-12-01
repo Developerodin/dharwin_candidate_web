@@ -18,7 +18,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     const user = JSON.parse(userData);
 
     // Role-based access control
-    if (pathname.startsWith("/candidates") && user.role !== "admin") {
+    if (pathname.startsWith("/candidates") && user.role !== "admin" && user.role !== "recruiter") {
       // Allow users to access edit form for their own profile
       if (pathname.startsWith("/candidates/edit")) {
         // This will be handled by the edit form component itself

@@ -1,5 +1,5 @@
 import api from './api';
-import { Attendance_API, Candidate_SalarySlips_API, Candidates_API, Documents_API, Export_Candidates_API, Fetch_Candidate_Documents_API, Forgot_Password_API, Join_Meeting_API, Logs_API, Meeting_API, Onboard_Candidate_API, Register_User_API, Share_Candidate_API, Transcription_API, Transcription_Download_API, Transcription_Start_API, Transcription_Status_API, Verify_Document_API } from './constants';
+import { Attendance_API, Candidate_SalarySlips_API, Candidates_API, Documents_API, Export_Candidates_API, Fetch_Candidate_Documents_API, Forgot_Password_API, Join_Meeting_API, Logs_API, Meeting_API, Onboard_Candidate_API, Register_User_API, Share_Candidate_API, Transcription_API, Transcription_Download_API, Transcription_Start_API, Transcription_Status_API, Users_API, Verify_Document_API } from './constants';
 
 // Fetch all leads with optional query parameters
 export const fetchAllCandidates = async (params?: {
@@ -432,5 +432,29 @@ export const shareMeeting = async (meetingId: string, shareData: {
 // resend email verification
 export const resendEmailVerification = async (candidateId: string) => {
   const response = await api.post(`${Candidates_API}/${candidateId}/resend-verification-email`);
+  return response.data;
+};
+
+// Add note to candidate (Recruiter and Admin only)
+export const addNoteToCandidate = async (candidateId: string, note: string) => {
+  const response = await api.post(`${Candidates_API}/${candidateId}/notes`, { note });
+  return response.data;
+};
+
+// Add feedback to candidate (Recruiter and Admin only)
+export const addFeedbackToCandidate = async (candidateId: string, feedback: string, rating?: number) => {
+  const response = await api.post(`${Candidates_API}/${candidateId}/feedback`, { feedback, rating });
+  return response.data;
+};
+
+// Assign recruiter to candidate (Admin only)
+export const assignRecruiterToCandidate = async (candidateId: string, recruiterId: string) => {
+  const response = await api.post(`${Candidates_API}/${candidateId}/assign-recruiter`, { recruiterId });
+  return response.data;
+};
+
+// Fetch user by ID (for recruiters, admins, etc.)
+export const fetchUserById = async (userId: string) => {
+  const response = await api.get(`${Users_API}/${userId}`);
   return response.data;
 };

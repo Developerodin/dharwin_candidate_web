@@ -22,7 +22,12 @@ type Meeting = {
   isRecurring: boolean;
   meetingUrl: string;
   joinToken: string;
-  createdBy: string;
+  createdBy: string | {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+  };
   participants: any[];
   hostParticipants: any[];
   channelName: string;
@@ -423,20 +428,21 @@ export default function ManageMeetingsPage() {
                 <th className="px-4 py-2 font-medium text-gray-700">Scheduled</th>
                 <th className="px-4 py-2 font-medium text-gray-700">Duration</th>
                 <th className="px-4 py-2 font-medium text-gray-700">Participants</th>
+                <th className="px-4 py-2 font-medium text-gray-700">Created By</th>
                 <th className="px-4 py-2 font-medium text-gray-700 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
               {loading && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-sm text-gray-500">
+                  <td colSpan={7} className="px-4 py-6 text-center text-sm text-gray-500">
                     Loading meetings...
                   </td>
                 </tr>
               )}
               {!loading && displayedMeetings.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-sm text-gray-500">
+                  <td colSpan={7} className="px-4 py-6 text-center text-sm text-gray-500">
                     No meetings found{statusFilter !== 'all' ? ` for status "${statusFilter}"` : ''}
                   </td>
                 </tr>
@@ -466,6 +472,19 @@ export default function ManageMeetingsPage() {
                   <td className="px-4 py-2 text-gray-700">
                     <div>{m.currentParticipants}/{m.maxParticipants}</div>
                     <div className="text-xs text-gray-500">Total: {m.totalJoined}</div>
+                  </td>
+                  <td className="px-4 py-2">
+                    {m.createdBy && typeof m.createdBy === 'object' && m.createdBy !== null ? (
+                      <div className="text-sm">
+                        <div className="font-semibold text-gray-900">{m.createdBy.name || '-'}</div>
+                        <div className="text-xs text-gray-600">{m.createdBy.email || '-'}</div>
+                        <div className="text-xs text-gray-500 text-primary">{m.createdBy.role || '-'}</div>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-gray-500">
+                        {typeof m.createdBy === 'string' ? m.createdBy : '-'}
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-2">
                     <div className="flex items-center justify-end gap-2">

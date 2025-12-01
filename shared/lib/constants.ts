@@ -83,3 +83,6 @@ export const Dashboard_API = `${DASHBOARD_URL}`;
 
 // Users API (for recruiters, supervisors, etc.)
 export const Users_API = `${BASE_API_URL}/users`;
+
+// Recruiter Activities API
+export const Recruiter_Activities_API = `${BASE_API_URL}/recruiter-activities`;
