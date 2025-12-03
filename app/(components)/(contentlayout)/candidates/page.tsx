@@ -1011,9 +1011,9 @@ const Candidates = () => {
                                     
                                     {/* Skills Filter */}
                                     <div className="lg:col-span-4 md:col-span-6 col-span-12">
-                                        <label className="form-label text-sm">Skills (comma-separated)</label>
+                                        <label className="form-label text-sm block mb-1">Skills (comma-separated)</label>
                                         <input
-                                            className="ti-form-control form-control-sm"
+                                            className="ti-form-control form-control-sm w-full"
                                             type="text"
                                             placeholder="e.g., JavaScript, React, Node.js"
                                             value={skills}
@@ -1026,9 +1026,9 @@ const Candidates = () => {
                                     
                                     {/* Skill Level */}
                                     <div className="lg:col-span-2 md:col-span-6 col-span-12">
-                                        <label className="form-label text-sm">Skill Level</label>
+                                        <label className="form-label text-sm block mb-1">Skill Level</label>
                                         <select
-                                            className="ti-form-control form-control-sm"
+                                            className="ti-form-control form-control-sm w-full"
                                             value={skillLevel}
                                             onChange={(e) => {
                                                 setSkillLevel(e.target.value);
@@ -1045,9 +1045,9 @@ const Candidates = () => {
                                     
                                     {/* Skill Match Mode */}
                                     <div className="lg:col-span-2 md:col-span-6 col-span-12">
-                                        <label className="form-label text-sm">Match Mode</label>
+                                        <label className="form-label text-sm block mb-1">Match Mode</label>
                                         <select
-                                            className="ti-form-control form-control-sm"
+                                            className="ti-form-control form-control-sm w-full"
                                             value={skillMatchMode}
                                             onChange={(e) => {
                                                 setSkillMatchMode(e.target.value as 'all' | 'any');
@@ -1061,9 +1061,9 @@ const Candidates = () => {
                                     
                                     {/* Experience Level */}
                                     <div className="lg:col-span-2 md:col-span-6 col-span-12">
-                                        <label className="form-label text-sm">Experience Level</label>
+                                        <label className="form-label text-sm block mb-1">Experience Level</label>
                                         <select
-                                            className="ti-form-control form-control-sm"
+                                            className="ti-form-control form-control-sm w-full"
                                             value={experienceLevel}
                                             onChange={(e) => {
                                                 setExperienceLevel(e.target.value);
@@ -1080,9 +1080,9 @@ const Candidates = () => {
                                     
                                     {/* Years of Experience Range */}
                                     <div className="lg:col-span-2 md:col-span-6 col-span-12">
-                                        <label className="form-label text-sm">Min Years</label>
+                                        <label className="form-label text-sm block mb-1">Min Years</label>
                                         <input
-                                            className="ti-form-control form-control-sm"
+                                            className="ti-form-control form-control-sm w-full"
                                             type="number"
                                             placeholder="Min years"
                                             value={minYearsOfExperience}
@@ -1095,9 +1095,9 @@ const Candidates = () => {
                                     </div>
                                     
                                     <div className="lg:col-span-2 md:col-span-6 col-span-12">
-                                        <label className="form-label text-sm">Max Years</label>
+                                        <label className="form-label text-sm block mb-1">Max Years</label>
                                         <input
-                                            className="ti-form-control form-control-sm"
+                                            className="ti-form-control form-control-sm w-full"
                                             type="number"
                                             placeholder="Max years"
                                             value={maxYearsOfExperience}
@@ -1111,9 +1111,9 @@ const Candidates = () => {
                                     
                                     {/* Location Filters */}
                                     <div className="lg:col-span-3 md:col-span-6 col-span-12">
-                                        <label className="form-label text-sm">Location</label>
+                                        <label className="form-label text-sm block mb-1">Location</label>
                                         <input
-                                            className="ti-form-control form-control-sm"
+                                            className="ti-form-control form-control-sm w-full"
                                             type="text"
                                             placeholder="City, State, or Country"
                                             value={location}
@@ -1125,9 +1125,9 @@ const Candidates = () => {
                                     </div>
                                     
                                     <div className="lg:col-span-3 md:col-span-6 col-span-12">
-                                        <label className="form-label text-sm">City</label>
+                                        <label className="form-label text-sm block mb-1">City</label>
                                         <input
-                                            className="ti-form-control form-control-sm"
+                                            className="ti-form-control form-control-sm w-full"
                                             type="text"
                                             placeholder="City"
                                             value={city}
@@ -1139,9 +1139,9 @@ const Candidates = () => {
                                     </div>
                                     
                                     <div className="lg:col-span-3 md:col-span-6 col-span-12">
-                                        <label className="form-label text-sm">State</label>
+                                        <label className="form-label text-sm block mb-1">State</label>
                                         <input
-                                            className="ti-form-control form-control-sm"
+                                            className="ti-form-control form-control-sm w-full"
                                             type="text"
                                             placeholder="State"
                                             value={state}
@@ -1153,9 +1153,9 @@ const Candidates = () => {
                                     </div>
                                     
                                     <div className="lg:col-span-3 md:col-span-6 col-span-12">
-                                        <label className="form-label text-sm">Country</label>
+                                        <label className="form-label text-sm block mb-1">Country</label>
                                         <input
-                                            className="ti-form-control form-control-sm"
+                                            className="ti-form-control form-control-sm w-full"
                                             type="text"
                                             placeholder="Country"
                                             value={country}
@@ -1168,9 +1168,9 @@ const Candidates = () => {
                                     
                                     {/* Education & Visa */}
                                     <div className="lg:col-span-4 md:col-span-6 col-span-12">
-                                        <label className="form-label text-sm">Degree</label>
+                                        <label className="form-label text-sm block mb-1">Degree</label>
                                         <input
-                                            className="ti-form-control form-control-sm"
+                                            className="ti-form-control form-control-sm w-full"
                                             type="text"
                                             placeholder="e.g., Computer Science"
                                             value={degree}
@@ -1182,9 +1182,9 @@ const Candidates = () => {
                                     </div>
                                     
                                     <div className="lg:col-span-4 md:col-span-6 col-span-12">
-                                        <label className="form-label text-sm">Visa Type</label>
+                                        <label className="form-label text-sm block mb-1">Visa Type</label>
                                         <input
-                                            className="ti-form-control form-control-sm"
+                                            className="ti-form-control form-control-sm w-full"
                                             type="text"
                                             placeholder="e.g., H1B, Green Card"
                                             value={visaType}
@@ -1197,9 +1197,9 @@ const Candidates = () => {
                                     
                                     {/* Sort By */}
                                     <div className="lg:col-span-2 md:col-span-6 col-span-12">
-                                        <label className="form-label text-sm">Sort By</label>
+                                        <label className="form-label text-sm block mb-1">Sort By</label>
                                         <select
-                                            className="ti-form-control form-control-sm"
+                                            className="ti-form-control form-control-sm w-full"
                                             value={sortBy}
                                             onChange={(e) => {
                                                 setSortBy(e.target.value);

@@ -712,7 +712,7 @@ const Dashboard = () => {
 
             {/* Summary Cards */}
             <div className="grid grid-cols-12 gap-x-6 mb-6">
-                <div className="xl:col-span-3 lg:col-span-6 md:col-span-6 col-span-12">
+                <div className="xl:col-span-4 lg:col-span-4 md:col-span-6 sm:col-span-6 col-span-12">
                     <div className="box">
                         <div className="box-body">
                             <div className="grid grid-cols-12">
@@ -739,7 +739,7 @@ const Dashboard = () => {
                     </div>
                 </div>
 
-                <div className="xl:col-span-3 lg:col-span-6 md:col-span-6 col-span-12">
+                <div className="xl:col-span-4 lg:col-span-4 md:col-span-6 sm:col-span-6 col-span-12">
                     <div className="box">
                         <div className="box-body">
                             <div className="grid grid-cols-12">
@@ -766,7 +766,7 @@ const Dashboard = () => {
                     </div>
                 </div>
 
-                <div className="xl:col-span-3 lg:col-span-6 md:col-span-6 col-span-12">
+                <div className="xl:col-span-4 lg:col-span-4 md:col-span-6 sm:col-span-6 col-span-12">
                     <div className="box">
                         <div className="box-body">
                             <div className="grid grid-cols-12">
@@ -793,7 +793,7 @@ const Dashboard = () => {
                     </div>
                 </div>
 
-                <div className="xl:col-span-3 lg:col-span-6 md:col-span-6 col-span-12">
+                <div className="xl:col-span-4 lg:col-span-4 md:col-span-6 sm:col-span-6 col-span-12">
                     <div className="box">
                         <div className="box-body">
                             <div className="grid grid-cols-12">
@@ -820,7 +820,7 @@ const Dashboard = () => {
                     </div>
                 </div>
 
-                <div className="xl:col-span-3 lg:col-span-6 md:col-span-6 col-span-12">
+                <div className="xl:col-span-4 lg:col-span-4 md:col-span-6 sm:col-span-6 col-span-12">
                     <div className="box">
                         <div className="box-body">
                             <div className="grid grid-cols-12">
@@ -847,7 +847,7 @@ const Dashboard = () => {
                     </div>
                 </div>
 
-                <div className="xl:col-span-3 lg:col-span-6 md:col-span-6 col-span-12">
+                <div className="xl:col-span-4 lg:col-span-4 md:col-span-6 sm:col-span-6 col-span-12">
                     <div className="box">
                         <div className="box-body">
                             <div className="grid grid-cols-12">
@@ -934,7 +934,7 @@ const Dashboard = () => {
 
                 {/* Task Statistics */}
                 <div className="xl:col-span-6 col-span-12">
-                    <div className="box">
+                    <div className="box xl:min-h-[321px]">
                         <div className="box-header">
                             <div className="box-title">Task Statistics</div>
                         </div>
@@ -1052,7 +1052,7 @@ const Dashboard = () => {
             {/* Bottlenecks */}
             <div className="grid grid-cols-12 gap-x-6 mb-6">
                 {/* Overdue Tasks */}
-                <div className="xl:col-span-6 col-span-12">
+                <div className="col-span-12">
                     <div className="box">
                         <div className="box-header">
                             <div className="box-title">Overdue Tasks</div>
@@ -1090,7 +1090,7 @@ const Dashboard = () => {
                 </div>
 
                 {/* Projects at Risk */}
-                <div className="xl:col-span-6 col-span-12">
+                <div className="col-span-12">
                     <div className="box">
                         <div className="box-header">
                             <div className="box-title">Projects at Risk</div>
@@ -1126,7 +1126,7 @@ const Dashboard = () => {
                 </div>
 
                 {/* Blocked Tasks */}
-                <div className="xl:col-span-6 col-span-12">
+                <div className="col-span-12">
                     <div className="box">
                         <div className="box-header">
                             <div className="box-title">Blocked Tasks (Critical in Review)</div>
@@ -1160,7 +1160,7 @@ const Dashboard = () => {
                 </div>
 
                 {/* High Priority Incomplete */}
-                <div className="xl:col-span-6 col-span-12">
+                <div className="col-span-12">
                     <div className="box">
                         <div className="box-header">
                             <div className="box-title">High Priority Incomplete Tasks</div>
