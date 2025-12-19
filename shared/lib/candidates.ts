@@ -293,20 +293,21 @@ export const getLogs = async (page?: number, limit?: number) => {
 
 
 // Punch in attendance
-export const punchInAttendance = async (candidateId: string, attendanceData: {
-  punchInTime: string;
-  notes: "Starting shift";
+export const punchInAttendance = async (candidateId: string, attendanceData?: {
+  punchInTime?: string;  // Optional: ISO 8601 date string. Defaults to current time if not provided
+  notes?: string;        // Optional: Additional notes
+  timezone?: string;     // Optional: IANA timezone (e.g., 'America/New_York', 'Asia/Kolkata', 'UTC'). Defaults to 'UTC'
 }) => {
-  const response = await api.post(`${Attendance_API}/punch-in/${candidateId}`, attendanceData);
+  const response = await api.post(`${Attendance_API}/punch-in/${candidateId}`, attendanceData || {});
   return response.data;
 };
 
 // Punch out attendance
-export const punchOutAttendance = async (candidateId: string, attendanceData: {
-  punchOutTime: string;
-  notes: "Ending shift";
+export const punchOutAttendance = async (candidateId: string, attendanceData?: {
+  punchOutTime?: string;  // Optional: ISO 8601 date string. Defaults to current time if not provided
+  notes?: string;         // Optional: Additional notes
 }) => {
-  const response = await api.post(`${Attendance_API}/punch-out/${candidateId}`, attendanceData);
+  const response = await api.post(`${Attendance_API}/punch-out/${candidateId}`, attendanceData || {});
   return response.data;
 };
 

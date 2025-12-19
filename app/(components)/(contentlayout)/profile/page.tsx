@@ -23,6 +23,9 @@ const profile = () => {
     const [isPunching, setIsPunching] = useState<boolean>(false);
     const [punchedIn, setPunchedIn] = useState<boolean>(false);
     const [punchStatusData, setPunchStatusData] = useState<any>(null);
+    const [elapsedTime, setElapsedTime] = useState<string>('');
+    const [selectedTimezone, setSelectedTimezone] = useState<string>('');
+    const [showTimezoneDropdown, setShowTimezoneDropdown] = useState<boolean>(false);
 
     // Function to check if profile is completed
     const isProfileCompleted = useCallback((profile: any): boolean => {
@@ -426,27 +429,120 @@ const profile = () => {
             try {
                 if (!canPunch || !candidateId) return;
                 const res = await getPunchInOutStatus(candidateId);
-                const activeValue = (res?.isPunchedIn !== undefined) ? res.isPunchedIn : (res?.data?.isActive ?? res?.isActive);
-                const active = activeValue === true;
-                setPunchedIn(active);
-                setPunchStatusData(res?.data || res);
+                // API returns: { success: true, data: {...}, isPunchedIn: true/false }
+                // or: { success: true, data: null, isPunchedIn: false }
+                const isPunchedInValue = res?.isPunchedIn !== undefined ? res.isPunchedIn : false;
+                setPunchedIn((prevPunchedIn) => {
+                    // If user was punched in but now is punched out (auto punch-out after 9 hours)
+                    if (prevPunchedIn && !isPunchedInValue && res?.data) {
+                        Swal.fire({
+                            icon: 'info',
+                            title: 'Auto Punch-Out',
+                            text: 'You have been automatically punched out after 9 hours.',
+                            timer: 3000,
+                            showConfirmButton: false
+                        });
+                    }
+                    return isPunchedInValue;
+                });
+                setPunchStatusData(res?.data || null);
             } catch (e) {
                 // if status fetch fails, keep existing state
                 console.warn('Failed to fetch punch status', e);
             }
         };
         fetchStatus();
+        
+        // Set up periodic status check every 15 minutes (900000 ms) to detect auto punch-out
+        // Backend automatically punches out after 9 hours, so we check periodically
+        const statusInterval = setInterval(() => {
+            fetchStatus();
+        }, 15 * 60 * 1000); // Check every 15 minutes
+        
+        return () => {
+            clearInterval(statusInterval);
+        };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [canPunch, candidateId]);
 
+    // Get browser timezone (auto-detect)
+    const getBrowserTimezone = () => {
+        try {
+            return Intl.DateTimeFormat().resolvedOptions().timeZone;
+        } catch {
+            return 'UTC';
+        }
+    };
+
+    // Timezone options - UTC and IST only (user must select explicitly)
+    const timezones = [
+        { value: 'UTC', label: 'UTC' },
+        { value: 'Asia/Kolkata', label: 'IST' },
+    ];
+
+    // Calculate and format elapsed time since punch in
+    const calculateElapsedTime = (punchInTime: string) => {
+        const now = new Date().getTime();
+        const punchIn = new Date(punchInTime).getTime();
+        const diff = now - punchIn;
+        
+        const hours = Math.floor(diff / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+        
+        if (hours > 0) {
+            return `${hours}h ${minutes}m`;
+        } else if (minutes > 0) {
+            return `${minutes}m ${seconds}s`;
+        } else {
+            return `${seconds}s`;
+        }
+    };
+
+    // Update elapsed time display when punched in
+    useEffect(() => {
+        if (!punchedIn || !punchStatusData?.punchIn) {
+            setElapsedTime('');
+            return;
+        }
+
+        const updateElapsedTime = () => {
+            setElapsedTime(calculateElapsedTime(punchStatusData.punchIn));
+        };
+
+        // Update immediately
+        updateElapsedTime();
+
+        // Update every second
+        const interval = setInterval(updateElapsedTime, 1000);
+
+        return () => clearInterval(interval);
+    }, [punchedIn, punchStatusData?.punchIn]);
+
     const handlePunchIn = async () => {
         if (!canPunch || !candidateId) return;
+        
+        // Validate timezone is selected (mandatory)
+        if (!selectedTimezone) {
+            await Swal.fire({
+                icon: 'warning',
+                title: 'Timezone Required',
+                text: 'Please select a timezone before punching in.',
+                confirmButtonText: 'OK'
+            });
+            return;
+        }
+        
         try {
             setIsPunching(true);
-            const nowIso = new Date().toISOString();
-            const res = await punchInAttendance(candidateId, { punchInTime: nowIso, notes: "Starting shift" as any });
+            const res = await punchInAttendance(candidateId, {
+                notes: "Starting shift",
+                timezone: selectedTimezone // Mandatory field
+                // punchInTime is optional - backend will use current time if not provided
+            });
             setPunchedIn(true);
             setPunchStatusData(res?.data || res);
+            setShowTimezoneDropdown(false); // Hide dropdown after punch in
             await Swal.fire({
                 icon: 'success',
                 title: 'Punched In',
@@ -457,12 +553,13 @@ const profile = () => {
             // Refresh status to get updated data
             const statusRes = await getPunchInOutStatus(candidateId);
             setPunchStatusData(statusRes?.data || statusRes);
-        } catch (e) {
+        } catch (e: any) {
             console.error('Punch-in failed', e);
+            const errorMessage = e?.response?.data?.message || e?.message || 'Failed to punch in. Please try again.';
             await Swal.fire({
                 icon: 'error',
                 title: 'Punch In Failed',
-                text: (e as any)?.response?.data?.message || (e as any)?.message || 'Failed to punch in. Please try again.'
+                text: errorMessage
             });
         } finally {
             setIsPunching(false);
@@ -473,8 +570,10 @@ const profile = () => {
         if (!canPunch || !candidateId) return;
         try {
             setIsPunching(true);
-            const nowIso = new Date().toISOString();
-            const res = await punchOutAttendance(candidateId, { punchOutTime: nowIso, notes: "Ending shift" as any });
+            const res = await punchOutAttendance(candidateId, {
+                notes: "Ending shift"
+                // punchOutTime is optional - backend will use current time if not provided
+            });
             setPunchedIn(false);
             setPunchStatusData(res?.data || res);
             await Swal.fire({
@@ -487,12 +586,13 @@ const profile = () => {
             // Refresh status to get updated data
             const statusRes = await getPunchInOutStatus(candidateId);
             setPunchStatusData(statusRes?.data || statusRes);
-        } catch (e) {
+        } catch (e: any) {
             console.error('Punch-out failed', e);
+            const errorMessage = e?.response?.data?.message || e?.message || 'Failed to punch out. Please try again.';
             await Swal.fire({
                 icon: 'error',
                 title: 'Punch Out Failed',
-                text: (e as any)?.response?.data?.message || (e as any)?.message || 'Failed to punch out. Please try again.'
+                text: errorMessage
             });
         } finally {
             setIsPunching(false);
@@ -526,10 +626,24 @@ const profile = () => {
                                                 </span>
                                             )}
                                             {punchedIn && punchStatusData.punchIn && (
-                                                <span className="inline-flex items-center gap-1">
-                                                    <i className="ri-time-line"></i>
-                                                    Punched In: {new Date(punchStatusData.punchIn).toLocaleTimeString()}
-                                                </span>
+                                                <>
+                                                    <span className="inline-flex items-center gap-1">
+                                                        <i className="ri-time-line"></i>
+                                                        Punched In: {new Date(punchStatusData.punchIn).toLocaleTimeString()}
+                                                    </span>
+                                                    {elapsedTime && (
+                                                        <span className="inline-flex items-center gap-1 text-primary font-semibold">
+                                                            <i className="ri-timer-line"></i>
+                                                            Elapsed: {elapsedTime}
+                                                        </span>
+                                                    )}
+                                                    {punchStatusData.timezone && (
+                                                        <span className="inline-flex items-center gap-1">
+                                                            <i className="ri-global-line"></i>
+                                                            Timezone: {punchStatusData.timezone}
+                                                        </span>
+                                                    )}
+                                                </>
                                             )}
                                             {!punchedIn && punchStatusData.punchOut && (
                                                 <span className="inline-flex items-center gap-1">
@@ -540,23 +654,80 @@ const profile = () => {
                                         </div>
                                     )}
                                 </div>
-                                <div>
+                                <div className="flex flex-row gap-3 items-center justify-end">
                                     {!punchedIn ? (
-                                        <button
-                                            type="button"
-                                            onClick={handlePunchIn}
-                                            disabled={isPunching}
-                                            className="ti-btn bg-green-600 hover:bg-green-700 text-white !font-medium !gap-1 disabled:opacity-60 shadow-lg shadow-green-500/50 border-2 border-green-400 animate-pulse px-4 py-2"
-                                        >
-                                            {isPunching ? <i className="ri-loader-4-line animate-spin me-1"></i> : <i className="ri-login-circle-line me-1"></i>}
-                                            Punch In
-                                        </button>
+                                        <>
+                                            {/* Timezone Dropdown */}
+                                            <div className="relative">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowTimezoneDropdown(!showTimezoneDropdown)}
+                                                    className="ti-btn ti-btn-light !text-xs !gap-1 inline-flex items-center justify-between min-w-[140px]"
+                                                >
+                                                    <span className="flex items-center gap-1">
+                                                        <i className="ri-global-line"></i>
+                                                        <span>{timezones.find(tz => tz.value === selectedTimezone)?.label || 'Select Timezone'}</span>
+                                                    </span>
+                                                    <i className={`ri-arrow-${showTimezoneDropdown ? 'up' : 'down'}-s-line`}></i>
+                                                </button>
+                                                
+                                                {showTimezoneDropdown && (
+                                                    <>
+                                                        <div 
+                                                            className="fixed inset-0 z-10" 
+                                                            onClick={() => setShowTimezoneDropdown(false)}
+                                                        ></div>
+                                                        <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-20">
+                                                            <div className="p-2">
+                                                                <div className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2 px-2 pb-2 border-b border-gray-200 dark:border-gray-700">
+                                                                    Select Timezone <span className="text-red-500">*</span>
+                                                                </div>
+                                                                <div className="flex flex-col gap-1">
+                                                                    {timezones.map((tz) => (
+                                                                        <button
+                                                                            key={tz.value}
+                                                                            type="button"
+                                                                            onClick={() => {
+                                                                                setSelectedTimezone(tz.value);
+                                                                                setShowTimezoneDropdown(false);
+                                                                            }}
+                                                                            className={`w-full text-left px-3 py-2.5 text-sm rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between ${
+                                                                                selectedTimezone === tz.value 
+                                                                                    ? 'bg-primary/10 text-primary font-medium' 
+                                                                                    : 'text-gray-700 dark:text-gray-300'
+                                                                            }`}
+                                                                        >
+                                                                            <span>{tz.label}</span>
+                                                                            {selectedTimezone === tz.value && (
+                                                                                <i className="ri-check-line text-primary"></i>
+                                                                            )}
+                                                                        </button>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </div>
+                                            
+                                            {/* Punch In Button */}
+                                            <button
+                                                type="button"
+                                                onClick={handlePunchIn}
+                                                disabled={isPunching || !selectedTimezone}
+                                                className="ti-btn bg-green-600 hover:bg-green-700 text-white !font-medium !gap-1 disabled:opacity-60 shadow-lg shadow-green-500/50 border-2 border-green-400 animate-pulse px-4 py-2"
+                                                title={!selectedTimezone ? 'Please select a timezone first' : ''}
+                                            >
+                                                {isPunching ? <i className="ri-loader-4-line animate-spin me-1"></i> : <i className="ri-login-circle-line me-1"></i>}
+                                                Punch In
+                                            </button>
+                                        </>
                                     ) : (
                                         <button
                                             type="button"
                                             onClick={handlePunchOut}
                                             disabled={isPunching}
-                                            className="ti-btn bg-rose-600 text-white !font-medium !gap-1 disabled:opacity-60"
+                                            className="ti-btn bg-rose-600 text-white !font-medium !gap-1 disabled:opacity-60 w-full sm:w-auto"
                                         >
                                             {isPunching ? <i className="ri-loader-4-line animate-spin me-1"></i> : <i className="ri-logout-circle-line me-1"></i>}
                                             Punch Out
@@ -774,7 +945,7 @@ const profile = () => {
                                                                     <th scope="row" className="!font-semibold text-start">
                                                                         Phone Number
                                                                     </th>
-                                                                    <td className="text-gray-600">{profileData?.countryCode === "IN" ? "+91 " : "+1 "}{profileData?.phoneNumber || '-'}</td>
+                                                                    <td className="text-gray-600">{profileData?.countryCode === "IN" && "+91 "}{profileData?.countryCode === "US" && "+1 "}{profileData?.phoneNumber || '-'}</td>
                                                                 </tr>
                                                                 <tr className="border border-defaultborder dark:border-defaultborder/10">
                                                                     <th scope="row" className="!font-semibold text-start">
@@ -824,7 +995,7 @@ const profile = () => {
                                                                     <th scope="row" className="!font-semibold text-start">
                                                                         Supervisor Contact
                                                                     </th>
-                                                                    <td className="text-gray-600">{profileData?.supervisorCountryCode === "IN" ? "+91 " : "+1 "}{profileData?.supervisorContact || '-'}</td>
+                                                                    <td className="text-gray-600">{profileData?.supervisorCountryCode === "IN" && "+91 "}{profileData?.supervisorCountryCode === "US" && "+1 "}{profileData?.supervisorContact || '-'}</td>
                                                                 </tr>
                                                                 <tr className="border border-defaultborder dark:border-defaultborder/10">
                                                                     <th scope="row" className="!font-semibold text-start">
