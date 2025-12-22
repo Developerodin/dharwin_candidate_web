@@ -218,6 +218,16 @@ const Candidates = () => {
         return () => clearTimeout(timer);
     }, [searchValue, searchFilter]);
 
+    // Helper function to truncate text to 200 words
+    const truncateToWords = (text: string | null | undefined, maxWords: number = 50): string => {
+        if (!text) return '';
+        const words = text.trim().split(/\s+/);
+        if (words.length <= maxWords) {
+            return text;
+        }
+        return words.slice(0, maxWords).join(' ') + '...';
+    };
+
     // Function to open candidate details modal
     const openCandidateModal = async (candidate: any) => {
         setSelectedCandidate(candidate);
@@ -1292,7 +1302,7 @@ const Candidates = () => {
                                                         <span className='text-black font-semibold text-[0.75rem]'>{can?.phoneNumber}</span>
                                                     </td>
                                                     <td>
-                                                        <span className='text-[#8c9097] dark:text-white/50 text-[0.75rem]'>{can?.shortBio}</span>
+                                                        <span className='text-[#8c9097] dark:text-white/50 text-[0.75rem]'>{truncateToWords(can?.shortBio, 10)}</span>
                                                     </td>
                                                     <td>
                                                         <div className="flex flex-row items-center !gap-2 text-[0.9375rem]" onClick={(e) => e.stopPropagation()}>

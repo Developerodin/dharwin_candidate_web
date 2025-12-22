@@ -474,10 +474,128 @@ const profile = () => {
         }
     };
 
-    // Timezone options - UTC and IST only (user must select explicitly)
+    // Get GMT offset for a timezone
+    const getGMTOffset = (timezone: string): string => {
+        try {
+            const now = new Date();
+            
+            // Method 1: Try using Intl.DateTimeFormat with timeZoneName
+            try {
+                const formatter = new Intl.DateTimeFormat('en', {
+                    timeZone: timezone,
+                    timeZoneName: 'shortOffset'
+                });
+                const parts = formatter.formatToParts(now);
+                const offsetPart = parts.find(part => part.type === 'timeZoneName');
+                
+                if (offsetPart && offsetPart.value && offsetPart.value.includes('GMT')) {
+                    // Normalize to (GMT±HH:MM) format
+                    let offsetStr = offsetPart.value;
+                    // Remove existing parentheses if any
+                    offsetStr = offsetStr.replace(/[()]/g, '');
+                    // Ensure it starts with GMT
+                    if (!offsetStr.startsWith('GMT')) {
+                        offsetStr = 'GMT' + offsetStr;
+                    }
+                    // Parse and reformat to ensure (GMT±HH:MM) format
+                    const match = offsetStr.match(/GMT([+-])(\d{1,2}):?(\d{2})?/);
+                    if (match) {
+                        const sign = match[1];
+                        const hours = parseInt(match[2], 10);
+                        const minutes = parseInt(match[3] || '0', 10);
+                        const hoursStr = hours.toString().padStart(2, '0');
+                        const minutesStr = minutes.toString().padStart(2, '0');
+                        return `(GMT${sign}${hoursStr}:${minutesStr})`;
+                    }
+                    return `(${offsetStr})`;
+                }
+            } catch (e) {
+                // Continue to fallback
+            }
+            
+            // Method 2: Calculate offset by getting the difference between UTC and timezone
+            // Use a more reliable method: format the same UTC timestamp in both timezones
+            const utcFormatter = new Intl.DateTimeFormat('en', {
+                timeZone: 'UTC',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
+            
+            const tzFormatter = new Intl.DateTimeFormat('en', {
+                timeZone: timezone,
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
+            
+            const utcParts = utcFormatter.formatToParts(now);
+            const tzParts = tzFormatter.formatToParts(now);
+            
+            const utcH = parseInt(utcParts.find(p => p.type === 'hour')?.value || '0', 10);
+            const utcM = parseInt(utcParts.find(p => p.type === 'minute')?.value || '0', 10);
+            const tzH = parseInt(tzParts.find(p => p.type === 'hour')?.value || '0', 10);
+            const tzM = parseInt(tzParts.find(p => p.type === 'minute')?.value || '0', 10);
+            
+            // Also get the date to handle day boundaries
+            const utcDateFormatter = new Intl.DateTimeFormat('en', {
+                timeZone: 'UTC',
+                day: 'numeric'
+            });
+            const tzDateFormatter = new Intl.DateTimeFormat('en', {
+                timeZone: timezone,
+                day: 'numeric'
+            });
+            
+            const utcDay = parseInt(utcDateFormatter.format(now), 10);
+            const tzDay = parseInt(tzDateFormatter.format(now), 10);
+            
+            // Calculate offset in minutes
+            let offsetMinutes = (tzH * 60 + tzM) - (utcH * 60 + utcM);
+            
+            // Adjust for date difference if timezone is on a different day
+            if (tzDay !== utcDay) {
+                const dayDiff = tzDay - utcDay;
+                // Normalize day difference to -1, 0, or 1 (accounting for month boundaries)
+                if (dayDiff > 15) {
+                    // Likely previous month
+                    offsetMinutes -= 1440;
+                } else if (dayDiff < -15) {
+                    // Likely next month
+                    offsetMinutes += 1440;
+                } else if (dayDiff > 0) {
+                    // Next day
+                    offsetMinutes += 1440;
+                } else {
+                    // Previous day
+                    offsetMinutes -= 1440;
+                }
+            }
+            
+            // Format the offset in (GMT±HH:MM) format matching the reference
+            const hours = Math.floor(Math.abs(offsetMinutes) / 60);
+            const minutes = Math.abs(offsetMinutes) % 60;
+            const sign = offsetMinutes >= 0 ? '+' : '-';
+            
+            // Always format as (GMT±HH:MM) with leading zeros
+            const hoursStr = hours.toString().padStart(2, '0');
+            const minutesStr = minutes.toString().padStart(2, '0');
+            return `(GMT${sign}${hoursStr}:${minutesStr})`;
+        } catch (error) {
+            console.error('Error calculating GMT offset:', error);
+            return '(GMT+00:00)';
+        }
+    };
+
+    // Timezone options - UTC, IST, and US timezones with GMT offsets
+    // Format matches reference: (GMT±HH:MM) Description
     const timezones = [
-        { value: 'UTC', label: 'UTC' },
-        { value: 'Asia/Kolkata', label: 'IST' },
+        { value: 'UTC', label: `${getGMTOffset('UTC')} UTC` },
+        { value: 'Asia/Kolkata', label: `${getGMTOffset('Asia/Kolkata')} IST (India)` },
+        { value: 'America/New_York', label: `${getGMTOffset('America/New_York')} Eastern Time (US & Canada)` },
+        { value: 'America/Chicago', label: `${getGMTOffset('America/Chicago')} Central Time (US & Canada)` },
+        { value: 'America/Denver', label: `${getGMTOffset('America/Denver')} Mountain Time (US & Canada)` },
+        { value: 'America/Los_Angeles', label: `${getGMTOffset('America/Los_Angeles')} Pacific Time (US & Canada)` },
     ];
 
     // Calculate and format elapsed time since punch in
@@ -662,7 +780,7 @@ const profile = () => {
                                                 <button
                                                     type="button"
                                                     onClick={() => setShowTimezoneDropdown(!showTimezoneDropdown)}
-                                                    className="ti-btn ti-btn-light !text-xs !gap-1 inline-flex items-center justify-between min-w-[140px]"
+                                                    className="ti-btn ti-btn-light !text-xs !gap-1 inline-flex items-center justify-between min-w-[180px]"
                                                 >
                                                     <span className="flex items-center gap-1">
                                                         <i className="ri-global-line"></i>
