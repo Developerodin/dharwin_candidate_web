@@ -318,8 +318,21 @@ export const getPunchInOutStatus = async (candidateId: string) => {
 };
 
 // Get Attendance by Candidate
-export const getAttendanceByCandidate = async (candidateId: string) => {
-  const response = await api.get(`${Attendance_API}/candidate/${candidateId}`);
+export const getAttendanceByCandidate = async (candidateId: string, params?: {
+  startDate?: string;
+  endDate?: string;
+  page?: number;
+  limit?: number;
+}) => {
+  const queryParams = new URLSearchParams();
+  if (params?.startDate) queryParams.append('startDate', params.startDate);
+  if (params?.endDate) queryParams.append('endDate', params.endDate);
+  if (params?.page) queryParams.append('page', params.page.toString());
+  if (params?.limit) queryParams.append('limit', params.limit.toString());
+  
+  const queryString = queryParams.toString();
+  const url = `${Attendance_API}/candidate/${candidateId}${queryString ? `?${queryString}` : ''}`;
+  const response = await api.get(url);
   return response.data;
 };
 

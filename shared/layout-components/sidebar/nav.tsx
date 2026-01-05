@@ -15,6 +15,7 @@ const DashboardIcon = <i className="bx bx-home side-menu__icon"></i>;
 const JobIcon = <i className="bx bx-briefcase side-menu__icon"></i>;
 const ATSIcon = <i className="bx bx-group side-menu__icon"></i>;
 const MasterIcon = <i className="bx bx-cog side-menu__icon"></i>;
+const SupportTicketsIcon = <i className="bx bx-support side-menu__icon"></i>;
 
 // Helper function to normalize paths (remove trailing slashes)
 const normalizePath = (path: string): string => {
@@ -105,7 +106,7 @@ export const useMenuItems = () => {
             active: true,
             selected: isRouteMatch("/dashboard", pathname ?? ""),
             dirchange: false,
-          }
+          },
         );
       }
 
@@ -319,6 +320,15 @@ export const useMenuItems = () => {
             ],
           },
           {
+            path: "/support-tickets",
+            title: "Support Tickets",
+            icon: SupportTicketsIcon,
+            type: "link",
+            active: true,
+            selected: isRouteMatch("/support-tickets", pathname ?? ""),
+            dirchange: false,
+          },
+          {
             icon: MasterIcon,
             title: "Settings",
             type: "sub",
@@ -501,7 +511,16 @@ export const useMenuItems = () => {
           active: true,
           selected: isRouteMatch("/attendance", pathname ?? ""),
           dirchange: false,
-        }
+        },
+        {
+          path: "/support-tickets",
+          title: "Support Tickets",
+          icon: SupportTicketsIcon,
+          type: "link",
+          active: true,
+          selected: isRouteMatch("/support-tickets", pathname ?? ""),
+          dirchange: false,
+        },
         );
       }
 

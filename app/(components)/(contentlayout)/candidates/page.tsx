@@ -5,8 +5,9 @@ import { candidateData } from '@/shared/data/pages/candidates/candidatedata'
 const Select = dynamic(() => import("react-select"), {ssr : false});
 import dynamic from 'next/dynamic';
 import Swal from "sweetalert2";
-import { useEffect, useState, useCallback } from 'react';
-import { fetchAllCandidates, deleteCandidate, addCandidateSalarySlips, uploadDocuments, fetchCandidateDocuments, verifyDocument, shareCandidate, getAttendanceByCandidate, resendEmailVerification, addNoteToCandidate, addFeedbackToCandidate, fetchCandidateById, fetchUserById } from '@/shared/lib/candidates';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { fetchAllCandidates, deleteCandidate, addCandidateSalarySlips, uploadDocuments, fetchCandidateDocuments, verifyDocument, shareCandidate, getAttendanceByCandidate, resendEmailVerification, addNoteToCandidate, addFeedbackToCandidate, fetchCandidateById, fetchUserById, punchInAttendance, punchOutAttendance } from '@/shared/lib/candidates';
+import * as XLSX from 'xlsx';
 
 const Candidates = () => {
     const [canData, setCanData] = useState<any[]>([]);
@@ -63,6 +64,13 @@ const Candidates = () => {
     const [selectedCandidateForAttendance, setSelectedCandidateForAttendance] = useState<any>(null);
     const [candidateAttendance, setCandidateAttendance] = useState<any[]>([]);
     const [loadingAttendanceData, setLoadingAttendanceData] = useState<boolean>(false);
+    
+    // Attendance calendar filters
+    const [attendanceYear, setAttendanceYear] = useState<number>(new Date().getFullYear());
+    const [attendanceMonth, setAttendanceMonth] = useState<number>(new Date().getMonth());
+    const [showAdvancedFilter, setShowAdvancedFilter] = useState<boolean>(false);
+    const [startDate, setStartDate] = useState<string>('');
+    const [endDate, setEndDate] = useState<string>('');
     const [showNotesModal, setShowNotesModal] = useState<boolean>(false);
     const [showFeedbackModal, setShowFeedbackModal] = useState<boolean>(false);
     const [selectedCandidateForNotes, setSelectedCandidateForNotes] = useState<any>(null);
@@ -72,6 +80,18 @@ const Candidates = () => {
     const [addingNote, setAddingNote] = useState<boolean>(false);
     const [addingFeedback, setAddingFeedback] = useState<boolean>(false);
     const [recruiterDetails, setRecruiterDetails] = useState<Record<string, { name: string; email: string }>>({});
+    
+    // Back-date attendance state
+    const [showBackDateAttendanceModal, setShowBackDateAttendanceModal] = useState<boolean>(false);
+    const [backDateEntries, setBackDateEntries] = useState<Array<{
+        date: string;
+        punchInTime: string;
+        punchOutTime: string;
+        notes: string;
+        timezone: string;
+    }>>([{ date: '', punchInTime: '', punchOutTime: '', notes: '', timezone: 'UTC' }]);
+    const [addingBackDateAttendance, setAddingBackDateAttendance] = useState<boolean>(false);
+    const excelFileInputRef = useRef<HTMLInputElement>(null);
 
     // Build filter parameters
     const buildFilterParams = () => {
@@ -449,19 +469,29 @@ const Candidates = () => {
         }
     };
 
-    // Function to open attendance modal
-    const openAttendanceModal = async (candidate: any) => {
-        setSelectedCandidateForAttendance(candidate);
-        setShowAttendanceModal(true);
+    // Function to fetch attendance data
+    const fetchAttendanceData = async (candidateId: string) => {
         setLoadingAttendanceData(true);
-        
         try {
-            const candidateId = candidate?.id || candidate?._id;
-            if (candidateId) {
-                const response: any = await getAttendanceByCandidate(candidateId);
-                const records = response?.data?.results || response?.results || [];
-                setCandidateAttendance(records);
+            const params: any = {};
+            
+            // If advanced filter is enabled, use date range
+            if (showAdvancedFilter && startDate && endDate) {
+                params.startDate = startDate;
+                params.endDate = endDate;
+            } else {
+                // Otherwise, use year/month to calculate date range
+                const firstDay = new Date(attendanceYear, attendanceMonth, 1);
+                const lastDay = new Date(attendanceYear, attendanceMonth + 1, 0);
+                params.startDate = firstDay.toISOString().split('T')[0];
+                params.endDate = lastDay.toISOString().split('T')[0];
             }
+            
+            params.limit = 1000; // Get all records for the period
+            
+            const response: any = await getAttendanceByCandidate(candidateId, params);
+            const records = response?.data?.results || response?.results || [];
+            setCandidateAttendance(records);
         } catch (e: any) {
             console.error('Failed to load candidate attendance:', e);
             setCandidateAttendance([]);
@@ -470,11 +500,37 @@ const Candidates = () => {
         }
     };
 
+    // Function to open attendance modal
+    const openAttendanceModal = async (candidate: any) => {
+        setSelectedCandidateForAttendance(candidate);
+        setShowAttendanceModal(true);
+        
+        // Reset to current month/year
+        const now = new Date();
+        setAttendanceYear(now.getFullYear());
+        setAttendanceMonth(now.getMonth());
+        setShowAdvancedFilter(false);
+        setStartDate('');
+        setEndDate('');
+        
+        const candidateId = candidate?.id || candidate?._id;
+        if (candidateId) {
+            await fetchAttendanceData(candidateId);
+        }
+    };
+
     // Function to close attendance modal
     const closeAttendanceModal = () => {
         setShowAttendanceModal(false);
         setSelectedCandidateForAttendance(null);
         setCandidateAttendance([]);
+        // Reset filters
+        const now = new Date();
+        setAttendanceYear(now.getFullYear());
+        setAttendanceMonth(now.getMonth());
+        setShowAdvancedFilter(false);
+        setStartDate('');
+        setEndDate('');
     };
 
     // Function to open notes modal
@@ -607,11 +663,10 @@ const Candidates = () => {
         return Math.round((milliseconds / (1000 * 60 * 60)) * 100) / 100;
     };
 
-    // Get calendar data for the current month/year
+    // Get calendar data for the selected month/year
     const getCalendarData = () => {
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = now.getMonth();
+        const year = attendanceYear;
+        const month = attendanceMonth;
         
         const firstDay = new Date(year, month, 1);
         const lastDay = new Date(year, month + 1, 0);
@@ -621,10 +676,8 @@ const Candidates = () => {
         candidateAttendance.forEach(record => {
             if (record.date) {
                 const recordDate = new Date(record.date);
-                if (recordDate.getFullYear() === year && recordDate.getMonth() === month) {
-                    const dateKey = recordDate.toISOString().split('T')[0];
-                    attendanceMap.set(dateKey, record);
-                }
+                const dateKey = recordDate.toISOString().split('T')[0];
+                attendanceMap.set(dateKey, record);
             }
         });
         
@@ -645,27 +698,599 @@ const Candidates = () => {
         return calendarDays;
     };
 
-    // Calculate statistics for current month only
+    // Calculate statistics for selected month/year
     const getMonthStatistics = () => {
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = now.getMonth();
+        const year = attendanceYear;
+        const month = attendanceMonth;
         
-        const currentMonthRecords = candidateAttendance.filter(record => {
-            if (!record.date) return false;
-            const recordDate = new Date(record.date);
-            return recordDate.getFullYear() === year && recordDate.getMonth() === month;
-        });
+        let filteredRecords = candidateAttendance;
+        
+        // If advanced filter is enabled, filter by date range
+        if (showAdvancedFilter && startDate && endDate) {
+            filteredRecords = candidateAttendance.filter(record => {
+                if (!record.date) return false;
+                const recordDate = new Date(record.date).toISOString().split('T')[0];
+                return recordDate >= startDate && recordDate <= endDate;
+            });
+        } else {
+            // Otherwise, filter by selected month/year
+            filteredRecords = candidateAttendance.filter(record => {
+                if (!record.date) return false;
+                const recordDate = new Date(record.date);
+                return recordDate.getFullYear() === year && recordDate.getMonth() === month;
+            });
+        }
         
         const totalHours = formatDurationHours(
-            currentMonthRecords.reduce((sum, record) => sum + (record.duration || 0), 0)
+            filteredRecords.reduce((sum, record) => sum + (record.duration || 0), 0)
         );
         
-        const presentDays = currentMonthRecords.filter(r => r.punchIn && r.punchOut).length;
-        const daysInCurrentMonth = new Date(year, month + 1, 0).getDate();
-        const absentDays = Math.max(0, daysInCurrentMonth - presentDays);
+        const presentDays = filteredRecords.filter(r => r.punchIn && r.punchOut).length;
+        
+        // Calculate total days in the period
+        let totalDays: number;
+        if (showAdvancedFilter && startDate && endDate) {
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+            totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        } else {
+            totalDays = new Date(year, month + 1, 0).getDate();
+        }
+        
+        const absentDays = Math.max(0, totalDays - presentDays);
         
         return { totalHours, presentDays, absentDays };
+    };
+    
+    // Handle year/month change
+    const handleAttendanceDateChange = async () => {
+        if (!selectedCandidateForAttendance) return;
+        const candidateId = selectedCandidateForAttendance?.id || selectedCandidateForAttendance?._id;
+        if (candidateId) {
+            await fetchAttendanceData(candidateId);
+        }
+    };
+
+    // Get GMT offset for a timezone (same as profile page)
+    const getGMTOffset = (timezone: string): string => {
+        try {
+            const now = new Date();
+            
+            // Method 1: Try using Intl.DateTimeFormat with timeZoneName
+            try {
+                const formatter = new Intl.DateTimeFormat('en', {
+                    timeZone: timezone,
+                    timeZoneName: 'shortOffset'
+                });
+                const parts = formatter.formatToParts(now);
+                const offsetPart = parts.find(part => part.type === 'timeZoneName');
+                
+                if (offsetPart && offsetPart.value && offsetPart.value.includes('GMT')) {
+                    // Normalize to (GMT±HH:MM) format
+                    let offsetStr = offsetPart.value;
+                    // Remove existing parentheses if any
+                    offsetStr = offsetStr.replace(/[()]/g, '');
+                    // Ensure it starts with GMT
+                    if (!offsetStr.startsWith('GMT')) {
+                        offsetStr = 'GMT' + offsetStr;
+                    }
+                    // Parse and reformat to ensure (GMT±HH:MM) format
+                    const match = offsetStr.match(/GMT([+-])(\d{1,2}):?(\d{2})?/);
+                    if (match) {
+                        const sign = match[1];
+                        const hours = parseInt(match[2], 10);
+                        const minutes = parseInt(match[3] || '0', 10);
+                        const hoursStr = hours.toString().padStart(2, '0');
+                        const minutesStr = minutes.toString().padStart(2, '0');
+                        return `(GMT${sign}${hoursStr}:${minutesStr})`;
+                    }
+                    return `(${offsetStr})`;
+                }
+            } catch (e) {
+                // Continue to fallback
+            }
+            
+            // Method 2: Calculate offset by getting the difference between UTC and timezone
+            const utcFormatter = new Intl.DateTimeFormat('en', {
+                timeZone: 'UTC',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
+            
+            const tzFormatter = new Intl.DateTimeFormat('en', {
+                timeZone: timezone,
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
+            
+            const utcParts = utcFormatter.formatToParts(now);
+            const tzParts = tzFormatter.formatToParts(now);
+            
+            const utcH = parseInt(utcParts.find(p => p.type === 'hour')?.value || '0', 10);
+            const utcM = parseInt(utcParts.find(p => p.type === 'minute')?.value || '0', 10);
+            const tzH = parseInt(tzParts.find(p => p.type === 'hour')?.value || '0', 10);
+            const tzM = parseInt(tzParts.find(p => p.type === 'minute')?.value || '0', 10);
+            
+            // Also get the date to handle day boundaries
+            const utcDateFormatter = new Intl.DateTimeFormat('en', {
+                timeZone: 'UTC',
+                day: 'numeric'
+            });
+            const tzDateFormatter = new Intl.DateTimeFormat('en', {
+                timeZone: timezone,
+                day: 'numeric'
+            });
+            
+            const utcDay = parseInt(utcDateFormatter.format(now), 10);
+            const tzDay = parseInt(tzDateFormatter.format(now), 10);
+            
+            // Calculate offset in minutes
+            let offsetMinutes = (tzH * 60 + tzM) - (utcH * 60 + utcM);
+            
+            // Adjust for date difference if timezone is on a different day
+            if (tzDay !== utcDay) {
+                const dayDiff = tzDay - utcDay;
+                // Normalize day difference to -1, 0, or 1 (accounting for month boundaries)
+                if (dayDiff > 15) {
+                    // Likely previous month
+                    offsetMinutes -= 1440;
+                } else if (dayDiff < -15) {
+                    // Likely next month
+                    offsetMinutes += 1440;
+                } else if (dayDiff > 0) {
+                    // Next day
+                    offsetMinutes += 1440;
+                } else {
+                    // Previous day
+                    offsetMinutes -= 1440;
+                }
+            }
+            
+            // Format the offset in (GMT±HH:MM) format matching the reference
+            const hours = Math.floor(Math.abs(offsetMinutes) / 60);
+            const minutes = Math.abs(offsetMinutes) % 60;
+            const sign = offsetMinutes >= 0 ? '+' : '-';
+            
+            // Always format as (GMT±HH:MM) with leading zeros
+            const hoursStr = hours.toString().padStart(2, '0');
+            const minutesStr = minutes.toString().padStart(2, '0');
+            return `(GMT${sign}${hoursStr}:${minutesStr})`;
+        } catch (error) {
+            console.error('Error calculating GMT offset:', error);
+            return '(GMT+00:00)';
+        }
+    };
+
+    // Timezone options - UTC, IST, and US timezones with GMT offsets (same as profile page)
+    const timezones = [
+        { value: 'UTC', label: `${getGMTOffset('UTC')} UTC` },
+        { value: 'Asia/Kolkata', label: `${getGMTOffset('Asia/Kolkata')} IST (India)` },
+        { value: 'America/New_York', label: `${getGMTOffset('America/New_York')} Eastern Time (US & Canada)` },
+        { value: 'America/Chicago', label: `${getGMTOffset('America/Chicago')} Central Time (US & Canada)` },
+        { value: 'America/Denver', label: `${getGMTOffset('America/Denver')} Mountain Time (US & Canada)` },
+        { value: 'America/Los_Angeles', label: `${getGMTOffset('America/Los_Angeles')} Pacific Time (US & Canada)` },
+    ];
+
+    // Generate and download Excel template
+    const downloadExcelTemplate = () => {
+        const templateData = [
+            {
+                'Date (YYYY-MM-DD)': '2024-01-15',
+                'Punch In Time (HH:MM)': '09:00',
+                'Punch Out Time (HH:MM)': '17:00',
+                'Timezone': 'UTC',
+                'Notes (Optional)': 'Sample entry'
+            },
+            {
+                'Date (YYYY-MM-DD)': '2024-01-16',
+                'Punch In Time (HH:MM)': '09:30',
+                'Punch Out Time (HH:MM)': '18:00',
+                'Timezone': 'Asia/Kolkata',
+                'Notes (Optional)': 'Another sample entry'
+            }
+        ];
+
+        const ws = XLSX.utils.json_to_sheet(templateData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Attendance');
+
+        // Set column widths
+        const colWidths = [
+            { wch: 20 }, // Date
+            { wch: 20 }, // Punch In Time
+            { wch: 20 }, // Punch Out Time
+            { wch: 20 }, // Timezone
+            { wch: 30 }  // Notes
+        ];
+        ws['!cols'] = colWidths;
+
+        XLSX.writeFile(wb, 'attendance_template.xlsx');
+    };
+
+    // Parse Excel file and convert to attendance entries
+    const handleExcelImport = async (file: File) => {
+        try {
+            const data = await file.arrayBuffer();
+            const workbook = XLSX.read(data, { type: 'array' });
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+            if (!jsonData || jsonData.length === 0) {
+                await Swal.fire({
+                    icon: 'error',
+                    title: 'Invalid File',
+                    text: 'The Excel file is empty or invalid.',
+                    confirmButtonText: 'OK'
+                });
+                return;
+            }
+
+            const entries: Array<{
+                date: string;
+                punchInTime: string;
+                punchOutTime: string;
+                notes: string;
+                timezone: string;
+            }> = [];
+
+            const errors: string[] = [];
+
+            jsonData.forEach((row: any, index: number) => {
+                const rowNum = index + 2; // +2 because Excel rows start at 1 and we have header
+
+                // Get values from various possible column names
+                const date = row['Date (YYYY-MM-DD)'] || row['Date'] || row['date'] || row['DATE'];
+                const punchInTime = row['Punch In Time (HH:MM)'] || row['Punch In Time'] || row['Punch In'] || row['punchInTime'] || row['PunchInTime'] || row['PUNCH_IN_TIME'];
+                const punchOutTime = row['Punch Out Time (HH:MM)'] || row['Punch Out Time'] || row['Punch Out'] || row['punchOutTime'] || row['PunchOutTime'] || row['PUNCH_OUT_TIME'];
+                const timezone = row['Timezone'] || row['timezone'] || row['TIMEZONE'] || 'UTC';
+                const notes = row['Notes (Optional)'] || row['Notes'] || row['notes'] || row['NOTES'] || '';
+
+                // Validate required fields
+                if (!date) {
+                    errors.push(`Row ${rowNum}: Date is required`);
+                    return;
+                }
+
+                if (!punchInTime) {
+                    errors.push(`Row ${rowNum}: Punch In Time is required`);
+                    return;
+                }
+
+                if (!punchOutTime) {
+                    errors.push(`Row ${rowNum}: Punch Out Time is required`);
+                    return;
+                }
+
+                // Format date (handle various formats)
+                let formattedDate = '';
+                try {
+                    // If date is a number, it's likely an Excel serial date
+                    if (typeof date === 'number') {
+                        // Excel date serial number (days since 1900-01-01)
+                        const excelEpoch = new Date(1899, 11, 30); // Excel epoch is Dec 30, 1899
+                        const excelDate = new Date(excelEpoch.getTime() + date * 86400000);
+                        formattedDate = excelDate.toISOString().split('T')[0];
+                    } else if (typeof date === 'string') {
+                        // Try to parse string date
+                        // Handle YYYY-MM-DD format
+                        if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+                            formattedDate = date;
+                        } else {
+                            // Try parsing as date string
+                            const dateObj = new Date(date);
+                            if (isNaN(dateObj.getTime())) {
+                                errors.push(`Row ${rowNum}: Invalid date format - ${date}`);
+                                return;
+                            }
+                            formattedDate = dateObj.toISOString().split('T')[0];
+                        }
+                    } else {
+                        errors.push(`Row ${rowNum}: Invalid date format - ${date}`);
+                        return;
+                    }
+                } catch (e) {
+                    errors.push(`Row ${rowNum}: Invalid date format - ${date}`);
+                    return;
+                }
+
+                // Format time (handle various formats)
+                let formattedPunchIn = '';
+                let formattedPunchOut = '';
+
+                try {
+                    // Handle time as string (HH:MM or HH:MM:SS)
+                    if (typeof punchInTime === 'string') {
+                        const timeParts = punchInTime.split(':');
+                        if (timeParts.length >= 2) {
+                            formattedPunchIn = `${timeParts[0].padStart(2, '0')}:${timeParts[1].padStart(2, '0')}`;
+                        } else {
+                            errors.push(`Row ${rowNum}: Invalid punch-in time format - ${punchInTime}`);
+                            return;
+                        }
+                    } else if (typeof punchInTime === 'number') {
+                        // Excel time format (decimal fraction of a day)
+                        const totalSeconds = Math.floor(punchInTime * 86400);
+                        const hours = Math.floor(totalSeconds / 3600);
+                        const minutes = Math.floor((totalSeconds % 3600) / 60);
+                        formattedPunchIn = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+                    }
+
+                    if (typeof punchOutTime === 'string') {
+                        const timeParts = punchOutTime.split(':');
+                        if (timeParts.length >= 2) {
+                            formattedPunchOut = `${timeParts[0].padStart(2, '0')}:${timeParts[1].padStart(2, '0')}`;
+                        } else {
+                            errors.push(`Row ${rowNum}: Invalid punch-out time format - ${punchOutTime}`);
+                            return;
+                        }
+                    } else if (typeof punchOutTime === 'number') {
+                        // Excel time format
+                        const totalSeconds = Math.floor(punchOutTime * 86400);
+                        const hours = Math.floor(totalSeconds / 3600);
+                        const minutes = Math.floor((totalSeconds % 3600) / 60);
+                        formattedPunchOut = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+                    }
+                } catch (e) {
+                    errors.push(`Row ${rowNum}: Error parsing time values`);
+                    return;
+                }
+
+                // Validate punch-out is after punch-in
+                const punchInDateTime = new Date(`${formattedDate}T${formattedPunchIn}`);
+                const punchOutDateTime = new Date(`${formattedDate}T${formattedPunchOut}`);
+                
+                if (punchOutDateTime <= punchInDateTime) {
+                    errors.push(`Row ${rowNum}: Punch-out time must be after punch-in time`);
+                    return;
+                }
+
+                entries.push({
+                    date: formattedDate,
+                    punchInTime: formattedPunchIn,
+                    punchOutTime: formattedPunchOut,
+                    notes: notes || '',
+                    timezone: timezone || 'UTC'
+                });
+            });
+
+            if (errors.length > 0) {
+                await Swal.fire({
+                    icon: 'warning',
+                    title: 'Import Errors',
+                    html: `Found ${errors.length} error(s):<br><br>${errors.slice(0, 10).join('<br>')}${errors.length > 10 ? '<br>... and more' : ''}`,
+                    confirmButtonText: 'OK'
+                });
+            }
+
+            if (entries.length > 0) {
+                setBackDateEntries(entries);
+                await Swal.fire({
+                    icon: 'success',
+                    title: 'Import Successful',
+                    text: `Successfully imported ${entries.length} attendance ${entries.length === 1 ? 'entry' : 'entries'}.${errors.length > 0 ? ' Some entries had errors and were skipped.' : ''}`,
+                    confirmButtonText: 'OK'
+                });
+            } else {
+                await Swal.fire({
+                    icon: 'error',
+                    title: 'No Valid Entries',
+                    text: 'No valid attendance entries could be imported from the file.',
+                    confirmButtonText: 'OK'
+                });
+            }
+
+            // Reset file input
+            if (excelFileInputRef.current) {
+                excelFileInputRef.current.value = '';
+            }
+        } catch (error: any) {
+            console.error('Excel import error:', error);
+            await Swal.fire({
+                icon: 'error',
+                title: 'Import Failed',
+                text: error?.message || 'Failed to import Excel file. Please check the file format.',
+                confirmButtonText: 'OK'
+            });
+        }
+    };
+
+    // Back-date attendance handlers
+    const addBackDateEntry = () => {
+        setBackDateEntries([...backDateEntries, { date: '', punchInTime: '', punchOutTime: '', notes: '', timezone: 'UTC' }]);
+    };
+
+    const removeBackDateEntry = (index: number) => {
+        if (backDateEntries.length > 1) {
+            setBackDateEntries(backDateEntries.filter((_, i) => i !== index));
+        }
+    };
+
+    const updateBackDateEntry = (index: number, field: string, value: string) => {
+        const updated = [...backDateEntries];
+        updated[index] = { ...updated[index], [field]: value };
+        setBackDateEntries(updated);
+    };
+
+    const handleSubmitBackDateAttendance = async () => {
+        if (!selectedCandidateForAttendance) return;
+        
+        const candidateId = selectedCandidateForAttendance?.id || selectedCandidateForAttendance?._id;
+        if (!candidateId) {
+            await Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: 'Candidate ID not found',
+                confirmButtonText: 'OK'
+            });
+            return;
+        }
+
+        // Validate entries
+        const validEntries = backDateEntries.filter(entry => entry.date && entry.punchInTime && entry.punchOutTime);
+        if (validEntries.length === 0) {
+            await Swal.fire({
+                icon: 'warning',
+                title: 'Validation Error',
+                text: 'Please add at least one entry with date, punch-in time, and punch-out time.',
+                confirmButtonText: 'OK'
+            });
+            return;
+        }
+
+        // Check for invalid entries (date without both times)
+        const invalidEntries = backDateEntries.filter(entry => entry.date && (!entry.punchInTime || !entry.punchOutTime));
+        if (invalidEntries.length > 0) {
+            await Swal.fire({
+                icon: 'warning',
+                title: 'Validation Error',
+                text: 'All entries with a date must have both punch-in and punch-out times.',
+                confirmButtonText: 'OK'
+            });
+            return;
+        }
+
+        try {
+            setAddingBackDateAttendance(true);
+            
+            // Process each entry
+            const results = [];
+            for (const entry of validEntries) {
+                try {
+                    // Combine date and punch-in time (ensure proper format)
+                    const punchInTimeStr = entry.punchInTime.includes(':') ? entry.punchInTime : `${entry.punchInTime}:00`;
+                    const punchInDateTime = new Date(`${entry.date}T${punchInTimeStr}`);
+                    
+                    // Validate date
+                    if (isNaN(punchInDateTime.getTime())) {
+                        results.push({ date: entry.date, success: false, error: 'Invalid punch-in date/time' });
+                        continue;
+                    }
+                    
+                    const punchInISO = punchInDateTime.toISOString();
+                    
+                    // Combine date and punch-out time (ensure proper format)
+                    const punchOutTimeStr = entry.punchOutTime.includes(':') ? entry.punchOutTime : `${entry.punchOutTime}:00`;
+                    const punchOutDateTime = new Date(`${entry.date}T${punchOutTimeStr}`);
+                    
+                    // Validate date
+                    if (isNaN(punchOutDateTime.getTime())) {
+                        results.push({ date: entry.date, success: false, error: 'Invalid punch-out date/time' });
+                        continue;
+                    }
+                    
+                    const punchOutISO = punchOutDateTime.toISOString();
+                    
+                    // Validate that punch-out is after punch-in
+                    if (punchOutDateTime <= punchInDateTime) {
+                        results.push({ date: entry.date, success: false, error: 'Punch-out time must be after punch-in time' });
+                        continue;
+                    }
+                    
+                    // Punch in
+                    await punchInAttendance(candidateId, {
+                        punchInTime: punchInISO,
+                        notes: entry.notes || `Back-dated attendance - ${entry.date}`,
+                        timezone: entry.timezone || 'UTC'
+                    });
+                    
+                    // Punch out
+                    await punchOutAttendance(candidateId, {
+                        punchOutTime: punchOutISO,
+                        notes: entry.notes || `Back-dated attendance - ${entry.date}`
+                    });
+                    
+                    results.push({ date: entry.date, success: true });
+                } catch (error: any) {
+                    results.push({ 
+                        date: entry.date, 
+                        success: false, 
+                        error: error?.response?.data?.message || error?.message || 'Failed to add attendance' 
+                    });
+                }
+            }
+            
+            // Show results
+            const successCount = results.filter(r => r.success).length;
+            const failCount = results.filter(r => !r.success).length;
+            
+            if (failCount === 0) {
+                await Swal.fire({
+                    icon: 'success',
+                    title: 'Success',
+                    text: `Successfully added ${successCount} back-dated attendance ${successCount === 1 ? 'entry' : 'entries'}.`,
+                    confirmButtonText: 'OK'
+                });
+            } else {
+                const failedDates = results.filter(r => !r.success).map(r => `${r.date} (${r.error})`).join(', ');
+                await Swal.fire({
+                    icon: 'warning',
+                    title: 'Partial Success',
+                    html: `Successfully added ${successCount} ${successCount === 1 ? 'entry' : 'entries'}.<br><br>Failed: ${failCount} ${failCount === 1 ? 'entry' : 'entries'}<br>${failedDates}`,
+                    confirmButtonText: 'OK'
+                });
+            }
+            
+            // Refresh attendance data
+            await fetchAttendanceData(candidateId);
+            
+            // Close modal and reset form
+            setShowBackDateAttendanceModal(false);
+            setBackDateEntries([{ date: '', punchInTime: '', punchOutTime: '', notes: '', timezone: 'UTC' }]);
+        } catch (error: any) {
+            console.error('Error adding back-dated attendance:', error);
+            await Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: error?.response?.data?.message || error?.message || 'Failed to add back-dated attendance. Please try again.',
+                confirmButtonText: 'OK'
+            });
+        } finally {
+            setAddingBackDateAttendance(false);
+        }
+    };
+    
+    // Auto-fetch attendance data when year/month changes (only if modal is open and not using advanced filter)
+    useEffect(() => {
+        if (showAttendanceModal && selectedCandidateForAttendance && !showAdvancedFilter) {
+            const candidateId = selectedCandidateForAttendance?.id || selectedCandidateForAttendance?._id;
+            if (candidateId) {
+                const timer = setTimeout(() => {
+                    fetchAttendanceData(candidateId);
+                }, 300); // Debounce for 300ms
+                return () => clearTimeout(timer);
+            }
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [attendanceYear, attendanceMonth, showAttendanceModal]);
+    
+    // Handle advanced filter apply
+    const handleApplyAdvancedFilter = async () => {
+        if (!selectedCandidateForAttendance) return;
+        if (!startDate || !endDate) {
+            await Swal.fire({
+                icon: 'warning',
+                title: 'Missing Dates',
+                text: 'Please select both start date and end date.',
+                confirmButtonText: 'OK'
+            });
+            return;
+        }
+        if (new Date(startDate) > new Date(endDate)) {
+            await Swal.fire({
+                icon: 'warning',
+                title: 'Invalid Date Range',
+                text: 'Start date must be before or equal to end date.',
+                confirmButtonText: 'OK'
+            });
+            return;
+        }
+        const candidateId = selectedCandidateForAttendance?.id || selectedCandidateForAttendance?._id;
+        if (candidateId) {
+            await fetchAttendanceData(candidateId);
+        }
     };
 
     // Function to handle document verification
@@ -2588,12 +3213,27 @@ const Candidates = () => {
                                             {selectedCandidateForAttendance?.email}
                                         </p>
                                     </div>
-                                    <button
-                                        onClick={closeAttendanceModal}
-                                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                                    >
-                                        <i className="ri-close-line text-2xl"></i>
-                                    </button>
+                                    <div className="flex items-center gap-3">
+                                        {userRole === 'admin' && (
+                                            <button
+                                                onClick={() => {
+                                                    setBackDateEntries([{ date: '', punchInTime: '', punchOutTime: '', notes: '', timezone: 'UTC' }]);
+                                                    setShowBackDateAttendanceModal(true);
+                                                }}
+                                                className="px-4 py-2 bg-primary text-white rounded-lg hover:opacity-90 transition-colors text-sm font-medium flex items-center gap-2"
+                                                title="Add Back-Dated Attendance"
+                                            >
+                                                <i className="ri-calendar-line"></i>
+                                                Add Back-Dated
+                                            </button>
+                                        )}
+                                        <button
+                                            onClick={closeAttendanceModal}
+                                            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                        >
+                                            <i className="ri-close-line text-2xl"></i>
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
 
@@ -2650,10 +3290,158 @@ const Candidates = () => {
 
                                         {/* Calendar Layout */}
                                         <div>
-                                            <h4 className="text-md font-semibold text-gray-900 dark:text-white mb-4">
-                                                Calendar View - {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-                                            </h4>
+                                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-4">
+                                                <h4 className="text-md font-semibold text-gray-900 dark:text-white">
+                                                    Calendar View - {new Date(attendanceYear, attendanceMonth).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                                                </h4>
+                                                
+                                                {/* Year/Month Selectors and Advanced Filter */}
+                                                <div className="flex flex-wrap items-center gap-3">
+                                                    {/* Year Dropdown */}
+                                                    <div className="flex items-center gap-2">
+                                                        <label className="text-sm text-gray-600 dark:text-gray-400">Year:</label>
+                                                        <select
+                                                            value={attendanceYear}
+                                                            onChange={(e) => {
+                                                                setAttendanceYear(parseInt(e.target.value));
+                                                                setShowAdvancedFilter(false);
+                                                            }}
+                                                            className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-bodydark dark:text-white"
+                                                        >
+                                                            {Array.from({ length: 10 }, (_, i) => {
+                                                                const year = new Date().getFullYear() - 2 + i;
+                                                                return (
+                                                                    <option key={year} value={year}>
+                                                                        {year}
+                                                                    </option>
+                                                                );
+                                                            })}
+                                                        </select>
+                                                    </div>
+                                                    
+                                                    {/* Month Dropdown */}
+                                                    <div className="flex items-center gap-2">
+                                                        <label className="text-sm text-gray-600 dark:text-gray-400">Month:</label>
+                                                        <select
+                                                            value={attendanceMonth}
+                                                            onChange={(e) => {
+                                                                setAttendanceMonth(parseInt(e.target.value));
+                                                                setShowAdvancedFilter(false);
+                                                            }}
+                                                            className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-bodydark dark:text-white"
+                                                        >
+                                                            {[
+                                                                'January', 'February', 'March', 'April', 'May', 'June',
+                                                                'July', 'August', 'September', 'October', 'November', 'December'
+                                                            ].map((month, index) => (
+                                                                <option key={index} value={index}>
+                                                                    {month}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                    
+                                                    {/* Advanced Filter Toggle */}
+                                                    <button
+                                                        onClick={() => {
+                                                            setShowAdvancedFilter(!showAdvancedFilter);
+                                                            if (showAdvancedFilter) {
+                                                                setStartDate('');
+                                                                setEndDate('');
+                                                                handleAttendanceDateChange();
+                                                            }
+                                                        }}
+                                                        className="px-3 py-1.5 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                                                    >
+                                                        {showAdvancedFilter ? 'Hide' : 'Advanced'} Filter
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            
+                                            {/* Advanced Filter Section */}
+                                            {showAdvancedFilter && (
+                                                <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                                                    <div className="flex flex-col sm:flex-row gap-4 items-end">
+                                                        <div className="flex-1">
+                                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                                Start Date
+                                                            </label>
+                                                            <input
+                                                                type="date"
+                                                                value={startDate}
+                                                                onChange={(e) => setStartDate(e.target.value)}
+                                                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-bodydark dark:text-white"
+                                                            />
+                                                        </div>
+                                                        <div className="flex-1">
+                                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                                End Date
+                                                            </label>
+                                                            <input
+                                                                type="date"
+                                                                value={endDate}
+                                                                onChange={(e) => setEndDate(e.target.value)}
+                                                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-bodydark dark:text-white"
+                                                            />
+                                                        </div>
+                                                        <button
+                                                            onClick={handleApplyAdvancedFilter}
+                                                            className="px-4 py-2 bg-primary text-white rounded-lg hover:opacity-90 transition-colors"
+                                                        >
+                                                            Apply Filter
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            
                                             <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                                                {/* Month Navigation */}
+                                                <div className="flex items-center justify-between bg-gray-50 dark:bg-gray-700 px-4 py-3 border-b border-gray-200 dark:border-gray-600">
+                                                    <button
+                                                        onClick={() => {
+                                                            let newMonth = attendanceMonth - 1;
+                                                            let newYear = attendanceYear;
+                                                            
+                                                            if (newMonth < 0) {
+                                                                newMonth = 11;
+                                                                newYear = attendanceYear - 1;
+                                                            }
+                                                            
+                                                            setAttendanceMonth(newMonth);
+                                                            setAttendanceYear(newYear);
+                                                            setShowAdvancedFilter(false);
+                                                        }}
+                                                        className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-gray-700 dark:text-gray-300"
+                                                        title="Previous Month"
+                                                    >
+                                                        <i className="ri-arrow-left-s-line text-xl"></i>
+                                                    </button>
+                                                    
+                                                    <h5 className="text-lg font-semibold text-gray-900 dark:text-white">
+                                                        {new Date(attendanceYear, attendanceMonth).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                                                    </h5>
+                                                    
+                                                    <button
+                                                        onClick={() => {
+                                                            let newMonth = attendanceMonth + 1;
+                                                            let newYear = attendanceYear;
+                                                            
+                                                            if (newMonth > 11) {
+                                                                newMonth = 0;
+                                                                newYear = attendanceYear + 1;
+                                                            }
+                                                            
+                                                            setAttendanceMonth(newMonth);
+                                                            setAttendanceYear(newYear);
+                                                            setShowAdvancedFilter(false);
+                                                        }}
+                                                        className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-gray-700 dark:text-gray-300"
+                                                        title="Next Month"
+                                                    >
+                                                        <i className="ri-arrow-right-s-line text-xl"></i>
+                                                    </button>
+                                                </div>
+                                                
                                                 {/* Calendar Header */}
                                                 <div className="grid grid-cols-7 bg-gray-50 dark:bg-gray-700">
                                                     {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
@@ -2665,8 +3453,14 @@ const Candidates = () => {
                                                 {/* Calendar Grid */}
                                                 <div className="grid grid-cols-7 bg-white dark:bg-gray-800">
                                                     {getCalendarData().map((item, index) => {
+                                                        const hasAttendance = item.attendance && (item.attendance.punchIn || item.attendance.punchOut);
                                                         const isPresent = item.attendance && item.attendance.punchIn && item.attendance.punchOut;
                                                         const hours = item.attendance ? formatDurationHours(item.attendance.duration) : 0;
+                                                        const today = new Date();
+                                                        today.setHours(0, 0, 0, 0);
+                                                        const itemDate = new Date(item.date);
+                                                        itemDate.setHours(0, 0, 0, 0);
+                                                        const isPastDate = itemDate < today;
                                                         
                                                         return (
                                                             <div
@@ -2676,7 +3470,11 @@ const Candidates = () => {
                                                                         ? 'bg-gray-50 dark:bg-gray-900' 
                                                                         : isPresent 
                                                                             ? 'bg-green-50 dark:bg-green-900/20' 
-                                                                            : 'bg-white dark:bg-gray-800'
+                                                                            : hasAttendance && !isPresent
+                                                                                ? 'bg-yellow-50 dark:bg-yellow-900/20'
+                                                                                : isPastDate
+                                                                                    ? 'bg-red-50 dark:bg-red-900/20'
+                                                                                    : 'bg-white dark:bg-gray-800'
                                                                 }`}
                                                             >
                                                                 {item.day > 0 && (
@@ -2686,18 +3484,37 @@ const Candidates = () => {
                                                                                 ? 'text-gray-400' 
                                                                                 : isPresent 
                                                                                     ? 'text-green-700 dark:text-green-400' 
-                                                                                    : 'text-gray-600 dark:text-gray-400'
+                                                                                    : hasAttendance && !isPresent
+                                                                                        ? 'text-yellow-700 dark:text-yellow-400'
+                                                                                        : isPastDate
+                                                                                            ? 'text-red-700 dark:text-red-400'
+                                                                                            : 'text-gray-600 dark:text-gray-400'
                                                                         }`}>
                                                                             {item.day}
                                                                         </span>
                                                                         {isPresent && (
-                                                                            <span className="text-xs text-green-600 dark:text-green-400 mt-1">
-                                                                                {hours.toFixed(1)}h
+                                                                            <>
+                                                                                <span className="text-xs font-semibold text-green-600 dark:text-green-400 mt-1">
+                                                                                    Present
+                                                                                </span>
+                                                                                <span className="text-xs text-green-600 dark:text-green-400">
+                                                                                    {hours.toFixed(1)}h
+                                                                                </span>
+                                                                            </>
+                                                                        )}
+                                                                        {hasAttendance && !isPresent && (
+                                                                            <span className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
+                                                                                Incomplete
                                                                             </span>
                                                                         )}
-                                                                        {!isPresent && item.day > 0 && (
+                                                                        {!hasAttendance && isPastDate && (
                                                                             <span className="text-xs text-red-500 dark:text-red-400 mt-1">
                                                                                 Absent
+                                                                            </span>
+                                                                        )}
+                                                                        {!hasAttendance && !isPastDate && (
+                                                                            <span className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                                                                                -
                                                                             </span>
                                                                         )}
                                                                     </div>
@@ -2719,6 +3536,242 @@ const Candidates = () => {
                                     className="ti-btn ti-btn-primary"
                                 >
                                     Close
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Back-Date Attendance Modal */}
+            {showBackDateAttendanceModal && selectedCandidateForAttendance && (
+                <div className="fixed inset-0 z-50 overflow-y-auto">
+                    <div className="flex items-center justify-center min-h-screen pt-4 px-2 sm:px-4 pb-20 text-center sm:block sm:p-0">
+                        {/* Background overlay */}
+                        <div 
+                            className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" 
+                            onClick={() => {
+                                setShowBackDateAttendanceModal(false);
+                                setBackDateEntries([{ date: '', punchInTime: '', punchOutTime: '', notes: '', timezone: 'UTC' }]);
+                                if (excelFileInputRef.current) {
+                                    excelFileInputRef.current.value = '';
+                                }
+                            }}
+                        ></div>
+
+                        {/* Modal panel */}
+                        <div className="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all w-full max-w-4xl mx-auto sm:my-8 sm:align-middle">
+                            {/* Modal header */}
+                            <div className="bg-white dark:bg-gray-800 px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                                            Add Back-Dated Attendance
+                                        </h3>
+                                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                            {selectedCandidateForAttendance?.fullName} - {selectedCandidateForAttendance?.email}
+                                        </p>
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            setShowBackDateAttendanceModal(false);
+                                            setBackDateEntries([{ date: '', punchInTime: '', punchOutTime: '', notes: '', timezone: 'UTC' }]);
+                                            if (excelFileInputRef.current) {
+                                                excelFileInputRef.current.value = '';
+                                            }
+                                        }}
+                                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                    >
+                                        <i className="ri-close-line text-2xl"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Modal body */}
+                            <div className="bg-white dark:bg-gray-800 px-4 sm:px-6 py-4 max-h-[70vh] overflow-y-auto">
+                                <div className="space-y-4">
+                                    <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                                        <p className="text-sm text-blue-800 dark:text-blue-300">
+                                            <i className="ri-information-line me-2"></i>
+                                            You can add multiple back-dated attendance entries. Each entry requires a date, punch-in time, and punch-out time.
+                                        </p>
+                                    </div>
+
+                                    {/* Excel Import Section */}
+                                    <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                                                <i className="ri-file-excel-2-line text-lg text-green-600"></i>
+                                                Import from Excel
+                                            </h4>
+                                        </div>
+                                        <div className="flex flex-col sm:flex-row gap-3">
+                                            <button
+                                                onClick={downloadExcelTemplate}
+                                                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium flex items-center justify-center gap-2"
+                                            >
+                                                <i className="ri-download-line"></i>
+                                                Download Template
+                                            </button>
+                                            <label className="px-4 py-2 bg-primary text-white rounded-lg hover:opacity-90 transition-colors text-sm font-medium flex items-center justify-center gap-2 cursor-pointer">
+                                                <i className="ri-upload-line"></i>
+                                                Import Excel File
+                                                <input
+                                                    ref={excelFileInputRef}
+                                                    type="file"
+                                                    accept=".xlsx,.xls"
+                                                    onChange={(e) => {
+                                                        const file = e.target.files?.[0];
+                                                        if (file) {
+                                                            handleExcelImport(file);
+                                                        }
+                                                    }}
+                                                    className="hidden"
+                                                />
+                                            </label>
+                                        </div>
+                                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                                            Download the template, fill in your attendance data, and import it here. The template includes sample entries for reference.
+                                        </p>
+                                    </div>
+
+                                    {backDateEntries.map((entry, index) => (
+                                        <div key={index} className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900/50">
+                                            <div className="flex items-center justify-between mb-3">
+                                                <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                                    Entry {index + 1}
+                                                </h4>
+                                                {backDateEntries.length > 1 && (
+                                                    <button
+                                                        onClick={() => removeBackDateEntry(index)}
+                                                        className="text-red-500 hover:text-red-700 dark:hover:text-red-400"
+                                                        title="Remove entry"
+                                                    >
+                                                        <i className="ri-delete-bin-line text-lg"></i>
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                {/* Date */}
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                        Date <span className="text-red-500">*</span>
+                                                    </label>
+                                                    <input
+                                                        type="date"
+                                                        value={entry.date}
+                                                        onChange={(e) => updateBackDateEntry(index, 'date', e.target.value)}
+                                                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-bodydark dark:text-white"
+                                                        required
+                                                    />
+                                                </div>
+
+                                                {/* Timezone */}
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                        Timezone
+                                                    </label>
+                                                    <select
+                                                        value={entry.timezone}
+                                                        onChange={(e) => updateBackDateEntry(index, 'timezone', e.target.value)}
+                                                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-bodydark dark:text-white"
+                                                    >
+                                                        {timezones.map((tz) => (
+                                                            <option key={tz.value} value={tz.value}>
+                                                                {tz.label}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+
+                                                {/* Punch In Time */}
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                        Punch In Time <span className="text-red-500">*</span>
+                                                    </label>
+                                                    <input
+                                                        type="time"
+                                                        value={entry.punchInTime}
+                                                        onChange={(e) => updateBackDateEntry(index, 'punchInTime', e.target.value)}
+                                                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-bodydark dark:text-white"
+                                                        required
+                                                    />
+                                                </div>
+
+                                                {/* Punch Out Time */}
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                        Punch Out Time <span className="text-red-500">*</span>
+                                                    </label>
+                                                    <input
+                                                        type="time"
+                                                        value={entry.punchOutTime}
+                                                        onChange={(e) => updateBackDateEntry(index, 'punchOutTime', e.target.value)}
+                                                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-bodydark dark:text-white"
+                                                        required
+                                                    />
+                                                </div>
+
+                                                {/* Notes */}
+                                                <div className="md:col-span-2">
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                        Notes (Optional)
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={entry.notes}
+                                                        onChange={(e) => updateBackDateEntry(index, 'notes', e.target.value)}
+                                                        placeholder="Add any notes for this attendance entry"
+                                                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-bodydark dark:text-white"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+
+                                    {/* Add Another Entry Button */}
+                                    <button
+                                        onClick={addBackDateEntry}
+                                        className="w-full py-2 px-4 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-gray-600 dark:text-gray-400 hover:border-primary hover:text-primary dark:hover:border-primary dark:hover:text-primary transition-colors flex items-center justify-center gap-2"
+                                    >
+                                        <i className="ri-add-line"></i>
+                                        Add Another Entry
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Modal footer */}
+                            <div className="bg-gray-50 dark:bg-gray-700 px-4 sm:px-6 py-3 flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3">
+                                <button
+                                    onClick={() => {
+                                        setShowBackDateAttendanceModal(false);
+                                        setBackDateEntries([{ date: '', punchInTime: '', punchOutTime: '', notes: '', timezone: 'UTC' }]);
+                                        if (excelFileInputRef.current) {
+                                            excelFileInputRef.current.value = '';
+                                        }
+                                    }}
+                                    className="ti-btn ti-btn-light w-full sm:w-auto"
+                                    disabled={addingBackDateAttendance}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleSubmitBackDateAttendance}
+                                    disabled={addingBackDateAttendance}
+                                    className="ti-btn ti-btn-primary w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {addingBackDateAttendance ? (
+                                        <>
+                                            <i className="ri-loader-4-line animate-spin me-1"></i>
+                                            Adding...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <i className="ri-calendar-check-line me-1"></i>
+                                            Add Attendance
+                                        </>
+                                    )}
                                 </button>
                             </div>
                         </div>
