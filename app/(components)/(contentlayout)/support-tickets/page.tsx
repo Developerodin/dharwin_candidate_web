@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import Swal from "sweetalert2";
+
+const Select = dynamic(() => import("react-select"), { ssr: false });
 import {
   createSupportTicket,
   getAllSupportTickets,
@@ -11,6 +14,7 @@ import {
   deleteSupportTicket,
   type TicketFilters
 } from '@/shared/lib/supportTickets';
+import { fetchAllCandidates } from '@/shared/lib/candidates';
 
 const SupportTickets = () => {
   // State management
@@ -22,6 +26,7 @@ const SupportTickets = () => {
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [priorityFilter, setPriorityFilter] = useState<string>('');
   const [categoryFilter, setCategoryFilter] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState<string>('');
   
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -33,6 +38,7 @@ const SupportTickets = () => {
   // User role
   const [userRole, setUserRole] = useState<string>('user');
   const [userId, setUserId] = useState<string>('');
+  const [candidateId, setCandidateId] = useState<string>(''); // Candidate ID for candidates (role='user')
   
   // Modals
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -44,16 +50,24 @@ const SupportTickets = () => {
     title: '',
     description: '',
     priority: 'Medium' as 'Low' | 'Medium' | 'High' | 'Urgent',
-    category: 'General'
+    category: 'General',
+    candidateId: '' // Admin only - Create ticket on behalf of candidate
   });
   const [attachments, setAttachments] = useState<File[]>([]);
   const [attachmentErrors, setAttachmentErrors] = useState<string[]>([]);
   const [creatingTicket, setCreatingTicket] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
+  // Candidates list for dropdown (admin only)
+  const [candidatesList, setCandidatesList] = useState<any[]>([]);
+  const [loadingCandidates, setLoadingCandidates] = useState(false);
+  
   // Comment form
   const [commentText, setCommentText] = useState('');
   const [addingComment, setAddingComment] = useState(false);
+  const [commentAttachments, setCommentAttachments] = useState<File[]>([]);
+  const [commentAttachmentErrors, setCommentAttachmentErrors] = useState<string[]>([]);
+  const commentFileInputRef = useRef<HTMLInputElement>(null);
   
   // Update ticket form (admin only)
   const [updateForm, setUpdateForm] = useState({
@@ -81,6 +95,51 @@ const SupportTickets = () => {
     }
   }, []);
 
+  // Resolve candidate ID for candidates (role='user')
+  useEffect(() => {
+    const resolveCandidateId = async () => {
+      if (userRole !== 'user' || !userId) return;
+      
+      try {
+        // Fetch all candidates to find the one matching this user
+        const allCandidates = await fetchAllCandidates({
+          page: 1,
+          limit: 1000
+        });
+        
+        const candidates = Array.isArray(allCandidates) 
+          ? allCandidates 
+          : (Array.isArray(allCandidates?.results) ? allCandidates.results : []);
+        
+        // Find candidate by owner ID or email
+        const match = candidates.find((c: any) => {
+          const byOwner = String(c?.owner) === String(userId);
+          const userData = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
+          if (userData) {
+            try {
+              const parsedUser = JSON.parse(userData);
+              const byEmail = (c?.email || '').toLowerCase() === (parsedUser?.email || '').toLowerCase();
+              return byOwner || byEmail;
+            } catch (e) {
+              return byOwner;
+            }
+          }
+          return byOwner;
+        });
+        
+        // Handle both id and _id fields
+        const matchedCandidateId = match?.id || match?._id;
+        if (matchedCandidateId) {
+          setCandidateId(matchedCandidateId);
+        }
+      } catch (error) {
+        console.warn('Failed to resolve candidate ID:', error);
+      }
+    };
+    
+    resolveCandidateId();
+  }, [userRole, userId]);
+
   // Build filter parameters
   const buildFilterParams = (): TicketFilters => {
     const params: TicketFilters = {
@@ -104,26 +163,48 @@ const SupportTickets = () => {
       const params = buildFilterParams();
       const data = await getAllSupportTickets(params);
       
+      let ticketsData: any[] = [];
       if (data && data.results) {
-        setTickets(data.results);
+        ticketsData = data.results;
         setTotalPages(data.totalPages || 1);
         setTotalResults(data.totalResults || 0);
       } else if (Array.isArray(data)) {
-        setTickets(data);
+        ticketsData = data;
         setTotalPages(1);
         setTotalResults(data.length);
       } else {
-        setTickets([]);
+        ticketsData = [];
         setTotalPages(1);
         setTotalResults(0);
       }
+
+      // Apply search filter on frontend
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase().trim();
+        ticketsData = ticketsData.filter((ticket: any) => {
+          const ticketId = ticket.id || ticket._id;
+          const ticketIdStr = ticket.ticketId || ticketId.slice(-8).toUpperCase();
+          const title = (ticket.title || '').toLowerCase();
+          const description = (ticket.description || '').toLowerCase();
+          
+          return title.includes(query) || 
+                 description.includes(query) || 
+                 ticketIdStr.toLowerCase().includes(query);
+        });
+        // Update total results for filtered data
+        setTotalResults(ticketsData.length);
+        // Recalculate total pages for filtered results
+        setTotalPages(Math.ceil(ticketsData.length / limit));
+      }
+
+      setTickets(ticketsData);
     } catch (err: any) {
       setError(err?.response?.data?.message || err?.message || "Failed to fetch support tickets");
       setTickets([]);
     } finally {
       setLoading(false);
     }
-  }, [currentPage, limit, sortBy, statusFilter, priorityFilter, categoryFilter]);
+  }, [currentPage, limit, sortBy, statusFilter, priorityFilter, categoryFilter, searchQuery]);
 
   // Fetch tickets when filters change
   useEffect(() => {
@@ -148,6 +229,7 @@ const SupportTickets = () => {
     setStatusFilter('');
     setPriorityFilter('');
     setCategoryFilter('');
+    setSearchQuery('');
     setCurrentPage(1);
   };
 
@@ -156,17 +238,50 @@ const SupportTickets = () => {
     setCurrentPage(page);
   };
 
+  // Fetch candidates list for admin
+  const fetchCandidates = useCallback(async () => {
+    if (userRole !== 'admin') return;
+    
+    setLoadingCandidates(true);
+    try {
+      const data = await fetchAllCandidates({
+        page: 1,
+        limit: 1000, // Get all candidates for dropdown
+        sortBy: 'fullName:asc'
+      });
+      
+      if (data && data.results) {
+        setCandidatesList(data.results);
+      } else if (Array.isArray(data)) {
+        setCandidatesList(data);
+      } else {
+        setCandidatesList([]);
+      }
+    } catch (error) {
+      console.error('Error fetching candidates:', error);
+      setCandidatesList([]);
+    } finally {
+      setLoadingCandidates(false);
+    }
+  }, [userRole]);
+
   // Open create ticket modal
   const openCreateModal = () => {
     setCreateForm({
       title: '',
       description: '',
       priority: 'Medium',
-      category: 'General'
+      category: 'General',
+      candidateId: ''
     });
     setAttachments([]);
     setAttachmentErrors([]);
     setShowCreateModal(true);
+    
+    // Fetch candidates if admin
+    if (userRole === 'admin') {
+      fetchCandidates();
+    }
   };
 
   // Close create ticket modal
@@ -176,7 +291,8 @@ const SupportTickets = () => {
       title: '',
       description: '',
       priority: 'Medium',
-      category: 'General'
+      category: 'General',
+      candidateId: ''
     });
     setAttachments([]);
     setAttachmentErrors([]);
@@ -245,6 +361,56 @@ const SupportTickets = () => {
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
   };
 
+  // Handle comment file selection
+  const handleCommentFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    const errors: string[] = [];
+    const validFiles: File[] = [];
+
+    // Check total file count
+    if (commentAttachments.length + files.length > 10) {
+      errors.push('Maximum 10 files allowed. Please select fewer files.');
+      setCommentAttachmentErrors(errors);
+      return;
+    }
+
+    // Validate each file
+    files.forEach((file) => {
+      // Check file size (100MB = 100 * 1024 * 1024 bytes)
+      const maxSize = 100 * 1024 * 1024;
+      if (file.size > maxSize) {
+        errors.push(`${file.name}: File size exceeds 100MB limit.`);
+        return;
+      }
+
+      // Check file type
+      const allowedImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'image/bmp', 'image/svg+xml'];
+      const allowedVideoTypes = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo', 'video/x-matroska'];
+      const allowedTypes = [...allowedImageTypes, ...allowedVideoTypes];
+
+      if (!allowedTypes.includes(file.type)) {
+        errors.push(`${file.name}: File type not allowed. Allowed: Images (JPEG, PNG, GIF, WEBP, BMP, SVG) and Videos (MP4, WEBM, MOV, AVI, MKV)`);
+        return;
+      }
+
+      validFiles.push(file);
+    });
+
+    if (errors.length > 0) {
+      setCommentAttachmentErrors(errors);
+    } else {
+      setCommentAttachmentErrors([]);
+    }
+
+    setCommentAttachments([...commentAttachments, ...validFiles]);
+  };
+
+  // Remove comment attachment
+  const removeCommentAttachment = (index: number) => {
+    setCommentAttachments(commentAttachments.filter((_, i) => i !== index));
+    setCommentAttachmentErrors([]);
+  };
+
   // Handle create ticket
   const handleCreateTicket = async () => {
     // Validate title (5-200 characters)
@@ -307,7 +473,8 @@ const SupportTickets = () => {
         description: createForm.description.trim(),
         priority: createForm.priority,
         category: createForm.category.trim() || 'General',
-        attachments: attachments.length > 0 ? attachments : undefined
+        attachments: attachments.length > 0 ? attachments : undefined,
+        ...(isAdmin && createForm.candidateId.trim() ? { candidateId: createForm.candidateId.trim() } : {})
       });
 
       await Swal.fire({
@@ -366,6 +533,11 @@ const SupportTickets = () => {
     setShowTicketModal(false);
     setSelectedTicket(null);
     setCommentText('');
+    setCommentAttachments([]);
+    setCommentAttachmentErrors([]);
+    if (commentFileInputRef.current) {
+      commentFileInputRef.current.value = '';
+    }
     setUpdateForm({
       status: '',
       priority: '',
@@ -399,12 +571,33 @@ const SupportTickets = () => {
 
     if (!selectedTicket) return;
 
+    // Check for comment attachment errors
+    if (commentAttachmentErrors.length > 0) {
+      await Swal.fire({
+        icon: 'error',
+        title: 'File Upload Error',
+        html: commentAttachmentErrors.join('<br>'),
+        confirmButtonText: 'OK'
+      });
+      return;
+    }
+
     try {
       setAddingComment(true);
       const ticketId = selectedTicket.id || selectedTicket._id;
-      const updatedTicket = await addCommentToTicket(ticketId, commentText.trim());
+      const updatedTicket = await addCommentToTicket(
+        ticketId, 
+        commentText.trim(),
+        commentAttachments.length > 0 ? commentAttachments : undefined
+      );
 
       setCommentText('');
+      setCommentAttachments([]);
+      setCommentAttachmentErrors([]);
+      // Reset file input
+      if (commentFileInputRef.current) {
+        commentFileInputRef.current.value = '';
+      }
       
       // Update selected ticket with new comment
       const latestTicket = await getSupportTicketById(ticketId);
@@ -614,6 +807,20 @@ const SupportTickets = () => {
 
       {/* Filters */}
       <div className="bg-white dark:bg-bodydark rounded-lg shadow-sm p-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
+          <div className="md:col-span-5">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Search Tickets
+            </label>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by ticket ID, title, or description..."
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-bodydark dark:text-white"
+            />
+          </div>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -735,14 +942,32 @@ const SupportTickets = () => {
               <tbody className="bg-white dark:bg-bodydark divide-y divide-gray-200 dark:divide-gray-700">
                 {tickets.map((ticket) => {
                   const ticketId = ticket.id || ticket._id;
-                  const canView = isAdmin || (ticket.createdBy?.id || ticket.createdBy?._id || ticket.candidate?.id || ticket.candidate?._id) === userId;
+                  // Check if user can view this ticket
+                  // Admin can view all tickets
+                  // Candidates can view tickets where they are the candidate (even if created by admin)
+                  const ticketCandidateId = ticket.candidate?.id || ticket.candidate?._id;
+                  const ticketCreatedById = ticket.createdBy?.id || ticket.createdBy?._id;
+                  const canView = isAdmin || 
+                    (userRole === 'user' && candidateId && ticketCandidateId === candidateId) ||
+                    (ticketCreatedById === userId) ||
+                    (ticketCandidateId === userId);
                   
                   return (
                     <tr key={ticketId} className="hover:bg-gray-50 dark:hover:bg-gray-800">
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-sm font-mono text-gray-900 dark:text-white">
-                          {ticket.ticketId || ticketId.slice(-8).toUpperCase()}
-                        </span>
+                        {canView ? (
+                          <button
+                            onClick={() => openTicketModal(ticket)}
+                            className="text-sm font-mono text-primary hover:text-primary-dark hover:underline cursor-pointer"
+                            title="Click to view ticket details"
+                          >
+                            {ticket.ticketId || ticketId.slice(-8).toUpperCase()}
+                          </button>
+                        ) : (
+                          <span className="text-sm font-mono text-gray-900 dark:text-white">
+                            {ticket.ticketId || ticketId.slice(-8).toUpperCase()}
+                          </span>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         <div className="text-sm font-medium text-gray-900 dark:text-white">
@@ -955,11 +1180,159 @@ const SupportTickets = () => {
                       value={createForm.category}
                       onChange={(e) => setCreateForm({ ...createForm, category: e.target.value })}
                       placeholder="e.g., Technical, General"
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-bodydark dark:text-white"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-bodydark dark:text-white bg-gray-100 dark:bg-gray-700 cursor-not-allowed"
                       maxLength={100}
+                      disabled
+                      readOnly
                     />
                   </div>
                 </div>
+
+                {/* Admin only - Create ticket on behalf of candidate */}
+                {isAdmin && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Create on behalf of Candidate (Optional)
+                    </label>
+                    {loadingCandidates ? (
+                      <div className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-bodydark flex items-center">
+                        <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
+                        <span className="text-sm text-gray-500 dark:text-gray-400">Loading candidates...</span>
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="dark-mode-react-select">
+                          <Select
+                            isClearable
+                            isSearchable
+                            placeholder="Select Candidate (or leave empty to create ticket for yourself)"
+                            value={candidatesList.find(c => (c.id || c._id) === createForm.candidateId) ? {
+                              value: createForm.candidateId,
+                              label: `${candidatesList.find(c => (c.id || c._id) === createForm.candidateId)?.fullName || 'Unknown'} ${candidatesList.find(c => (c.id || c._id) === createForm.candidateId)?.email ? `(${candidatesList.find(c => (c.id || c._id) === createForm.candidateId)?.email})` : ''}`
+                            } : null}
+                            onChange={(selectedOption: any) => {
+                              setCreateForm({ 
+                                ...createForm, 
+                                candidateId: selectedOption ? selectedOption.value : '' 
+                              });
+                            }}
+                            options={candidatesList.map((candidate) => {
+                              const candidateId = candidate.id || candidate._id;
+                              const fullName = candidate.fullName || 'Unknown';
+                              const email = candidate.email || '';
+                              return {
+                                value: candidateId,
+                                label: `${fullName}${email ? ` (${email})` : ''}`
+                              };
+                            })}
+                            styles={{
+                              control: (baseStyles, state) => ({
+                                ...baseStyles,
+                                backgroundColor: 'transparent',
+                                borderColor: state.isFocused ? '#6366f1' : '#d1d5db',
+                                borderRadius: '0.5rem',
+                                minHeight: '42px',
+                                boxShadow: state.isFocused ? '0 0 0 2px rgba(99, 102, 241, 0.2)' : 'none',
+                                '&:hover': {
+                                  borderColor: '#6366f1'
+                                }
+                              }),
+                              menu: (baseStyles) => ({
+                                ...baseStyles,
+                                backgroundColor: 'white',
+                                zIndex: 9999
+                              }),
+                              option: (baseStyles, state) => ({
+                                ...baseStyles,
+                                backgroundColor: state.isSelected 
+                                  ? '#6366f1' 
+                                  : state.isFocused 
+                                  ? '#e0e7ff' 
+                                  : 'white',
+                                color: state.isSelected ? 'white' : '#1f2937',
+                                '&:active': {
+                                  backgroundColor: '#6366f1',
+                                  color: 'white'
+                                }
+                              }),
+                              input: (baseStyles) => ({
+                                ...baseStyles,
+                                color: '#1f2937'
+                              }),
+                              singleValue: (baseStyles) => ({
+                                ...baseStyles,
+                                color: '#1f2937'
+                              }),
+                              placeholder: (baseStyles) => ({
+                                ...baseStyles,
+                                color: '#9ca3af'
+                              })
+                            }}
+                            className="react-select-container"
+                            classNamePrefix="react-select"
+                            theme={(theme) => ({
+                              ...theme,
+                              colors: {
+                                ...theme.colors,
+                                primary: '#6366f1',
+                                primary25: '#e0e7ff',
+                                primary50: '#c7d2fe',
+                                primary75: '#a5b4fc'
+                              }
+                            })}
+                          />
+                        </div>
+                        <style jsx global>{`
+                          .dark .dark-mode-react-select .react-select__control {
+                            background-color: #1f2937 !important;
+                            border-color: #4b5563 !important;
+                          }
+                          .dark .dark-mode-react-select .react-select__control:hover {
+                            border-color: #6366f1 !important;
+                          }
+                          .dark .dark-mode-react-select .react-select__single-value {
+                            color: #f3f4f6 !important;
+                          }
+                          .dark .dark-mode-react-select .react-select__input-container {
+                            color: #f3f4f6 !important;
+                          }
+                          .dark .dark-mode-react-select .react-select__placeholder {
+                            color: #9ca3af !important;
+                          }
+                          .dark .dark-mode-react-select .react-select__menu {
+                            background-color: #1f2937 !important;
+                          }
+                          .dark .dark-mode-react-select .react-select__option {
+                            background-color: #1f2937 !important;
+                            color: #f3f4f6 !important;
+                          }
+                          .dark .dark-mode-react-select .react-select__option:hover {
+                            background-color: #374151 !important;
+                          }
+                          .dark .dark-mode-react-select .react-select__option--is-selected {
+                            background-color: #6366f1 !important;
+                            color: white !important;
+                          }
+                          .dark .dark-mode-react-select .react-select__option--is-focused {
+                            background-color: #4b5563 !important;
+                          }
+                          .dark .dark-mode-react-select .react-select__indicator-separator {
+                            background-color: #4b5563 !important;
+                          }
+                          .dark .dark-mode-react-select .react-select__dropdown-indicator {
+                            color: #9ca3af !important;
+                          }
+                          .dark .dark-mode-react-select .react-select__clear-indicator {
+                            color: #9ca3af !important;
+                          }
+                        `}</style>
+                      </div>
+                    )}
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      Search and select a candidate to create ticket on their behalf, or leave empty to create ticket for yourself.
+                    </p>
+                  </div>
+                )}
 
                 {/* File Upload Section */}
                 <div>
@@ -975,7 +1348,7 @@ const SupportTickets = () => {
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-bodydark dark:text-white"
                   />
                   <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    Maximum 10 files, 10MB per file. Allowed: Images (JPEG, PNG, GIF, WEBP, BMP, SVG) and Videos (MP4, WEBM, MOV, AVI, MKV)
+                    Maximum 10 files, 100MB per file. Allowed: Images (JPEG, PNG, GIF, WEBP, BMP, SVG) and Videos (MP4, WEBM, MOV, AVI, MKV)
                   </p>
                   
                   {/* Attachment Errors */}
@@ -1228,7 +1601,9 @@ const SupportTickets = () => {
                         type="text"
                         value={updateForm.category}
                         onChange={(e) => setUpdateForm({ ...updateForm, category: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-bodydark dark:text-white"
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-bodydark dark:text-white bg-gray-100 dark:bg-gray-700 cursor-not-allowed"
+                        disabled
+                        readOnly
                       />
                     </div>
                   </div>
@@ -1243,7 +1618,11 @@ const SupportTickets = () => {
               )}
 
               {/* Candidate can only close their own tickets */}
-              {!isAdmin && (selectedTicket.createdBy?.id || selectedTicket.createdBy?._id || selectedTicket.candidate?.id || selectedTicket.candidate?._id) === userId && selectedTicket.status !== 'Closed' && (
+              {!isAdmin && (
+                (userRole === 'user' && candidateId && (selectedTicket.candidate?.id || selectedTicket.candidate?._id) === candidateId) ||
+                (selectedTicket.createdBy?.id || selectedTicket.createdBy?._id) === userId ||
+                (selectedTicket.candidate?.id || selectedTicket.candidate?._id) === userId
+              ) && selectedTicket.status !== 'Closed' && (
                 <div className="mb-6">
                   <button
                     onClick={async () => {
@@ -1307,7 +1686,85 @@ const SupportTickets = () => {
                             </p>
                           </div>
                         </div>
-                        <p className="text-sm text-gray-700 dark:text-gray-300">{comment.content}</p>
+                        <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">{comment.content}</p>
+                        
+                        {/* Comment Attachments */}
+                        {comment.attachments && comment.attachments.length > 0 && (
+                          <div className="mt-3 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                            {comment.attachments.map((attachment: any, attIndex: number) => {
+                              const isImage = attachment.mimeType?.startsWith('image/');
+                              const isVideo = attachment.mimeType?.startsWith('video/');
+                              
+                              return (
+                                <div
+                                  key={attachment.id || attachment._id || attIndex}
+                                  className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-800"
+                                >
+                                  {isImage ? (
+                                    <div className="relative aspect-square bg-gray-100 dark:bg-gray-900">
+                                      <img
+                                        src={attachment.url}
+                                        alt={attachment.originalName || 'Attachment'}
+                                        className="w-full h-full object-cover cursor-pointer"
+                                        onClick={() => window.open(attachment.url, '_blank')}
+                                        onError={(e) => {
+                                          (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100"%3E%3Crect width="100" height="100" fill="%23ddd"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em" fill="%23999"%3EImage%3C/text%3E%3C/svg%3E';
+                                        }}
+                                      />
+                                    </div>
+                                  ) : isVideo ? (
+                                    <div className="relative aspect-square bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
+                                      <video
+                                        src={attachment.url}
+                                        controls
+                                        className="w-full h-full object-contain"
+                                        onError={(e) => {
+                                          const target = e.target as HTMLVideoElement;
+                                          target.style.display = 'none';
+                                          const parent = target.parentElement;
+                                          if (parent) {
+                                            parent.innerHTML = `
+                                              <div class="flex flex-col items-center justify-center h-full p-2">
+                                                <i class="ri-video-line text-2xl text-gray-400 mb-2"></i>
+                                                <p class="text-xs text-gray-500 dark:text-gray-400 text-center truncate w-full">${attachment.originalName || 'Video'}</p>
+                                                <a href="${attachment.url}" target="_blank" class="text-xs text-primary mt-1 hover:underline">Open Video</a>
+                                              </div>
+                                            `;
+                                          }
+                                        }}
+                                      >
+                                        Your browser does not support the video tag.
+                                      </video>
+                                    </div>
+                                  ) : (
+                                    <div className="aspect-square flex flex-col items-center justify-center p-2">
+                                      <i className="ri-file-line text-2xl text-gray-400 mb-1"></i>
+                                      <p className="text-xs text-gray-500 dark:text-gray-400 text-center truncate w-full">
+                                        {attachment.originalName || 'File'}
+                                      </p>
+                                      <a
+                                        href={attachment.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-xs text-primary mt-1 hover:underline"
+                                      >
+                                        Download
+                                      </a>
+                                    </div>
+                                  )}
+                                  <div className="p-1 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
+                                    <p className="text-xs text-gray-600 dark:text-gray-400 truncate" title={attachment.originalName}>
+                                      {attachment.originalName || 'Attachment'}
+                                    </p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-500">
+                                      {formatFileSize(attachment.size || 0)}
+                                    </p>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     ))
                   ) : (
@@ -1329,6 +1786,63 @@ const SupportTickets = () => {
                       minLength={5}
                       maxLength={2000}
                     />
+                    
+                    {/* Comment File Upload */}
+                    <div className="mb-2">
+                      <input
+                        ref={commentFileInputRef}
+                        type="file"
+                        multiple
+                        accept="image/*,video/*"
+                        onChange={handleCommentFileChange}
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-bodydark dark:text-white text-sm"
+                      />
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        Maximum 10 files, 100MB per file. Allowed: Images (JPEG, PNG, GIF, WEBP, BMP, SVG) and Videos (MP4, WEBM, MOV, AVI, MKV)
+                      </p>
+                      
+                      {/* Comment Attachment Errors */}
+                      {commentAttachmentErrors.length > 0 && (
+                        <div className="mt-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                          {commentAttachmentErrors.map((error, index) => (
+                            <p key={index} className="text-xs text-red-600 dark:text-red-400">{error}</p>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Selected Comment Files List */}
+                      {commentAttachments.length > 0 && (
+                        <div className="mt-3 space-y-2">
+                          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Selected Files ({commentAttachments.length}/10):
+                          </p>
+                          <div className="space-y-1 max-h-40 overflow-y-auto">
+                            {commentAttachments.map((file, index) => (
+                              <div
+                                key={index}
+                                className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-800 rounded-lg"
+                              >
+                                <div className="flex items-center gap-2 flex-1 min-w-0">
+                                  <i className={`ri-${file.type.startsWith('image/') ? 'image' : 'video'}-line text-lg text-gray-500 dark:text-gray-400`}></i>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm text-gray-900 dark:text-white truncate">{file.name}</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">{formatFileSize(file.size)}</p>
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => removeCommentAttachment(index)}
+                                  className="ml-2 text-red-500 hover:text-red-700 dark:hover:text-red-400"
+                                  title="Remove file"
+                                >
+                                  <i className="ri-close-circle-line text-lg"></i>
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    
                     <button
                       onClick={handleAddComment}
                       disabled={addingComment || !commentText.trim()}

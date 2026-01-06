@@ -6,7 +6,7 @@ const Select = dynamic(() => import("react-select"), {ssr : false});
 import dynamic from 'next/dynamic';
 import Swal from "sweetalert2";
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { fetchAllCandidates, deleteCandidate, addCandidateSalarySlips, uploadDocuments, fetchCandidateDocuments, verifyDocument, shareCandidate, getAttendanceByCandidate, resendEmailVerification, addNoteToCandidate, addFeedbackToCandidate, fetchCandidateById, fetchUserById, punchInAttendance, punchOutAttendance } from '@/shared/lib/candidates';
+import { fetchAllCandidates, deleteCandidate, addCandidateSalarySlips, uploadDocuments, fetchCandidateDocuments, verifyDocument, shareCandidate, getAttendanceByCandidate, resendEmailVerification, addNoteToCandidate, addFeedbackToCandidate, fetchCandidateById, fetchUserById, punchInAttendance, punchOutAttendance, updateCandidateJoiningDate, updateCandidateResignDate } from '@/shared/lib/candidates';
 import * as XLSX from 'xlsx';
 
 const Candidates = () => {
@@ -92,6 +92,14 @@ const Candidates = () => {
     }>>([{ date: '', punchInTime: '', punchOutTime: '', notes: '', timezone: 'UTC' }]);
     const [addingBackDateAttendance, setAddingBackDateAttendance] = useState<boolean>(false);
     const excelFileInputRef = useRef<HTMLInputElement>(null);
+    
+    // Joining date and resign date state
+    const [showJoiningDateModal, setShowJoiningDateModal] = useState<boolean>(false);
+    const [showResignDateModal, setShowResignDateModal] = useState<boolean>(false);
+    const [joiningDateInput, setJoiningDateInput] = useState<string>('');
+    const [resignDateInput, setResignDateInput] = useState<string>('');
+    const [updatingJoiningDate, setUpdatingJoiningDate] = useState<boolean>(false);
+    const [updatingResignDate, setUpdatingResignDate] = useState<boolean>(false);
 
     // Build filter parameters
     const buildFilterParams = () => {
@@ -413,6 +421,174 @@ const Candidates = () => {
         setShareEmail('');
         setShareWithDoc(false);
         setSharingCandidate(false);
+    };
+
+    // Function to open joining date modal
+    const openJoiningDateModal = () => {
+        if (selectedCandidate?.joiningDate) {
+            const date = new Date(selectedCandidate.joiningDate);
+            setJoiningDateInput(date.toISOString().split('T')[0]);
+        } else {
+            setJoiningDateInput('');
+        }
+        setShowJoiningDateModal(true);
+    };
+
+    // Function to close joining date modal
+    const closeJoiningDateModal = () => {
+        setShowJoiningDateModal(false);
+        setJoiningDateInput('');
+    };
+
+    // Function to handle update joining date
+    const handleUpdateJoiningDate = async () => {
+        if (!joiningDateInput) {
+            await Swal.fire({
+                icon: 'warning',
+                title: 'Date Required',
+                text: 'Please select a joining date.',
+                confirmButtonText: 'OK'
+            });
+            return;
+        }
+
+        try {
+            setUpdatingJoiningDate(true);
+            const candidateId = selectedCandidate?.id || selectedCandidate?._id;
+            await updateCandidateJoiningDate(candidateId, joiningDateInput);
+
+            // Refresh candidate data
+            const updatedCandidate = await fetchCandidateById(candidateId);
+            setSelectedCandidate(updatedCandidate.data || updatedCandidate);
+
+            // Refresh candidates list
+            await getCandidates();
+
+            await Swal.fire({
+                icon: 'success',
+                title: 'Joining Date Updated!',
+                text: 'The joining date has been updated successfully.',
+                confirmButtonText: 'OK'
+            });
+
+            closeJoiningDateModal();
+        } catch (error: any) {
+            console.error('Update joining date error:', error);
+            await Swal.fire({
+                icon: 'error',
+                title: 'Update Failed',
+                text: error?.response?.data?.message || error?.message || 'Failed to update joining date. Please try again.',
+                confirmButtonText: 'OK'
+            });
+        } finally {
+            setUpdatingJoiningDate(false);
+        }
+    };
+
+    // Function to open resign date modal
+    const openResignDateModal = () => {
+        if (selectedCandidate?.resignDate) {
+            const date = new Date(selectedCandidate.resignDate);
+            setResignDateInput(date.toISOString().split('T')[0]);
+        } else {
+            setResignDateInput('');
+        }
+        setShowResignDateModal(true);
+    };
+
+    // Function to close resign date modal
+    const closeResignDateModal = () => {
+        setShowResignDateModal(false);
+        setResignDateInput('');
+    };
+
+    // Function to handle update resign date
+    const handleUpdateResignDate = async () => {
+        if (!resignDateInput) {
+            await Swal.fire({
+                icon: 'warning',
+                title: 'Date Required',
+                text: 'Please select a resign date.',
+                confirmButtonText: 'OK'
+            });
+            return;
+        }
+
+        try {
+            setUpdatingResignDate(true);
+            const candidateId = selectedCandidate?.id || selectedCandidate?._id;
+            await updateCandidateResignDate(candidateId, resignDateInput);
+
+            // Refresh candidate data
+            const updatedCandidate = await fetchCandidateById(candidateId);
+            setSelectedCandidate(updatedCandidate.data || updatedCandidate);
+
+            // Refresh candidates list
+            await getCandidates();
+
+            const resignDate = new Date(resignDateInput);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            resignDate.setHours(0, 0, 0, 0);
+
+            const message = resignDate > today
+                ? `Resign date set. Candidate will be deactivated on ${resignDateInput}.`
+                : 'Resign date updated. Candidate is now inactive.';
+
+            await Swal.fire({
+                icon: 'success',
+                title: 'Resign Date Updated!',
+                text: message,
+                confirmButtonText: 'OK'
+            });
+
+            closeResignDateModal();
+        } catch (error: any) {
+            console.error('Update resign date error:', error);
+            await Swal.fire({
+                icon: 'error',
+                title: 'Update Failed',
+                text: error?.response?.data?.message || error?.message || 'Failed to update resign date. Please try again.',
+                confirmButtonText: 'OK'
+            });
+        } finally {
+            setUpdatingResignDate(false);
+        }
+    };
+
+    // Function to handle clear resign date
+    const handleClearResignDate = async () => {
+        try {
+            setUpdatingResignDate(true);
+            const candidateId = selectedCandidate?.id || selectedCandidate?._id;
+            await updateCandidateResignDate(candidateId, null);
+
+            // Refresh candidate data
+            const updatedCandidate = await fetchCandidateById(candidateId);
+            setSelectedCandidate(updatedCandidate.data || updatedCandidate);
+
+            // Refresh candidates list
+            await getCandidates();
+
+            await Swal.fire({
+                icon: 'success',
+                title: 'Resign Date Cleared!',
+                text: 'Resign date cleared. Candidate is now active.',
+                confirmButtonText: 'OK'
+            });
+
+            closeResignDateModal();
+        } catch (error: any) {
+            console.error('Clear resign date error:', error);
+            await Swal.fire({
+                icon: 'error',
+                title: 'Clear Failed',
+                text: error?.response?.data?.message || error?.message || 'Failed to clear resign date. Please try again.',
+                confirmButtonText: 'OK'
+            });
+        } finally {
+            setUpdatingResignDate(false);
+        }
     };
 
     // Function to handle share candidate
@@ -2201,12 +2377,78 @@ const Candidates = () => {
                                             )}
                                         </div>
                                     </div>
-                                    <button
-                                        onClick={closeModal}
-                                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex-shrink-0 ml-2"
-                                    >
-                                        <i className="ri-close-line text-xl"></i>
-                                    </button>
+                                    <div className="flex items-center gap-2 sm:gap-3 ml-2 sm:ml-4">
+                                        {/* Joining Date */}
+                                        {(userRole === 'admin' || userRole === 'recruiter') && (
+                                            <div className="flex items-center gap-1 sm:gap-2">
+                                                {selectedCandidate?.joiningDate ? (
+                                                    <button
+                                                        onClick={openJoiningDateModal}
+                                                        className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-md transition-colors"
+                                                        title="Edit Joining Date"
+                                                    >
+                                                        <i className="ri-calendar-check-line"></i>
+                                                        <span className="hidden sm:inline">
+                                                            {new Date(selectedCandidate.joiningDate).toLocaleDateString()}
+                                                        </span>
+                                                        <span className="sm:hidden">
+                                                            {new Date(selectedCandidate.joiningDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                                        </span>
+                                                        <i className="ri-pencil-line text-xs"></i>
+                                                    </button>
+                                                ) : (
+                                                    <button
+                                                        onClick={openJoiningDateModal}
+                                                        className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-md transition-colors"
+                                                        title="Add Joining Date"
+                                                    >
+                                                        <i className="ri-calendar-add-line"></i>
+                                                        <span className="hidden sm:inline">Add Joining Date</span>
+                                                        <span className="sm:hidden">Joining</span>
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
+                                        
+                                        {/* Resign Date */}
+                                        {(userRole === 'admin' || userRole === 'recruiter') && (
+                                            <div className="flex items-center gap-1 sm:gap-2">
+                                                {selectedCandidate?.resignDate ? (
+                                                    <button
+                                                        onClick={openResignDateModal}
+                                                        className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-md transition-colors"
+                                                        title="Edit Resign Date"
+                                                    >
+                                                        <i className="ri-calendar-close-line"></i>
+                                                        <span className="hidden sm:inline">
+                                                            {new Date(selectedCandidate.resignDate).toLocaleDateString()}
+                                                        </span>
+                                                        <span className="sm:hidden">
+                                                            {new Date(selectedCandidate.resignDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                                        </span>
+                                                        <i className="ri-pencil-line text-xs"></i>
+                                                    </button>
+                                                ) : (
+                                                    <button
+                                                        onClick={openResignDateModal}
+                                                        className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-md transition-colors"
+                                                        title="Add Resign Date"
+                                                    >
+                                                        <i className="ri-calendar-close-line"></i>
+                                                        <span className="hidden sm:inline">Add Resign Date</span>
+                                                        <span className="sm:hidden">Resign</span>
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
+                                        
+                                        <button
+                                            onClick={closeModal}
+                                            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex-shrink-0"
+                                        >
+                                            <i className="ri-close-line text-xl"></i>
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
 
@@ -2788,6 +3030,203 @@ const Candidates = () => {
                                         Edit Profile
                                     </Link>
                                 )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Joining Date Modal */}
+            {showJoiningDateModal && selectedCandidate && (userRole === 'admin' || userRole === 'recruiter') && (
+                <div className="fixed inset-0 z-50 overflow-y-auto">
+                    <div className="flex items-center justify-center min-h-screen pt-4 px-2 sm:px-4 pb-20 text-center sm:block sm:p-0">
+                        {/* Background overlay */}
+                        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={closeJoiningDateModal}></div>
+
+                        {/* Modal panel */}
+                        <div className="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all w-full max-w-md mx-auto sm:my-8 sm:align-middle">
+                            {/* Modal header */}
+                            <div className="bg-white dark:bg-gray-800 px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                                        {selectedCandidate?.joiningDate ? 'Edit Joining Date' : 'Add Joining Date'}
+                                    </h3>
+                                    <button
+                                        onClick={closeJoiningDateModal}
+                                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                    >
+                                        <i className="ri-close-line text-xl"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Modal body */}
+                            <div className="bg-white dark:bg-gray-800 px-4 sm:px-6 py-4">
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                            Joining Date
+                                        </label>
+                                        <input
+                                            type="date"
+                                            value={joiningDateInput}
+                                            onChange={(e) => setJoiningDateInput(e.target.value)}
+                                            max={selectedCandidate?.resignDate ? new Date(selectedCandidate.resignDate).toISOString().split('T')[0] : undefined}
+                                            className="ti-form-input w-full"
+                                        />
+                                        {selectedCandidate?.resignDate && (
+                                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                                Must be before resign date: {new Date(selectedCandidate.resignDate).toLocaleDateString()}
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Modal footer */}
+                            <div className="bg-gray-50 dark:bg-gray-700 px-4 sm:px-6 py-3 flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3">
+                                <button
+                                    onClick={closeJoiningDateModal}
+                                    className="ti-btn ti-btn-light w-full sm:w-auto"
+                                    disabled={updatingJoiningDate}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleUpdateJoiningDate}
+                                    className="ti-btn ti-btn-primary w-full sm:w-auto"
+                                    disabled={updatingJoiningDate || !joiningDateInput}
+                                >
+                                    {updatingJoiningDate ? (
+                                        <>
+                                            <i className="ri-loader-4-line animate-spin me-1"></i>
+                                            Updating...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <i className="ri-save-line me-1"></i>
+                                            {selectedCandidate?.joiningDate ? 'Update' : 'Add'} Joining Date
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Resign Date Modal */}
+            {showResignDateModal && selectedCandidate && (userRole === 'admin' || userRole === 'recruiter') && (
+                <div className="fixed inset-0 z-50 overflow-y-auto">
+                    <div className="flex items-center justify-center min-h-screen pt-4 px-2 sm:px-4 pb-20 text-center sm:block sm:p-0">
+                        {/* Background overlay */}
+                        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={closeResignDateModal}></div>
+
+                        {/* Modal panel */}
+                        <div className="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all w-full max-w-md mx-auto sm:my-8 sm:align-middle">
+                            {/* Modal header */}
+                            <div className="bg-white dark:bg-gray-800 px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                                        {selectedCandidate?.resignDate ? 'Edit Resign Date' : 'Add Resign Date'}
+                                    </h3>
+                                    <button
+                                        onClick={closeResignDateModal}
+                                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                    >
+                                        <i className="ri-close-line text-xl"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Modal body */}
+                            <div className="bg-white dark:bg-gray-800 px-4 sm:px-6 py-4">
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                            Resign Date
+                                        </label>
+                                        <input
+                                            type="date"
+                                            value={resignDateInput}
+                                            onChange={(e) => setResignDateInput(e.target.value)}
+                                            min={selectedCandidate?.joiningDate ? new Date(selectedCandidate.joiningDate).toISOString().split('T')[0] : undefined}
+                                            className="ti-form-input w-full"
+                                        />
+                                        {selectedCandidate?.joiningDate && (
+                                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                                Must be after joining date: {new Date(selectedCandidate.joiningDate).toLocaleDateString()}
+                                            </p>
+                                        )}
+                                        {resignDateInput && new Date(resignDateInput) <= new Date() && (
+                                            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                                                <i className="ri-information-line me-1"></i>
+                                                Candidate will be deactivated immediately.
+                                            </p>
+                                        )}
+                                        {resignDateInput && new Date(resignDateInput) > new Date() && (
+                                            <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                                                <i className="ri-information-line me-1"></i>
+                                                Candidate will remain active until this date.
+                                            </p>
+                                        )}
+                                    </div>
+                                    {selectedCandidate?.resignDate && (
+                                        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
+                                            <p className="text-sm text-amber-800 dark:text-amber-200">
+                                                <i className="ri-information-line me-1"></i>
+                                                <strong>Note:</strong> Clearing the resign date will reactivate the candidate.
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Modal footer */}
+                            <div className="bg-gray-50 dark:bg-gray-700 px-4 sm:px-6 py-3 flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3">
+                                {selectedCandidate?.resignDate && (
+                                    <button
+                                        onClick={handleClearResignDate}
+                                        className="ti-btn ti-btn-warning w-full sm:w-auto"
+                                        disabled={updatingResignDate}
+                                    >
+                                        {updatingResignDate ? (
+                                            <>
+                                                <i className="ri-loader-4-line animate-spin me-1"></i>
+                                                Clearing...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <i className="ri-delete-bin-line me-1"></i>
+                                                Clear Resign Date
+                                            </>
+                                        )}
+                                    </button>
+                                )}
+                                <button
+                                    onClick={closeResignDateModal}
+                                    className="ti-btn ti-btn-light w-full sm:w-auto"
+                                    disabled={updatingResignDate}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleUpdateResignDate}
+                                    className="ti-btn ti-btn-primary w-full sm:w-auto"
+                                    disabled={updatingResignDate || !resignDateInput}
+                                >
+                                    {updatingResignDate ? (
+                                        <>
+                                            <i className="ri-loader-4-line animate-spin me-1"></i>
+                                            Updating...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <i className="ri-save-line me-1"></i>
+                                            {selectedCandidate?.resignDate ? 'Update' : 'Add'} Resign Date
+                                        </>
+                                    )}
+                                </button>
                             </div>
                         </div>
                     </div>

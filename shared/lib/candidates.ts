@@ -472,3 +472,19 @@ export const fetchUserById = async (userId: string) => {
   const response = await api.get(`${Users_API}/${userId}`);
   return response.data;
 };
+
+// Update candidate joining date (Admin only)
+export const updateCandidateJoiningDate = async (candidateId: string, joiningDate: string) => {
+  const response = await api.patch(`${Candidates_API}/${candidateId}/joining-date`, {
+    joiningDate: new Date(joiningDate).toISOString()
+  });
+  return response.data;
+};
+
+// Update candidate resign date (Admin only)
+export const updateCandidateResignDate = async (candidateId: string, resignDate: string | null) => {
+  const response = await api.patch(`${Candidates_API}/${candidateId}/resign-date`, {
+    resignDate: resignDate ? new Date(resignDate).toISOString() : null
+  });
+  return response.data;
+};

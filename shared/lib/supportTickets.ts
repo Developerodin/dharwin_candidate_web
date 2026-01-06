@@ -8,6 +8,7 @@ export interface CreateTicketData {
   priority?: 'Low' | 'Medium' | 'High' | 'Urgent';
   category?: string;
   attachments?: File[]; // Optional array of files
+  candidateId?: string; // Optional: Admin only - Create ticket on behalf of this candidate
 }
 
 export interface UpdateTicketData {
@@ -42,6 +43,11 @@ export const createSupportTicket = async (ticketData: CreateTicketData) => {
       formData.append('category', ticketData.category);
     }
     
+    // Admin can specify candidateId to create ticket on behalf of candidate
+    if (ticketData.candidateId) {
+      formData.append('candidateId', ticketData.candidateId);
+    }
+    
     // Add files (all files use the same field name 'attachments')
     ticketData.attachments.forEach((file) => {
       formData.append('attachments', file);
@@ -59,7 +65,8 @@ export const createSupportTicket = async (ticketData: CreateTicketData) => {
       title: ticketData.title,
       description: ticketData.description,
       priority: ticketData.priority,
-      category: ticketData.category
+      category: ticketData.category,
+      ...(ticketData.candidateId && { candidateId: ticketData.candidateId })
     });
     return response.data;
   }
@@ -95,10 +102,31 @@ export const updateSupportTicket = async (ticketId: string, updateData: UpdateTi
   return response.data;
 };
 
-// Add a comment to a support ticket
-export const addCommentToTicket = async (ticketId: string, content: string) => {
-  const response = await api.post(Support_Ticket_Comments_API(ticketId), { content });
-  return response.data;
+// Add a comment to a support ticket with optional file uploads
+export const addCommentToTicket = async (ticketId: string, content: string, attachments?: File[]) => {
+  // If files are provided, use FormData
+  if (attachments && attachments.length > 0) {
+    const formData = new FormData();
+    
+    // Add content field
+    formData.append('content', content);
+    
+    // Add files (all files use the same field name 'attachments')
+    attachments.forEach((file) => {
+      formData.append('attachments', file);
+    });
+    
+    const response = await api.post(Support_Ticket_Comments_API(ticketId), formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+    return response.data;
+  } else {
+    // No files, use regular JSON
+    const response = await api.post(Support_Ticket_Comments_API(ticketId), { content });
+    return response.data;
+  }
 };
 
 // Delete a support ticket (admin only)
