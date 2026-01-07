@@ -90,3 +90,6 @@ export const Recruiter_Activities_API = `${BASE_API_URL}/recruiter-activities`;
 // Support Tickets API
 export const Support_Tickets_API = `${BASE_API_URL}/support-tickets`;
 export const Support_Ticket_Comments_API = (ticketId: string) => `${Support_Tickets_API}/${ticketId}/comments`;
+
+// Holidays API
+export const Holidays_API = `${BASE_API_URL}/holidays`;

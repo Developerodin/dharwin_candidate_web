@@ -7,6 +7,7 @@ import dynamic from 'next/dynamic';
 import Swal from "sweetalert2";
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { fetchAllCandidates, deleteCandidate, addCandidateSalarySlips, uploadDocuments, fetchCandidateDocuments, verifyDocument, shareCandidate, getAttendanceByCandidate, resendEmailVerification, addNoteToCandidate, addFeedbackToCandidate, fetchCandidateById, fetchUserById, punchInAttendance, punchOutAttendance, updateCandidateJoiningDate, updateCandidateResignDate } from '@/shared/lib/candidates';
+import { getAllHolidays } from '@/shared/lib/holidays';
 import * as XLSX from 'xlsx';
 
 const Candidates = () => {
@@ -64,6 +65,7 @@ const Candidates = () => {
     const [selectedCandidateForAttendance, setSelectedCandidateForAttendance] = useState<any>(null);
     const [candidateAttendance, setCandidateAttendance] = useState<any[]>([]);
     const [loadingAttendanceData, setLoadingAttendanceData] = useState<boolean>(false);
+    const [candidateHolidaysByDate, setCandidateHolidaysByDate] = useState<Record<string, { title: string; date: string }>>({});
     
     // Attendance calendar filters
     const [attendanceYear, setAttendanceYear] = useState<number>(new Date().getFullYear());
@@ -840,6 +842,95 @@ const Candidates = () => {
     };
 
     // Get calendar data for the selected month/year
+    // Get effective joining date: from candidate data or first punchIn date
+    const getEffectiveJoiningDate = (): Date | null => {
+        if (!selectedCandidateForAttendance) return null;
+        
+        // First priority: Use joiningDate from candidate data if available and valid
+        const joiningDate = selectedCandidateForAttendance?.joiningDate;
+        if (joiningDate) {
+            try {
+                const date = new Date(joiningDate);
+                // Check if date is valid
+                if (!isNaN(date.getTime())) {
+                    date.setHours(0, 0, 0, 0);
+                    return date;
+                }
+            } catch (e) {
+                // Invalid date, continue to next option
+            }
+        }
+        
+        // Second priority: If no joiningDate, find the earliest punchIn date
+        if (candidateAttendance.length > 0) {
+            let earliestPunchIn: Date | null = null;
+            candidateAttendance.forEach(record => {
+                if (record.punchIn) {
+                    try {
+                        const punchInDate = new Date(record.punchIn);
+                        if (!isNaN(punchInDate.getTime())) {
+                            punchInDate.setHours(0, 0, 0, 0);
+                            if (!earliestPunchIn || punchInDate < earliestPunchIn) {
+                                earliestPunchIn = punchInDate;
+                            }
+                        }
+                    } catch (e) {
+                        // Skip invalid dates
+                    }
+                }
+            });
+            return earliestPunchIn;
+        }
+        
+        // If neither available, return null
+        return null;
+    };
+
+    // Get resign date from candidate data
+    const getResignDate = (): Date | null => {
+        if (!selectedCandidateForAttendance) return null;
+        
+        const resignDate = selectedCandidateForAttendance?.resignDate;
+        if (resignDate) {
+            try {
+                const date = new Date(resignDate);
+                // Check if date is valid
+                if (!isNaN(date.getTime())) {
+                    date.setHours(0, 0, 0, 0);
+                    return date;
+                }
+            } catch (e) {
+                // Invalid date, return null
+            }
+        }
+        
+        return null;
+    };
+
+    // Get week-off days from candidate data
+    const getWeekOffDays = (): string[] => {
+        if (!selectedCandidateForAttendance) return [];
+        return selectedCandidateForAttendance.weekOff || [];
+    };
+
+    // Build a local (non-UTC) date key in YYYY-MM-DD format
+    const getLocalDateKey = (date: Date): string => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    // Check if a date is a week-off day
+    const isWeekOffDay = (date: Date): boolean => {
+        const weekOffDays = getWeekOffDays();
+        if (weekOffDays.length === 0) return false;
+        
+        // Get day name (e.g., "Sunday", "Monday")
+        const dayName = date.toLocaleDateString('en-US', { weekday: 'long' });
+        return weekOffDays.includes(dayName);
+    };
+
     const getCalendarData = () => {
         const year = attendanceYear;
         const month = attendanceMonth;
@@ -848,73 +939,150 @@ const Candidates = () => {
         const lastDay = new Date(year, month + 1, 0);
         const daysInMonth = lastDay.getDate();
         
+        // Get effective joining date and resign date
+        const joiningDate = getEffectiveJoiningDate();
+        const joiningDateUTC = joiningDate ? new Date(Date.UTC(
+            joiningDate.getUTCFullYear(),
+            joiningDate.getUTCMonth(),
+            joiningDate.getUTCDate()
+        )) : null;
+        
+        const resignDate = getResignDate();
+        const resignDateUTC = resignDate ? new Date(Date.UTC(
+            resignDate.getUTCFullYear(),
+            resignDate.getUTCMonth(),
+            resignDate.getUTCDate()
+        )) : null;
+        
+        // Map attendance records by punchIn date (not date field)
+        // Extract date using UTC to avoid timezone shifts
         const attendanceMap = new Map<string, any>();
         candidateAttendance.forEach(record => {
-            if (record.date) {
-                const recordDate = new Date(record.date);
-                const dateKey = recordDate.toISOString().split('T')[0];
-                attendanceMap.set(dateKey, record);
+            if (record.punchIn) {
+                const punchInDate = new Date(record.punchIn);
+                // Use UTC methods to get the exact date from punchIn timestamp
+                const year = punchInDate.getUTCFullYear();
+                const month = String(punchInDate.getUTCMonth() + 1).padStart(2, '0');
+                const day = String(punchInDate.getUTCDate()).padStart(2, '0');
+                const dateKey = `${year}-${month}-${day}`;
+                // If multiple records for same date, keep the one with punchOut (complete attendance)
+                if (!attendanceMap.has(dateKey) || (record.punchOut && !attendanceMap.get(dateKey).punchOut)) {
+                    attendanceMap.set(dateKey, record);
+                }
             }
         });
         
-        const calendarDays: Array<{ day: number; date: Date; attendance: any | null }> = [];
+        const calendarDays: Array<{ day: number; date: Date; attendance: any | null; holiday?: { title: string; date: string } | null }> = [];
         
         const startDayOfWeek = firstDay.getDay();
         for (let i = 0; i < startDayOfWeek; i++) {
-            calendarDays.push({ day: 0, date: new Date(year, month, -i), attendance: null });
+            calendarDays.push({ day: 0, date: new Date(year, month, -i), attendance: null, holiday: null });
         }
         
         for (let day = 1; day <= daysInMonth; day++) {
             const date = new Date(year, month, day);
-            const dateKey = date.toISOString().split('T')[0];
+            // Create date key using UTC to match punchIn date extraction
+            // Use Date.UTC to create date at midnight UTC, then extract date parts
+            const utcDate = new Date(Date.UTC(year, month, day));
+            
+            // Skip dates before joining date
+            if (joiningDateUTC && utcDate < joiningDateUTC) {
+                calendarDays.push({ day: 0, date, attendance: null, holiday: null });
+                continue;
+            }
+            
+            // Skip dates after resign date
+            if (resignDateUTC && utcDate > resignDateUTC) {
+                calendarDays.push({ day: 0, date, attendance: null, holiday: null });
+                continue;
+            }
+            
+            const yearUTC = utcDate.getUTCFullYear();
+            const monthUTC = String(utcDate.getUTCMonth() + 1).padStart(2, '0');
+            const dayUTC = String(utcDate.getUTCDate()).padStart(2, '0');
+            const dateKey = `${yearUTC}-${monthUTC}-${dayUTC}`;
             const attendance = attendanceMap.get(dateKey) || null;
-            calendarDays.push({ day, date, attendance });
+
+            // Holiday matching is done with local date key so it aligns with the visual calendar
+            const holidayKey = getLocalDateKey(date);
+            const holiday = candidateHolidaysByDate[holidayKey] || null;
+
+            calendarDays.push({ day, date, attendance, holiday });
         }
         
         return calendarDays;
     };
 
-    // Calculate statistics for selected month/year
+    // Calculate statistics for selected month/year using calendar data,
+    // treating week-offs and holidays as non-working days (not present/absent).
     const getMonthStatistics = () => {
-        const year = attendanceYear;
-        const month = attendanceMonth;
-        
-        let filteredRecords = candidateAttendance;
-        
-        // If advanced filter is enabled, filter by date range
-        if (showAdvancedFilter && startDate && endDate) {
-            filteredRecords = candidateAttendance.filter(record => {
-                if (!record.date) return false;
-                const recordDate = new Date(record.date).toISOString().split('T')[0];
-                return recordDate >= startDate && recordDate <= endDate;
-            });
-        } else {
-            // Otherwise, filter by selected month/year
-            filteredRecords = candidateAttendance.filter(record => {
-                if (!record.date) return false;
-                const recordDate = new Date(record.date);
-                return recordDate.getFullYear() === year && recordDate.getMonth() === month;
-            });
-        }
-        
-        const totalHours = formatDurationHours(
-            filteredRecords.reduce((sum, record) => sum + (record.duration || 0), 0)
-        );
-        
-        const presentDays = filteredRecords.filter(r => r.punchIn && r.punchOut).length;
-        
-        // Calculate total days in the period
-        let totalDays: number;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const calendarDays = getCalendarData();
+
+        let isInRange: (d: Date) => boolean;
+
         if (showAdvancedFilter && startDate && endDate) {
             const start = new Date(startDate);
-            const end = new Date(endDate);
-            totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+            start.setHours(0, 0, 0, 0);
+            const rawEnd = new Date(endDate);
+            rawEnd.setHours(0, 0, 0, 0);
+
+            const resignDate = getResignDate();
+            let effectiveEnd = rawEnd;
+            if (resignDate && resignDate < effectiveEnd) {
+                effectiveEnd = resignDate;
+            }
+            if (effectiveEnd > today) {
+                effectiveEnd = today;
+            }
+
+            isInRange = (d: Date) => d >= start && d <= effectiveEnd;
         } else {
-            totalDays = new Date(year, month + 1, 0).getDate();
+            const year = attendanceYear;
+            const month = attendanceMonth;
+
+            isInRange = (d: Date) =>
+                d.getFullYear() === year &&
+                d.getMonth() === month &&
+                d < today;
         }
-        
-        const absentDays = Math.max(0, totalDays - presentDays);
-        
+
+        let totalDuration = 0;
+        let presentDays = 0;
+        let workingDays = 0;
+
+        calendarDays.forEach((item) => {
+            if (item.day === 0) return;
+
+            const itemDate = new Date(item.date);
+            itemDate.setHours(0, 0, 0, 0);
+            if (!isInRange(itemDate)) return;
+
+            const hasAttendance =
+                item.attendance && (item.attendance.punchIn || item.attendance.punchOut);
+            const isPresent =
+                !!(item.attendance && item.attendance.punchIn && item.attendance.punchOut);
+            const isWeekOff = isWeekOffDay(itemDate);
+            const isHoliday = !!item.holiday;
+
+            // Week-offs and holidays are non-working: do not count them as working, present, or absent
+            if (!isWeekOff && !isHoliday) {
+                workingDays += 1;
+                if (isPresent) {
+                    presentDays += 1;
+                }
+            }
+
+            if (item.attendance && item.attendance.duration) {
+                totalDuration += item.attendance.duration;
+            }
+        });
+
+        const totalHours = formatDurationHours(totalDuration);
+        const absentDays = Math.max(0, workingDays - presentDays);
+
         return { totalHours, presentDays, absentDays };
     };
     
@@ -1468,6 +1636,63 @@ const Candidates = () => {
             await fetchAttendanceData(candidateId);
         }
     };
+
+    // Load holidays for selected candidate (to show in attendance calendar)
+    useEffect(() => {
+        const loadCandidateHolidays = async () => {
+            if (!showAttendanceModal || !selectedCandidateForAttendance) {
+                setCandidateHolidaysByDate({});
+                return;
+            }
+
+            const holidayIds: string[] = selectedCandidateForAttendance.holidays || [];
+            if (!holidayIds.length) {
+                setCandidateHolidaysByDate({});
+                return;
+            }
+
+            try {
+                const response = await getAllHolidays({
+                    isActive: true,
+                    sortBy: 'date:asc',
+                    limit: 1000,
+                });
+
+                const holidaysList =
+                    response?.data?.results ||
+                    (Array.isArray(response?.data) ? response.data : []);
+
+                const idSet = new Set(holidayIds.map((id: any) => String(id)));
+                const map: Record<string, { title: string; date: string }> = {};
+
+                holidaysList.forEach((holiday: any) => {
+                    const id = String(holiday._id || holiday.id || '');
+                    if (!id || !idSet.has(id)) return;
+
+                    try {
+                        const dateObj = new Date(holiday.date);
+                        if (isNaN(dateObj.getTime())) return;
+
+                        // Use local date parts so holidays align with the visible calendar
+                        const key = getLocalDateKey(dateObj);
+                        map[key] = {
+                            title: holiday.title || 'Holiday',
+                            date: holiday.date,
+                        };
+                    } catch {
+                        // Ignore invalid dates
+                    }
+                });
+
+                setCandidateHolidaysByDate(map);
+            } catch (error) {
+                console.error('Failed to load holidays for candidate:', error);
+                setCandidateHolidaysByDate({});
+            }
+        };
+
+        loadCandidateHolidays();
+    }, [showAttendanceModal, selectedCandidateForAttendance]);
 
     // Function to handle document verification
     const handleDocumentVerification = async (doc: any, index: number, status: number) => {
@@ -3747,14 +3972,22 @@ const Candidates = () => {
                                                             }}
                                                             className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-bodydark dark:text-white"
                                                         >
-                                                            {Array.from({ length: 10 }, (_, i) => {
-                                                                const year = new Date().getFullYear() - 2 + i;
-                                                                return (
-                                                                    <option key={year} value={year}>
-                                                                        {year}
-                                                                    </option>
-                                                                );
-                                                            })}
+                                                            {(() => {
+                                                                const joiningDate = getEffectiveJoiningDate();
+                                                                const resignDate = getResignDate();
+                                                                const joiningYear = joiningDate ? joiningDate.getUTCFullYear() : new Date().getFullYear() - 2;
+                                                                const maxYear = resignDate ? resignDate.getUTCFullYear() : new Date().getFullYear();
+                                                                const yearsToShow = maxYear - joiningYear + 1;
+                                                                return Array.from({ length: Math.max(yearsToShow, 10) }, (_, i) => {
+                                                                    const year = joiningYear + i;
+                                                                    if (year > maxYear) return null;
+                                                                    return (
+                                                                        <option key={year} value={year}>
+                                                                            {year}
+                                                                        </option>
+                                                                    );
+                                                                }).filter(Boolean);
+                                                            })()}
                                                         </select>
                                                     </div>
                                                     
@@ -3846,12 +4079,35 @@ const Candidates = () => {
                                                                 newYear = attendanceYear - 1;
                                                             }
                                                             
+                                                            // Check if new date is before joining date
+                                                            const joiningDate = getEffectiveJoiningDate();
+                                                            if (joiningDate) {
+                                                                const joiningYear = joiningDate.getUTCFullYear();
+                                                                const joiningMonth = joiningDate.getUTCMonth();
+                                                                if (newYear < joiningYear || (newYear === joiningYear && newMonth < joiningMonth)) {
+                                                                    return; // Don't navigate before joining date
+                                                                }
+                                                            }
+                                                            
                                                             setAttendanceMonth(newMonth);
                                                             setAttendanceYear(newYear);
                                                             setShowAdvancedFilter(false);
                                                         }}
-                                                        className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-gray-700 dark:text-gray-300"
+                                                        className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-gray-700 dark:text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
                                                         title="Previous Month"
+                                                        disabled={(() => {
+                                                            const joiningDate = getEffectiveJoiningDate();
+                                                            if (!joiningDate) return false;
+                                                            const joiningYear = joiningDate.getUTCFullYear();
+                                                            const joiningMonth = joiningDate.getUTCMonth();
+                                                            let prevMonth = attendanceMonth - 1;
+                                                            let prevYear = attendanceYear;
+                                                            if (prevMonth < 0) {
+                                                                prevMonth = 11;
+                                                                prevYear = attendanceYear - 1;
+                                                            }
+                                                            return prevYear < joiningYear || (prevYear === joiningYear && prevMonth < joiningMonth);
+                                                        })()}
                                                     >
                                                         <i className="ri-arrow-left-s-line text-xl"></i>
                                                     </button>
@@ -3870,12 +4126,35 @@ const Candidates = () => {
                                                                 newYear = attendanceYear + 1;
                                                             }
                                                             
+                                                            // Check if new date is after resign date
+                                                            const resignDate = getResignDate();
+                                                            if (resignDate) {
+                                                                const resignYear = resignDate.getUTCFullYear();
+                                                                const resignMonth = resignDate.getUTCMonth();
+                                                                if (newYear > resignYear || (newYear === resignYear && newMonth > resignMonth)) {
+                                                                    return; // Don't navigate after resign date
+                                                                }
+                                                            }
+                                                            
                                                             setAttendanceMonth(newMonth);
                                                             setAttendanceYear(newYear);
                                                             setShowAdvancedFilter(false);
                                                         }}
-                                                        className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-gray-700 dark:text-gray-300"
+                                                        className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-gray-700 dark:text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
                                                         title="Next Month"
+                                                        disabled={(() => {
+                                                            const resignDate = getResignDate();
+                                                            if (!resignDate) return false;
+                                                            const resignYear = resignDate.getUTCFullYear();
+                                                            const resignMonth = resignDate.getUTCMonth();
+                                                            let nextMonth = attendanceMonth + 1;
+                                                            let nextYear = attendanceYear;
+                                                            if (nextMonth > 11) {
+                                                                nextMonth = 0;
+                                                                nextYear = attendanceYear + 1;
+                                                            }
+                                                            return nextYear > resignYear || (nextYear === resignYear && nextMonth > resignMonth);
+                                                        })()}
                                                     >
                                                         <i className="ri-arrow-right-s-line text-xl"></i>
                                                     </button>
@@ -3900,6 +4179,8 @@ const Candidates = () => {
                                                         const itemDate = new Date(item.date);
                                                         itemDate.setHours(0, 0, 0, 0);
                                                         const isPastDate = itemDate < today;
+                                                        const isWeekOff = item.day > 0 && isWeekOffDay(itemDate);
+                                                        const isHoliday = !!item.holiday;
                                                         
                                                         return (
                                                             <div
@@ -3911,9 +4192,13 @@ const Candidates = () => {
                                                                             ? 'bg-green-50 dark:bg-green-900/20' 
                                                                             : hasAttendance && !isPresent
                                                                                 ? 'bg-yellow-50 dark:bg-yellow-900/20'
-                                                                                : isPastDate
-                                                                                    ? 'bg-red-50 dark:bg-red-900/20'
-                                                                                    : 'bg-white dark:bg-gray-800'
+                                                                                : isHoliday
+                                                                                    ? 'bg-emerald-50 dark:bg-emerald-900/20'
+                                                                                    : isWeekOff
+                                                                                        ? 'bg-blue-50 dark:bg-blue-900/20'
+                                                                                        : isPastDate
+                                                                                            ? 'bg-red-50 dark:bg-red-900/20'
+                                                                                            : 'bg-white dark:bg-gray-800'
                                                                 }`}
                                                             >
                                                                 {item.day > 0 && (
@@ -3925,9 +4210,13 @@ const Candidates = () => {
                                                                                     ? 'text-green-700 dark:text-green-400' 
                                                                                     : hasAttendance && !isPresent
                                                                                         ? 'text-yellow-700 dark:text-yellow-400'
-                                                                                        : isPastDate
-                                                                                            ? 'text-red-700 dark:text-red-400'
-                                                                                            : 'text-gray-600 dark:text-gray-400'
+                                                                                        : isWeekOff
+                                                                                            ? 'text-blue-700 dark:text-blue-400'
+                                                                                            : isHoliday
+                                                                                                ? 'text-emerald-700 dark:text-emerald-400'
+                                                                                                : isPastDate
+                                                                                                    ? 'text-red-700 dark:text-red-400'
+                                                                                                    : 'text-gray-600 dark:text-gray-400'
                                                                         }`}>
                                                                             {item.day}
                                                                         </span>
@@ -3946,12 +4235,22 @@ const Candidates = () => {
                                                                                 Incomplete
                                                                             </span>
                                                                         )}
-                                                                        {!hasAttendance && isPastDate && (
+                                                                        {isHoliday && (
+                                                                            <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-1">
+                                                                                {item.holiday?.title ? `${item.holiday.title} (Holiday)` : 'Holiday'}
+                                                                            </span>
+                                                                        )}
+                                                                        {isWeekOff && !hasAttendance && !isHoliday && (
+                                                                            <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 mt-1">
+                                                                                Week-Off
+                                                                            </span>
+                                                                        )}
+                                                                        {!hasAttendance && !isWeekOff && !isHoliday && isPastDate && (
                                                                             <span className="text-xs text-red-500 dark:text-red-400 mt-1">
                                                                                 Absent
                                                                             </span>
                                                                         )}
-                                                                        {!hasAttendance && !isPastDate && (
+                                                                        {!hasAttendance && !isWeekOff && !isHoliday && !isPastDate && (
                                                                             <span className="text-xs text-gray-400 dark:text-gray-500 mt-1">
                                                                                 -
                                                                             </span>

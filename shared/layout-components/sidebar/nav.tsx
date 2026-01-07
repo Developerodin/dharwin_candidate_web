@@ -170,23 +170,38 @@ export const useMenuItems = () => {
           isRouteMatch(route, pathname ?? "")
         );
 
-        const masterRoutes = [
+        // Master -> Jobs routes
+        const masterJobsRoutes = [
           "/master/jobs/templates",
           "/master/jobs/create-template",
         ];
-        const isMasterSectionActive = masterRoutes.some((route) =>
+        const isMasterJobsSectionActive = masterJobsRoutes.some((route) =>
           isRouteMatch(route, pathname ?? "")
         );
-        
-        const settingsRoutes = [
-          "/master/jobs/templates",
-          "/master/jobs/create-template",
-          "/logs",
-          "/logs/recruiter-logs",
+
+        // Master -> Attendance routes
+        const masterAttendanceRoutes = [
+          "/master/attendance/week-off",
+          "/master/attendance/holidays",
+          "/master/attendance/assign-holidays",
         ];
-        const isSettingsSectionActive = settingsRoutes.some((route) =>
+        const isMasterAttendanceSectionActive = masterAttendanceRoutes.some(
+          (route) => isRouteMatch(route, pathname ?? "")
+        );
+
+        // Logs routes (under Settings but outside Master)
+        const logsRoutes = ["/logs", "/logs/recruiter-logs"];
+        const isLogsSectionActive = logsRoutes.some((route) =>
           isRouteMatch(route, pathname ?? "")
         );
+
+        // Master section is active if either Jobs or Attendance is active
+        const isMasterSectionActive =
+          isMasterJobsSectionActive || isMasterAttendanceSectionActive;
+
+        // Settings section is active if any of Master (Jobs/Attendance) or Logs is active
+        const isSettingsSectionActive =
+          isMasterSectionActive || isLogsSectionActive;
 
         items.push(
           {
@@ -344,8 +359,8 @@ export const useMenuItems = () => {
                   {
                     title: "Jobs",
                     type: "sub",
-                    active: isMasterSectionActive,
-                    selected: isMasterSectionActive,
+                    active: isMasterJobsSectionActive,
+                    selected: isMasterJobsSectionActive,
                     children: [
                       {
                         path: "/master/jobs/templates",
@@ -357,13 +372,45 @@ export const useMenuItems = () => {
                       },
                     ],
                   },
+                  {
+                    title: "Attendance",
+                    type: "sub",
+                    active: isMasterAttendanceSectionActive,
+                    selected: isMasterAttendanceSectionActive,
+                    children: [
+                      {
+                        path: "/master/attendance/week-off",
+                        title: "Manage Week Off",
+                        type: "link",
+                        active: true,
+                        selected: isRouteMatch("/master/attendance/week-off", pathname ?? ""),
+                        dirchange: false,
+                      },
+                      {
+                        path: "/master/attendance/holidays",
+                        title: "Holidays List",
+                        type: "link",
+                        active: true,
+                        selected: isRouteMatch("/master/attendance/holidays", pathname ?? ""),
+                        dirchange: false,
+                      },
+                      {
+                        path: "/master/attendance/assign-holidays",
+                        title: "Assign Holidays",
+                        type: "link",
+                        active: true,
+                        selected: isRouteMatch("/master/attendance/assign-holidays", pathname ?? ""),
+                        dirchange: false,
+                      },
+                    ],
+                  },
                 ],
               },
               {
                 title: "Logs",
                 type: "sub",
-                active: isMasterSectionActive,
-                selected: isMasterSectionActive,
+                active: isLogsSectionActive,
+                selected: isLogsSectionActive,
                 children: [
                   {
                     path: "/logs",

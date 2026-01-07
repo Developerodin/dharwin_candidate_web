@@ -347,6 +347,20 @@ export const getAttendance = async (page?: number, limit?: number) => {
   return response.data;
 };
 
+/**
+ * Assign holidays to multiple candidates
+ * @param candidateIds - Array of candidate MongoDB ObjectIds
+ * @param holidayIds - Array of holiday MongoDB ObjectIds
+ * @returns Promise with assignment results
+ */
+export const assignHolidaysToCandidates = async (candidateIds: string[], holidayIds: string[]): Promise<any> => {
+  const response = await api.post(`${Attendance_API}/holidays`, {
+    candidateIds,
+    holidayIds
+  });
+  return response.data;
+};
+
 // Recording API functions
 // Get recording status
 export const getRecordingStatus = async (meetingId: string) => {
@@ -486,5 +500,29 @@ export const updateCandidateResignDate = async (candidateId: string, resignDate:
   const response = await api.patch(`${Candidates_API}/${candidateId}/resign-date`, {
     resignDate: resignDate ? new Date(resignDate).toISOString() : null
   });
+  return response.data;
+};
+
+/**
+ * Update week-off calendar for multiple candidates (Admin only)
+ * @param candidateIds - Array of candidate MongoDB ObjectIds
+ * @param weekOff - Array of week-off day names (e.g., ['Saturday', 'Sunday'])
+ * @returns Promise with response data
+ */
+export const updateWeekOffCalendar = async (candidateIds: string[], weekOff: string[]): Promise<any> => {
+  const response = await api.post(`${Candidates_API}/week-off`, {
+    candidateIds,
+    weekOff
+  });
+  return response.data;
+};
+
+/**
+ * Get week-off calendar for a candidate
+ * @param candidateId - MongoDB ObjectId of the candidate
+ * @returns Promise with week-off data
+ */
+export const getCandidateWeekOff = async (candidateId: string): Promise<any> => {
+  const response = await api.get(`${Candidates_API}/${candidateId}/week-off`);
   return response.data;
 };
