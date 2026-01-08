@@ -186,6 +186,7 @@ export const useMenuItems = () => {
           "/master/attendance/assign-holidays",
           "/master/attendance/manage-shift",
           "/master/attendance/assign-shift",
+          "/master/attendance/assign-leave",
         ];
         const isMasterAttendanceSectionActive = masterAttendanceRoutes.some(
           (route) => isRouteMatch(route, pathname ?? "")
@@ -418,6 +419,14 @@ export const useMenuItems = () => {
                         type: "link",
                         active: true,
                         selected: isRouteMatch("/master/attendance/assign-shift", pathname ?? ""),
+                        dirchange: false,
+                      },
+                      {
+                        path: "/master/attendance/assign-leave",
+                        title: "Assign Leave",
+                        type: "link",
+                        active: true,
+                        selected: isRouteMatch("/master/attendance/assign-leave", pathname ?? ""),
                         dirchange: false,
                       },
                     ],

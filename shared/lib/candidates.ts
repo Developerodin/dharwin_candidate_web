@@ -378,6 +378,29 @@ export const assignShiftToCandidates = async (
   return response.data;
 };
 
+/**
+ * Assign leaves to multiple candidates
+ * @param candidateIds - Array of candidate MongoDB ObjectIds
+ * @param dates - Array of dates for leave (ISO 8601 format)
+ * @param leaveType - Type of leave: "casual" or "sick"
+ * @param notes - Optional notes for the leave
+ * @returns Promise with assignment results
+ */
+export const assignLeavesToCandidates = async (
+  candidateIds: string[],
+  dates: string[],
+  leaveType: 'casual' | 'sick',
+  notes?: string
+): Promise<any> => {
+  const response = await api.post(`${Attendance_API}/leaves`, {
+    candidateIds,
+    dates,
+    leaveType,
+    notes
+  });
+  return response.data;
+};
+
 // Recording API functions
 // Get recording status
 export const getRecordingStatus = async (meetingId: string) => {

@@ -8,6 +8,7 @@ import Swal from "sweetalert2";
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { fetchAllCandidates, deleteCandidate, addCandidateSalarySlips, uploadDocuments, fetchCandidateDocuments, verifyDocument, shareCandidate, getAttendanceByCandidate, resendEmailVerification, addNoteToCandidate, addFeedbackToCandidate, fetchCandidateById, fetchUserById, punchInAttendance, punchOutAttendance, updateCandidateJoiningDate, updateCandidateResignDate } from '@/shared/lib/candidates';
 import { getAllHolidays } from '@/shared/lib/holidays';
+import { getShiftById } from '@/shared/lib/shifts';
 import * as XLSX from 'xlsx';
 
 const Candidates = () => {
@@ -66,6 +67,8 @@ const Candidates = () => {
     const [candidateAttendance, setCandidateAttendance] = useState<any[]>([]);
     const [loadingAttendanceData, setLoadingAttendanceData] = useState<boolean>(false);
     const [candidateHolidaysByDate, setCandidateHolidaysByDate] = useState<Record<string, { title: string; date: string }>>({});
+    const [shiftData, setShiftData] = useState<any>(null);
+    const [loadingShiftData, setLoadingShiftData] = useState<boolean>(false);
     
     // Attendance calendar filters
     const [attendanceYear, setAttendanceYear] = useState<number>(new Date().getFullYear());
@@ -702,6 +705,7 @@ const Candidates = () => {
         setShowAttendanceModal(false);
         setSelectedCandidateForAttendance(null);
         setCandidateAttendance([]);
+        setShiftData(null);
         // Reset filters
         const now = new Date();
         setAttendanceYear(now.getFullYear());
@@ -972,11 +976,26 @@ const Candidates = () => {
             }
         });
         
-        const calendarDays: Array<{ day: number; date: Date; attendance: any | null; holiday?: { title: string; date: string } | null }> = [];
+        // Map leaves by date (leaves are stored with date field in ISO format)
+        const leavesMap = new Map<string, { _id: string; date: string; leaveType: 'casual' | 'sick'; notes: string | null; assignedAt: string }>();
+        const candidateLeaves = selectedCandidateForAttendance?.leaves || [];
+        candidateLeaves.forEach((leave: any) => {
+            if (leave.date) {
+                const leaveDate = new Date(leave.date);
+                // Extract date in UTC to match the format used for attendance
+                const year = leaveDate.getUTCFullYear();
+                const month = String(leaveDate.getUTCMonth() + 1).padStart(2, '0');
+                const day = String(leaveDate.getUTCDate()).padStart(2, '0');
+                const dateKey = `${year}-${month}-${day}`;
+                leavesMap.set(dateKey, leave);
+            }
+        });
+
+        const calendarDays: Array<{ day: number; date: Date; attendance: any | null; holiday?: { title: string; date: string } | null; leave?: { _id: string; date: string; leaveType: 'casual' | 'sick'; notes: string | null; assignedAt: string } | null }> = [];
         
         const startDayOfWeek = firstDay.getDay();
         for (let i = 0; i < startDayOfWeek; i++) {
-            calendarDays.push({ day: 0, date: new Date(year, month, -i), attendance: null, holiday: null });
+            calendarDays.push({ day: 0, date: new Date(year, month, -i), attendance: null, holiday: null, leave: null });
         }
         
         for (let day = 1; day <= daysInMonth; day++) {
@@ -987,13 +1006,13 @@ const Candidates = () => {
             
             // Skip dates before joining date
             if (joiningDateUTC && utcDate < joiningDateUTC) {
-                calendarDays.push({ day: 0, date, attendance: null, holiday: null });
+                calendarDays.push({ day: 0, date, attendance: null, holiday: null, leave: null });
                 continue;
             }
             
             // Skip dates after resign date
             if (resignDateUTC && utcDate > resignDateUTC) {
-                calendarDays.push({ day: 0, date, attendance: null, holiday: null });
+                calendarDays.push({ day: 0, date, attendance: null, holiday: null, leave: null });
                 continue;
             }
             
@@ -1002,12 +1021,13 @@ const Candidates = () => {
             const dayUTC = String(utcDate.getUTCDate()).padStart(2, '0');
             const dateKey = `${yearUTC}-${monthUTC}-${dayUTC}`;
             const attendance = attendanceMap.get(dateKey) || null;
+            const leave = leavesMap.get(dateKey) || null;
 
             // Holiday matching is done with local date key so it aligns with the visual calendar
             const holidayKey = getLocalDateKey(date);
             const holiday = candidateHolidaysByDate[holidayKey] || null;
 
-            calendarDays.push({ day, date, attendance, holiday });
+            calendarDays.push({ day, date, attendance, holiday, leave });
         }
         
         return calendarDays;
@@ -1052,6 +1072,7 @@ const Candidates = () => {
         let totalDuration = 0;
         let presentDays = 0;
         let workingDays = 0;
+        let leaveDays = 0;
 
         calendarDays.forEach((item) => {
             if (item.day === 0) return;
@@ -1066,11 +1087,17 @@ const Candidates = () => {
                 !!(item.attendance && item.attendance.punchIn && item.attendance.punchOut);
             const isWeekOff = isWeekOffDay(itemDate);
             const isHoliday = !!item.holiday;
+            // Check for leave from candidate.leaves array (primary source of truth)
+            // Only count leaves that are explicitly in the candidate.leaves array
+            const isLeave = !!item.leave;
 
             // Week-offs and holidays are non-working: do not count them as working, present, or absent
             if (!isWeekOff && !isHoliday) {
                 workingDays += 1;
-                if (isPresent) {
+                if (isLeave) {
+                    // Leave days are counted separately and not as absent
+                    leaveDays += 1;
+                } else if (isPresent) {
                     presentDays += 1;
                 }
             }
@@ -1081,9 +1108,10 @@ const Candidates = () => {
         });
 
         const totalHours = formatDurationHours(totalDuration);
-        const absentDays = Math.max(0, workingDays - presentDays);
+        // Absent days = working days - present days - leave days
+        const absentDays = Math.max(0, workingDays - presentDays - leaveDays);
 
-        return { totalHours, presentDays, absentDays };
+        return { totalHours, presentDays, absentDays, leaveDays };
     };
     
     // Handle year/month change
@@ -1693,6 +1721,30 @@ const Candidates = () => {
 
         loadCandidateHolidays();
     }, [showAttendanceModal, selectedCandidateForAttendance]);
+
+    // Fetch shift data when attendance modal opens
+    useEffect(() => {
+        const fetchShiftData = async () => {
+            if (!showAttendanceModal || !selectedCandidateForAttendance?.shift) {
+                setShiftData(null);
+                return;
+            }
+
+            setLoadingShiftData(true);
+            try {
+                const shiftResponse = await getShiftById(selectedCandidateForAttendance.shift);
+                const shift = shiftResponse?.data || shiftResponse;
+                setShiftData(shift);
+            } catch (error) {
+                console.error('Failed to fetch shift data:', error);
+                setShiftData(null);
+            } finally {
+                setLoadingShiftData(false);
+            }
+        };
+
+        fetchShiftData();
+    }, [showAttendanceModal, selectedCandidateForAttendance?.shift]);
 
     // Function to handle document verification
     const handleDocumentVerification = async (doc: any, index: number, status: number) => {
@@ -3865,7 +3917,7 @@ const Candidates = () => {
                         <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={closeAttendanceModal}></div>
 
                         {/* Modal panel */}
-                        <div className="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all w-full max-w-4xl mx-auto sm:my-8 sm:align-middle">
+                        <div className="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all w-full max-w-7xl mx-auto sm:my-8 sm:align-middle">
                             {/* Modal header */}
                             <div className="bg-white dark:bg-gray-800 px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-gray-700">
                                 <div className="flex items-center justify-between">
@@ -3914,7 +3966,7 @@ const Candidates = () => {
                                         {(() => {
                                             const monthStats = getMonthStatistics();
                                             return (
-                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                                     <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
                                                         <div className="flex items-center justify-between">
                                                             <div>
@@ -3948,9 +4000,75 @@ const Candidates = () => {
                                                             <i className="ri-close-circle-line text-3xl text-red-600 dark:text-red-400"></i>
                                                         </div>
                                                     </div>
+                                                    <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-4">
+                                                        <div className="flex items-center justify-between">
+                                                            <div>
+                                                                <p className="text-sm text-gray-600 dark:text-gray-400">Leave Days</p>
+                                                                <p className="text-2xl font-bold text-orange-600 dark:text-orange-400 mt-1">
+                                                                    {monthStats.leaveDays || 0}
+                                                                </p>
+                                                            </div>
+                                                            <i className="ri-calendar-check-line text-3xl text-orange-600 dark:text-orange-400"></i>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             );
                                         })()}
+
+                                        {/* Shift Details Section */}
+                                        {selectedCandidateForAttendance?.shift && (
+                                            <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 border border-gray-200 dark:border-gray-600">
+                                                <h4 className="text-md font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                                                    <i className="ri-time-zone-line text-primary"></i>
+                                                    Shift Details
+                                                </h4>
+                                                {loadingShiftData ? (
+                                                    <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                                                        <i className="ri-loader-4-line animate-spin"></i>
+                                                        <span className="text-sm">Loading shift details...</span>
+                                                    </div>
+                                                ) : shiftData ? (
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                                        <div>
+                                                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Shift Name</p>
+                                                            <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                                                {shiftData.name || 'N/A'}
+                                                            </p>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Start Time</p>
+                                                            <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                                                {shiftData.startTime || 'N/A'}
+                                                            </p>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">End Time</p>
+                                                            <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                                                {shiftData.endTime || 'N/A'}
+                                                            </p>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Timezone</p>
+                                                            <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                                                {shiftData.timezone || 'N/A'}
+                                                            </p>
+                                                        </div>
+                                                        {shiftData.description && (
+                                                            <div className="md:col-span-2 lg:col-span-4">
+                                                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Description</p>
+                                                                <p className="text-sm text-gray-700 dark:text-gray-300">
+                                                                    {shiftData.description}
+                                                                </p>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                                                        Shift details not available
+                                                    </p>
+                                                )}
+                                            </div>
+                                        )}
 
                                         {/* Calendar Layout */}
                                         <div>
@@ -4181,6 +4299,10 @@ const Candidates = () => {
                                                         const isPastDate = itemDate < today;
                                                         const isWeekOff = item.day > 0 && isWeekOffDay(itemDate);
                                                         const isHoliday = !!item.holiday;
+                                                        // Check for leave from candidate.leaves array first, then check attendance record with status "Leave" only if it matches a leave date
+                                                        // Only show as leave if it's in the candidate.leaves array (primary source of truth)
+                                                        const isLeave = !!item.leave;
+                                                        const leaveType = item.leave?.leaveType || null;
                                                         
                                                         return (
                                                             <div
@@ -4188,17 +4310,21 @@ const Candidates = () => {
                                                                 className={`min-h-[80px] p-2 border border-gray-200 dark:border-gray-700 ${
                                                                     item.day === 0 
                                                                         ? 'bg-gray-50 dark:bg-gray-900' 
-                                                                        : isPresent 
-                                                                            ? 'bg-green-50 dark:bg-green-900/20' 
-                                                                            : hasAttendance && !isPresent
-                                                                                ? 'bg-yellow-50 dark:bg-yellow-900/20'
-                                                                                : isHoliday
-                                                                                    ? 'bg-emerald-50 dark:bg-emerald-900/20'
-                                                                                    : isWeekOff
-                                                                                        ? 'bg-blue-50 dark:bg-blue-900/20'
-                                                                                        : isPastDate
-                                                                                            ? 'bg-red-50 dark:bg-red-900/20'
-                                                                                            : 'bg-white dark:bg-gray-800'
+                                                                        : isLeave
+                                                                            ? leaveType === 'sick' 
+                                                                                ? 'bg-purple-50 dark:bg-purple-900/20'
+                                                                                : 'bg-orange-50 dark:bg-orange-900/20'
+                                                                            : isPresent 
+                                                                                ? 'bg-green-50 dark:bg-green-900/20' 
+                                                                                : hasAttendance && !isPresent
+                                                                                    ? 'bg-yellow-50 dark:bg-yellow-900/20'
+                                                                                    : isHoliday
+                                                                                        ? 'bg-emerald-50 dark:bg-emerald-900/20'
+                                                                                        : isWeekOff
+                                                                                            ? 'bg-blue-50 dark:bg-blue-900/20'
+                                                                                            : isPastDate
+                                                                                                ? 'bg-red-50 dark:bg-red-900/20'
+                                                                                                : 'bg-white dark:bg-gray-800'
                                                                 }`}
                                                             >
                                                                 {item.day > 0 && (
@@ -4206,21 +4332,34 @@ const Candidates = () => {
                                                                         <span className={`text-sm font-medium ${
                                                                             item.day === 0 
                                                                                 ? 'text-gray-400' 
-                                                                                : isPresent 
-                                                                                    ? 'text-green-700 dark:text-green-400' 
-                                                                                    : hasAttendance && !isPresent
-                                                                                        ? 'text-yellow-700 dark:text-yellow-400'
-                                                                                        : isWeekOff
-                                                                                            ? 'text-blue-700 dark:text-blue-400'
-                                                                                            : isHoliday
-                                                                                                ? 'text-emerald-700 dark:text-emerald-400'
-                                                                                                : isPastDate
-                                                                                                    ? 'text-red-700 dark:text-red-400'
-                                                                                                    : 'text-gray-600 dark:text-gray-400'
+                                                                                : isLeave
+                                                                                    ? leaveType === 'sick'
+                                                                                        ? 'text-purple-700 dark:text-purple-400'
+                                                                                        : 'text-orange-700 dark:text-orange-400'
+                                                                                    : isPresent 
+                                                                                        ? 'text-green-700 dark:text-green-400' 
+                                                                                        : hasAttendance && !isPresent
+                                                                                            ? 'text-yellow-700 dark:text-yellow-400'
+                                                                                            : isWeekOff
+                                                                                                ? 'text-blue-700 dark:text-blue-400'
+                                                                                                : isHoliday
+                                                                                                    ? 'text-emerald-700 dark:text-emerald-400'
+                                                                                                    : isPastDate
+                                                                                                        ? 'text-red-700 dark:text-red-400'
+                                                                                                        : 'text-gray-600 dark:text-gray-400'
                                                                         }`}>
                                                                             {item.day}
                                                                         </span>
-                                                                        {isPresent && (
+                                                                        {isLeave && (
+                                                                            <span className={`text-xs font-semibold mt-1 ${
+                                                                                leaveType === 'sick'
+                                                                                    ? 'text-purple-600 dark:text-purple-400'
+                                                                                    : 'text-orange-600 dark:text-orange-400'
+                                                                            }`}>
+                                                                                {leaveType === 'sick' ? 'Sick Leave' : 'Casual Leave'}
+                                                                            </span>
+                                                                        )}
+                                                                        {isPresent && !isLeave && (
                                                                             <>
                                                                                 <span className="text-xs font-semibold text-green-600 dark:text-green-400 mt-1">
                                                                                     Present
@@ -4230,27 +4369,27 @@ const Candidates = () => {
                                                                                 </span>
                                                                             </>
                                                                         )}
-                                                                        {hasAttendance && !isPresent && (
+                                                                        {hasAttendance && !isPresent && !isLeave && (
                                                                             <span className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
                                                                                 Incomplete
                                                                             </span>
                                                                         )}
-                                                                        {isHoliday && (
+                                                                        {isHoliday && !isLeave && (
                                                                             <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-1">
                                                                                 {item.holiday?.title ? `${item.holiday.title} (Holiday)` : 'Holiday'}
                                                                             </span>
                                                                         )}
-                                                                        {isWeekOff && !hasAttendance && !isHoliday && (
+                                                                        {isWeekOff && !hasAttendance && !isHoliday && !isLeave && (
                                                                             <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 mt-1">
                                                                                 Week-Off
                                                                             </span>
                                                                         )}
-                                                                        {!hasAttendance && !isWeekOff && !isHoliday && isPastDate && (
+                                                                        {!hasAttendance && !isWeekOff && !isHoliday && !isLeave && isPastDate && (
                                                                             <span className="text-xs text-red-500 dark:text-red-400 mt-1">
                                                                                 Absent
                                                                             </span>
                                                                         )}
-                                                                        {!hasAttendance && !isWeekOff && !isHoliday && !isPastDate && (
+                                                                        {!hasAttendance && !isWeekOff && !isHoliday && !isLeave && !isPastDate && (
                                                                             <span className="text-xs text-gray-400 dark:text-gray-500 mt-1">
                                                                                 -
                                                                             </span>
