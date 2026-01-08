@@ -93,3 +93,6 @@ export const Support_Ticket_Comments_API = (ticketId: string) => `${Support_Tick
 
 // Holidays API
 export const Holidays_API = `${BASE_API_URL}/holidays`;
+
+// Shifts API
+export const Shifts_API = `${BASE_API_URL}/shifts`;

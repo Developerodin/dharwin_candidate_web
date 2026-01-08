@@ -5,6 +5,7 @@ import Seo from '@/shared/layout-components/seo/seo'
 import Link from 'next/link'
 import React, { Fragment, useEffect, useState, useCallback } from 'react'
 import { fetchAllCandidates, shareCandidate, punchInAttendance, punchOutAttendance, getPunchInOutStatus } from '@/shared/lib/candidates'
+import { getShiftById } from '@/shared/lib/shifts'
 import PerfectScrollbar from 'react-perfect-scrollbar';
 import 'react-perfect-scrollbar/dist/css/styles.css';
 import { useRouter } from 'next/navigation';
@@ -26,6 +27,7 @@ const profile = () => {
     const [elapsedTime, setElapsedTime] = useState<string>('');
     const [selectedTimezone, setSelectedTimezone] = useState<string>('');
     const [showTimezoneDropdown, setShowTimezoneDropdown] = useState<boolean>(false);
+    const [shiftData, setShiftData] = useState<any>(null);
 
     // Function to check if profile is completed
     const isProfileCompleted = useCallback((profile: any): boolean => {
@@ -43,35 +45,43 @@ const profile = () => {
         return hasBasicInfo && hasQualifications && hasExperiences && hasSkills && hasDocuments && hasSalarySlips;
     }, []);
 
-    // Function to show profile completion alert
-    const showProfileCompletionAlert = useCallback(async (profileData: any) => {
-        const result = await Swal.fire({
-            title: 'Complete Your Profile',
-            text: 'Your profile is incomplete. Would you like to complete it now?',
-            icon: 'info',
-            showCancelButton: true,
-            confirmButtonText: "Let's Complete It",
-            cancelButtonText: 'I will do it later',
-            confirmButtonColor: '#3085d6',
-            cancelButtonColor: '#d33',
-            customClass: {
-                popup: 'swal2-popup-custom',
-                title: 'swal2-title-custom',
-                confirmButton: 'swal2-confirm-custom'
+    // Function to get pending profile items
+    const getPendingProfileItems = useCallback((profile: any): Array<{ label: string; completed: boolean; icon: string }> => {
+        if (!profile) return [];
+        
+        return [
+            {
+                label: 'Basic Information (Full Name, Email, Phone, Bio)',
+                completed: !!(profile.fullName && profile.email && profile.phoneNumber && profile.shortBio),
+                icon: 'ri-user-line'
+            },
+            {
+                label: 'Qualifications',
+                completed: Array.isArray(profile.qualifications) && profile.qualifications.length > 0,
+                icon: 'ri-graduation-cap-line'
+            },
+            {
+                label: 'Work Experience',
+                completed: Array.isArray(profile.experiences) && profile.experiences.length > 0,
+                icon: 'ri-briefcase-line'
+            },
+            {
+                label: 'Skills',
+                completed: Array.isArray(profile.skills) && profile.skills.length > 0,
+                icon: 'ri-star-line'
+            },
+            {
+                label: 'Documents',
+                completed: Array.isArray(profile.documents) && profile.documents.length > 0,
+                icon: 'ri-file-line'
+            },
+            {
+                label: 'Salary Slips',
+                completed: Array.isArray(profile.salarySlips) && profile.salarySlips.length > 0,
+                icon: 'ri-money-dollar-box-line'
             }
-        });
-
-        if (result.isConfirmed) {
-            // Navigate to candidate edit form
-            if (profileData?.id || profileData?._id) {
-                const candidateId = profileData.id || profileData._id;
-                router.push(`/candidates/edit?id=${candidateId}`);
-            } else {
-                // If no profile exists, navigate to create new profile
-                router.push('/candidates/edit');
-            }
-        }
-    }, [router]);
+        ];
+    }, []);
 
     useEffect(() => {
         try {
@@ -95,14 +105,6 @@ const profile = () => {
                     if (match) chosen = match;
                 }
                 setProfileData(chosen);
-                
-                // Check profile completion after data is loaded
-                if (chosen && !isProfileCompleted(chosen)) {
-                    // Show profile completion alert after a short delay to ensure UI is ready
-                    setTimeout(() => {
-                        showProfileCompletionAlert(chosen);
-                    }, 1000);
-                }
             } catch (e: any) {
                 setError('Failed to load profile');
                 setProfileData(null);
@@ -111,7 +113,30 @@ const profile = () => {
             }
         };
         load();
-    }, [currentUser?.id, isProfileCompleted, showProfileCompletionAlert]);
+    }, [currentUser?.id]);
+
+    // Fetch shift data when profileData has a shift ID
+    useEffect(() => {
+        const fetchShiftData = async () => {
+            if (profileData?.shift) {
+                try {
+                    const shiftResponse = await getShiftById(profileData.shift);
+                    const shift = shiftResponse?.data || shiftResponse;
+                    setShiftData(shift);
+                    // Set timezone from shift if available
+                    if (shift?.timezone) {
+                        setSelectedTimezone(shift.timezone);
+                    }
+                } catch (e) {
+                    console.error('Failed to fetch shift data', e);
+                    setShiftData(null);
+                }
+            } else {
+                setShiftData(null);
+            }
+        };
+        fetchShiftData();
+    }, [profileData?.shift]);
 
     console.log(profileData);
 
@@ -755,10 +780,10 @@ const profile = () => {
                                                             Elapsed: {elapsedTime}
                                                         </span>
                                                     )}
-                                                    {punchStatusData.timezone && (
+                                                    {(punchStatusData.timezone || shiftData?.timezone) && (
                                                         <span className="inline-flex items-center gap-1">
                                                             <i className="ri-global-line"></i>
-                                                            Timezone: {punchStatusData.timezone}
+                                                            Timezone: {punchStatusData.timezone || shiftData?.timezone}
                                                         </span>
                                                     )}
                                                 </>
@@ -771,6 +796,20 @@ const profile = () => {
                                             )}
                                         </div>
                                     )}
+                                    {shiftData && (
+                                        <div className="text-xs text-blue-600 dark:text-blue-400 flex flex-wrap gap-2 items-center mt-1">
+                                            <span className="inline-flex items-center gap-1">
+                                                <i className="ri-time-line"></i>
+                                                Shift Time: {shiftData.startTime} - {shiftData.endTime}
+                                            </span>
+                                            {shiftData.name && (
+                                                <span className="inline-flex items-center gap-1">
+                                                    <i className="ri-calendar-schedule-line"></i>
+                                                    {shiftData.name}
+                                                </span>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="flex flex-row gap-3 items-center justify-end">
                                     {!punchedIn ? (
@@ -779,17 +818,24 @@ const profile = () => {
                                             <div className="relative">
                                                 <button
                                                     type="button"
-                                                    onClick={() => setShowTimezoneDropdown(!showTimezoneDropdown)}
-                                                    className="ti-btn ti-btn-light !text-xs !gap-1 inline-flex items-center justify-between min-w-[180px]"
+                                                    onClick={() => !shiftData && setShowTimezoneDropdown(!showTimezoneDropdown)}
+                                                    disabled={!!shiftData}
+                                                    className={`ti-btn ti-btn-light !text-xs !gap-1 inline-flex items-center justify-between min-w-[180px] ${shiftData ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                                    title={shiftData ? 'Timezone is set by your assigned shift' : ''}
                                                 >
                                                     <span className="flex items-center gap-1">
                                                         <i className="ri-global-line"></i>
-                                                        <span>{timezones.find(tz => tz.value === selectedTimezone)?.label || 'Select Timezone'}</span>
+                                                        <span>
+                                                            {shiftData?.timezone 
+                                                                ? `${getGMTOffset(shiftData.timezone)} ${shiftData.timezone}`
+                                                                : timezones.find(tz => tz.value === selectedTimezone)?.label || 'Select Timezone'
+                                                            }
+                                                        </span>
                                                     </span>
-                                                    <i className={`ri-arrow-${showTimezoneDropdown ? 'up' : 'down'}-s-line`}></i>
+                                                    {!shiftData && <i className={`ri-arrow-${showTimezoneDropdown ? 'up' : 'down'}-s-line`}></i>}
                                                 </button>
                                                 
-                                                {showTimezoneDropdown && (
+                                                {showTimezoneDropdown && !shiftData && (
                                                     <>
                                                         <div 
                                                             className="fixed inset-0 z-10" 
@@ -828,6 +874,16 @@ const profile = () => {
                                                 )}
                                             </div>
                                             
+                                            {/* Shift Time Display */}
+                                            {shiftData && (
+                                                <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
+                                                    <i className="ri-time-line text-blue-600 dark:text-blue-400"></i>
+                                                    <span className="text-xs text-blue-700 dark:text-blue-300 font-medium">
+                                                        Shift: {shiftData.startTime} - {shiftData.endTime}
+                                                    </span>
+                                                </div>
+                                            )}
+                                            
                                             {/* Punch In Button */}
                                             <button
                                                 type="button"
@@ -859,6 +915,77 @@ const profile = () => {
             )}
 
             <Pageheader currentpage="Profile" activepage="Pages" mainpage="Profile" />
+            
+            {/* Profile Completion Progress Bar */}
+            {profileData && !isProfileCompleted(profileData) && (() => {
+                const pendingItems = getPendingProfileItems(profileData);
+                const completedCount = pendingItems.filter(item => item.completed).length;
+                const totalCount = pendingItems.length;
+                const completionPercentage = Math.round((completedCount / totalCount) * 100);
+                const pendingList = pendingItems.filter(item => !item.completed);
+                
+                return (
+                    <div className="box mb-4">
+                        <div className="box-body">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+                                <div className="flex items-center gap-2">
+                                    <i className="ri-file-list-3-line text-primary text-lg"></i>
+                                    <h5 className="font-semibold text-gray-900 dark:text-white mb-0">
+                                        Profile Completion Status
+                                    </h5>
+                                </div>
+                                {canEditProfile() && (
+                                    <button 
+                                        type="button" 
+                                        onClick={handleEditProfile}
+                                        className="inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary/90 transition-colors whitespace-nowrap"
+                                    >
+                                        <i className="ri-edit-line me-1.5"></i>
+                                        Complete Profile
+                                    </button>
+                                )}
+                            </div>
+                            
+                            {/* Progress Bar */}
+                            <div className="mb-3">
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                        {completionPercentage}% Complete
+                                    </span>
+                                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                                        {completedCount} of {totalCount} sections completed
+                                    </span>
+                                </div>
+                                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+                                    <div 
+                                        className="bg-primary h-2.5 rounded-full transition-all duration-300"
+                                        style={{ width: `${completionPercentage}%` }}
+                                    ></div>
+                                </div>
+                            </div>
+                            
+                            {/* Pending Items List */}
+                            {pendingList.length > 0 && (
+                                <div className="flex flex-wrap gap-2">
+                                    <span className="text-xs text-gray-600 dark:text-gray-400 font-medium">
+                                        Pending:
+                                    </span>
+                                    {pendingList.map((item, index) => (
+                                        <span 
+                                            key={index}
+                                            className="inline-flex items-center gap-1 text-xs bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-2 py-1 rounded"
+                                        >
+                                            <i className={item.icon}></i>
+                                            {item.label.split('(')[0].trim()}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                );
+            })()}
+
             <div className="grid grid-cols-12 gap-x-6">
                 <div className="xxl:col-span-4 xl:col-span-12 col-span-12">
                     <div className="box overflow-hidden">

@@ -361,6 +361,23 @@ export const assignHolidaysToCandidates = async (candidateIds: string[], holiday
   return response.data;
 };
 
+/**
+ * Assign shift to multiple candidates
+ * @param candidateIds - Array of candidate MongoDB ObjectIds
+ * @param shiftId - Shift ObjectId from the shifts API
+ * @returns Promise with assignment results
+ */
+export const assignShiftToCandidates = async (
+  candidateIds: string[],
+  shiftId: string
+): Promise<any> => {
+  const response = await api.post(`${Candidates_API}/assign-shift`, {
+    candidateIds,
+    shiftId
+  });
+  return response.data;
+};
+
 // Recording API functions
 // Get recording status
 export const getRecordingStatus = async (meetingId: string) => {
