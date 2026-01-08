@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { getAllShifts, createShift, updateShift, deleteShift } from '@/shared/lib/shifts';
 import Pageheader from '@/shared/layout-components/page-header/pageheader';
 import Seo from '@/shared/layout-components/seo/seo';
 import Swal from 'sweetalert2';
+import * as XLSX from 'xlsx';
 
 type Shift = {
   _id?: string;
@@ -38,6 +39,23 @@ const ManageShiftsPage = () => {
     isActive: true,
   });
   const [submitting, setSubmitting] = useState<boolean>(false);
+  const [bulkMode, setBulkMode] = useState<boolean>(false);
+  const [bulkShifts, setBulkShifts] = useState<Array<{
+    name: string;
+    description: string;
+    timezone: string;
+    startTime: string;
+    endTime: string;
+    isActive: boolean;
+  }>>([{
+    name: '',
+    description: '',
+    timezone: 'UTC',
+    startTime: '',
+    endTime: '',
+    isActive: true,
+  }]);
+  const excelFileInputRef = useRef<HTMLInputElement>(null);
   
   // Filter state
   const [searchName, setSearchName] = useState<string>('');
@@ -226,98 +244,178 @@ const ManageShiftsPage = () => {
     return timeRegex.test(time);
   };
 
+  // Validate single shift
+  const validateShift = (shift: typeof formData): string | null => {
+    if (!shift.name.trim()) {
+      return 'Shift name is required';
+    }
+    if (!shift.startTime || !validateTimeFormat(shift.startTime)) {
+      return 'Start time must be in HH:mm format (24-hour, e.g., "10:00", "18:00")';
+    }
+    if (!shift.endTime || !validateTimeFormat(shift.endTime)) {
+      return 'End time must be in HH:mm format (24-hour, e.g., "10:00", "18:00")';
+    }
+    if (shift.startTime === shift.endTime) {
+      return 'End time cannot be the same as start time';
+    }
+    return null;
+  };
+
   // Handle form submit (create or update)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validation
-    if (!formData.name.trim()) {
-      await Swal.fire({
-        icon: 'warning',
-        title: 'Validation Error',
-        text: 'Shift name is required',
-        confirmButtonText: 'OK'
-      });
-      return;
-    }
-
-    if (!formData.startTime || !validateTimeFormat(formData.startTime)) {
-      await Swal.fire({
-        icon: 'warning',
-        title: 'Validation Error',
-        text: 'Start time must be in HH:mm format (24-hour, e.g., "10:00", "18:00")',
-        confirmButtonText: 'OK'
-      });
-      return;
-    }
-
-    if (!formData.endTime || !validateTimeFormat(formData.endTime)) {
-      await Swal.fire({
-        icon: 'warning',
-        title: 'Validation Error',
-        text: 'End time must be in HH:mm format (24-hour, e.g., "10:00", "18:00")',
-        confirmButtonText: 'OK'
-      });
-      return;
-    }
-
-    if (formData.startTime === formData.endTime) {
-      await Swal.fire({
-        icon: 'warning',
-        title: 'Validation Error',
-        text: 'End time cannot be the same as start time',
-        confirmButtonText: 'OK'
-      });
-      return;
-    }
-
-    setSubmitting(true);
-    setError(null);
-
-    try {
-      if (editingShift) {
-        // Update existing shift
-        const shiftId = editingShift._id || editingShift.id || '';
-        await updateShift(shiftId, formData);
-        
+    if (bulkMode) {
+      // Bulk creation mode
+      if (bulkShifts.length === 0) {
         await Swal.fire({
-          icon: 'success',
-          title: 'Success',
-          text: 'Shift updated successfully',
+          icon: 'warning',
+          title: 'Validation Error',
+          text: 'At least one shift is required',
           confirmButtonText: 'OK'
         });
-      } else {
-        // Create new shift
-        await createShift(formData);
-        
-        await Swal.fire({
-          icon: 'success',
-          title: 'Success',
-          text: 'Shift created successfully',
-          confirmButtonText: 'OK'
-        });
+        return;
       }
 
-      // Reset form and refresh list
-      resetForm();
-      await fetchShifts();
-    } catch (err: any) {
-      const errorMessage = err?.response?.data?.message || err?.message || 'Failed to save shift';
-      setError(errorMessage);
-      await Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: errorMessage,
-        confirmButtonText: 'OK'
+      if (bulkShifts.length > 100) {
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Validation Error',
+          text: 'Cannot create more than 100 shifts at once',
+          confirmButtonText: 'OK'
+        });
+        return;
+      }
+
+      // Validate all shifts
+      const validationErrors: Array<{ index: number; error: string }> = [];
+      bulkShifts.forEach((shift, index) => {
+        const error = validateShift(shift);
+        if (error) {
+          validationErrors.push({ index: index + 1, error });
+        }
       });
-    } finally {
-      setSubmitting(false);
+
+      if (validationErrors.length > 0) {
+        const errorMessages = validationErrors.map(e => `Shift ${e.index}: ${e.error}`).join('\n');
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Validation Error',
+          html: `<div style="text-align: left;">${errorMessages.split('\n').map(msg => `<p>${msg}</p>`).join('')}</div>`,
+          confirmButtonText: 'OK'
+        });
+        return;
+      }
+
+      setSubmitting(true);
+      setError(null);
+
+      try {
+        const response = await createShift(bulkShifts);
+        
+        // Handle response - could be single object or array
+        const createdShifts = Array.isArray(response?.data) ? response.data : [response?.data];
+        const successCount = createdShifts.length;
+        const totalCount = bulkShifts.length;
+        
+        if (response?.partialSuccess) {
+          // Some shifts failed
+          const failedCount = totalCount - successCount;
+          await Swal.fire({
+            icon: 'warning',
+            title: 'Partial Success',
+            html: `
+              <p>Created ${successCount} shift(s) successfully, ${failedCount} failed.</p>
+              ${response.errors ? `<p class="mt-2 text-sm">Errors:</p><ul class="text-sm text-left mt-1">${response.errors.map((e: any) => `<li>Shift ${e.index + 1}: ${e.error}</li>`).join('')}</ul>` : ''}
+            `,
+            confirmButtonText: 'OK'
+          });
+        } else {
+          await Swal.fire({
+            icon: 'success',
+            title: 'Success',
+            text: `${successCount} shift(s) created successfully`,
+            confirmButtonText: 'OK'
+          });
+        }
+
+        // Reset form and refresh list
+        resetForm();
+        await fetchShifts();
+      } catch (err: any) {
+        const errorMessage = err?.response?.data?.message || err?.message || 'Failed to create shifts';
+        setError(errorMessage);
+        await Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: errorMessage,
+          confirmButtonText: 'OK'
+        });
+      } finally {
+        setSubmitting(false);
+      }
+    } else {
+      // Single shift mode
+      const validationError = validateShift(formData);
+      if (validationError) {
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Validation Error',
+          text: validationError,
+          confirmButtonText: 'OK'
+        });
+        return;
+      }
+
+      setSubmitting(true);
+      setError(null);
+
+      try {
+        if (editingShift) {
+          // Update existing shift
+          const shiftId = editingShift._id || editingShift.id || '';
+          await updateShift(shiftId, formData);
+          
+          await Swal.fire({
+            icon: 'success',
+            title: 'Success',
+            text: 'Shift updated successfully',
+            confirmButtonText: 'OK'
+          });
+        } else {
+          // Create new shift
+          await createShift(formData);
+          
+          await Swal.fire({
+            icon: 'success',
+            title: 'Success',
+            text: 'Shift created successfully',
+            confirmButtonText: 'OK'
+          });
+        }
+
+        // Reset form and refresh list
+        resetForm();
+        await fetchShifts();
+      } catch (err: any) {
+        const errorMessage = err?.response?.data?.message || err?.message || 'Failed to save shift';
+        setError(errorMessage);
+        await Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: errorMessage,
+          confirmButtonText: 'OK'
+        });
+      } finally {
+        setSubmitting(false);
+      }
     }
   };
 
   // Handle edit
   const handleEdit = (shift: Shift) => {
     setEditingShift(shift);
+    setBulkMode(false); // Disable bulk mode when editing
     setFormData({
       name: shift.name || '',
       description: shift.description || '',
@@ -402,8 +500,345 @@ const ManageShiftsPage = () => {
       endTime: '',
       isActive: true,
     });
+    setBulkShifts([{
+      name: '',
+      description: '',
+      timezone: 'UTC',
+      startTime: '',
+      endTime: '',
+      isActive: true,
+    }]);
     setEditingShift(null);
     setShowForm(false);
+    setBulkMode(false);
+  };
+
+  // Add new shift to bulk array
+  const addBulkShift = () => {
+    if (bulkShifts.length >= 100) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Limit Reached',
+        text: 'Cannot add more than 100 shifts at once',
+        confirmButtonText: 'OK'
+      });
+      return;
+    }
+    setBulkShifts([...bulkShifts, {
+      name: '',
+      description: '',
+      timezone: 'UTC',
+      startTime: '',
+      endTime: '',
+      isActive: true,
+    }]);
+  };
+
+  // Remove shift from bulk array
+  const removeBulkShift = (index: number) => {
+    if (bulkShifts.length === 1) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Cannot Remove',
+        text: 'At least one shift is required',
+        confirmButtonText: 'OK'
+      });
+      return;
+    }
+    setBulkShifts(bulkShifts.filter((_, i) => i !== index));
+  };
+
+  // Update bulk shift
+  const updateBulkShift = (index: number, field: string, value: any) => {
+    const updated = [...bulkShifts];
+    updated[index] = { ...updated[index], [field]: value };
+    setBulkShifts(updated);
+  };
+
+  // Download Excel template
+  const downloadExcelTemplate = () => {
+    const templateData = [
+      {
+        'Shift Name': 'Morning Shift',
+        'Description': 'Standard morning work shift',
+        'Timezone': 'America/New_York',
+        'Start Time (HH:mm)': '09:00',
+        'End Time (HH:mm)': '17:00',
+        'Is Active': true
+      },
+      {
+        'Shift Name': 'Evening Shift',
+        'Description': 'Evening work shift',
+        'Timezone': 'America/New_York',
+        'Start Time (HH:mm)': '17:00',
+        'End Time (HH:mm)': '01:00',
+        'Is Active': true
+      },
+      {
+        'Shift Name': 'Night Shift',
+        'Description': 'Overnight shift',
+        'Timezone': 'Asia/Kolkata',
+        'Start Time (HH:mm)': '22:00',
+        'End Time (HH:mm)': '06:00',
+        'Is Active': true
+      }
+    ];
+
+    const ws = XLSX.utils.json_to_sheet(templateData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Shifts');
+
+    // Set column widths
+    const colWidths = [
+      { wch: 20 }, // Shift Name
+      { wch: 30 }, // Description
+      { wch: 25 }, // Timezone
+      { wch: 18 }, // Start Time
+      { wch: 18 }, // End Time
+      { wch: 12 }  // Is Active
+    ];
+    ws['!cols'] = colWidths;
+
+    // Generate Excel file
+    XLSX.writeFile(wb, 'shifts_import_template.xlsx');
+  };
+
+  // Handle Excel file import
+  const handleExcelImport = async (file: File) => {
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: 'array' });
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+      if (!jsonData || jsonData.length === 0) {
+        await Swal.fire({
+          icon: 'error',
+          title: 'Invalid File',
+          text: 'The Excel file is empty or invalid.',
+          confirmButtonText: 'OK'
+        });
+        return;
+      }
+
+      if (jsonData.length > 100) {
+        await Swal.fire({
+          icon: 'error',
+          title: 'Too Many Rows',
+          text: 'Cannot import more than 100 shifts at once. Please split your file into smaller batches.',
+          confirmButtonText: 'OK'
+        });
+        return;
+      }
+
+      const importedShifts: Array<{
+        name: string;
+        description: string;
+        timezone: string;
+        startTime: string;
+        endTime: string;
+        isActive: boolean;
+      }> = [];
+
+      const errors: string[] = [];
+
+      jsonData.forEach((row: any, index: number) => {
+        const rowNum = index + 2; // +2 because Excel rows start at 1 and we have header
+
+        // Get values from various possible column names (case-insensitive matching)
+        const name = row['Shift Name'] || row['shift name'] || row['ShiftName'] || row['shiftName'] || row['Name'] || row['name'];
+        const description = row['Description'] || row['description'] || row['Desc'] || row['desc'] || '';
+        const timezone = row['Timezone'] || row['timezone'] || row['Time Zone'] || row['time zone'] || 'UTC';
+        const startTime = row['Start Time (HH:mm)'] || row['Start Time'] || row['start time'] || row['StartTime'] || row['startTime'] || row['Start'] || row['start'];
+        const endTime = row['End Time (HH:mm)'] || row['End Time'] || row['end time'] || row['EndTime'] || row['endTime'] || row['End'] || row['end'];
+        const isActive = row['Is Active'] !== undefined ? row['Is Active'] : (row['is active'] !== undefined ? row['is active'] : (row['IsActive'] !== undefined ? row['IsActive'] : (row['isActive'] !== undefined ? row['isActive'] : true)));
+
+        // Validate required fields
+        if (!name || !name.toString().trim()) {
+          errors.push(`Row ${rowNum}: Shift Name is required`);
+          return;
+        }
+
+        if (!startTime) {
+          errors.push(`Row ${rowNum}: Start Time is required`);
+          return;
+        }
+
+        if (!endTime) {
+          errors.push(`Row ${rowNum}: End Time is required`);
+          return;
+        }
+
+        // Format time (handle various formats)
+        let formattedStartTime = '';
+        let formattedEndTime = '';
+
+        try {
+          // Handle time as string (HH:MM or HH:MM:SS)
+          if (typeof startTime === 'string') {
+            const timeParts = startTime.toString().split(':');
+            if (timeParts.length >= 2) {
+              const hours = parseInt(timeParts[0], 10);
+              const minutes = parseInt(timeParts[1], 10);
+              if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+                errors.push(`Row ${rowNum}: Invalid start time - ${startTime}`);
+                return;
+              }
+              formattedStartTime = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+            } else {
+              errors.push(`Row ${rowNum}: Invalid start time format - ${startTime}`);
+              return;
+            }
+          } else if (typeof startTime === 'number') {
+            // Excel time format (decimal fraction of a day)
+            const totalSeconds = Math.floor(startTime * 86400);
+            const hours = Math.floor(totalSeconds / 3600) % 24;
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            formattedStartTime = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+          } else {
+            errors.push(`Row ${rowNum}: Invalid start time format - ${startTime}`);
+            return;
+          }
+
+          if (typeof endTime === 'string') {
+            const timeParts = endTime.toString().split(':');
+            if (timeParts.length >= 2) {
+              const hours = parseInt(timeParts[0], 10);
+              const minutes = parseInt(timeParts[1], 10);
+              if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+                errors.push(`Row ${rowNum}: Invalid end time - ${endTime}`);
+                return;
+              }
+              formattedEndTime = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+            } else {
+              errors.push(`Row ${rowNum}: Invalid end time format - ${endTime}`);
+              return;
+            }
+          } else if (typeof endTime === 'number') {
+            // Excel time format
+            const totalSeconds = Math.floor(endTime * 86400);
+            const hours = Math.floor(totalSeconds / 3600) % 24;
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            formattedEndTime = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+          } else {
+            errors.push(`Row ${rowNum}: Invalid end time format - ${endTime}`);
+            return;
+          }
+        } catch (e) {
+          errors.push(`Row ${rowNum}: Error parsing time values`);
+          return;
+        }
+
+        // Validate time format (HH:mm)
+        if (!validateTimeFormat(formattedStartTime)) {
+          errors.push(`Row ${rowNum}: Start time must be in HH:mm format (24-hour) - ${formattedStartTime}`);
+          return;
+        }
+
+        if (!validateTimeFormat(formattedEndTime)) {
+          errors.push(`Row ${rowNum}: End time must be in HH:mm format (24-hour) - ${formattedEndTime}`);
+          return;
+        }
+
+        // Validate start time != end time
+        if (formattedStartTime === formattedEndTime) {
+          errors.push(`Row ${rowNum}: End time cannot be the same as start time`);
+          return;
+        }
+
+        // Validate timezone (basic check)
+        const validTimezones = timezones.map(tz => tz.value);
+        const normalizedTimezone = timezone.toString().trim();
+        if (!validTimezones.includes(normalizedTimezone)) {
+          // Allow it but warn - might be a valid timezone not in our list
+          console.warn(`Row ${rowNum}: Timezone "${normalizedTimezone}" not in common list, but will be used`);
+        }
+
+        importedShifts.push({
+          name: name.toString().trim(),
+          description: description ? description.toString().trim() : '',
+          timezone: normalizedTimezone,
+          startTime: formattedStartTime,
+          endTime: formattedEndTime,
+          isActive: isActive === true || isActive === 'true' || isActive === 'TRUE' || isActive === 1 || isActive === '1'
+        });
+      });
+
+      if (errors.length > 0) {
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Import Errors',
+          html: `Found ${errors.length} error(s):<br><br>${errors.slice(0, 10).join('<br>')}${errors.length > 10 ? '<br>... and more' : ''}`,
+          confirmButtonText: 'OK'
+        });
+      }
+
+      if (importedShifts.length > 0) {
+        setBulkShifts(importedShifts);
+        setBulkMode(true);
+        setShowForm(true);
+        
+        await Swal.fire({
+          icon: 'success',
+          title: 'Import Successful',
+          text: `Successfully imported ${importedShifts.length} shift(s).${errors.length > 0 ? ' Some rows had errors and were skipped.' : ''} Please review and submit.`,
+          confirmButtonText: 'OK'
+        });
+      } else {
+        await Swal.fire({
+          icon: 'error',
+          title: 'No Valid Shifts',
+          text: 'No valid shifts could be imported from the file.',
+          confirmButtonText: 'OK'
+        });
+      }
+
+      // Reset file input
+      if (excelFileInputRef.current) {
+        excelFileInputRef.current.value = '';
+      }
+    } catch (error: any) {
+      console.error('Excel import error:', error);
+      await Swal.fire({
+        icon: 'error',
+        title: 'Import Failed',
+        text: error?.message || 'Failed to import Excel file. Please check the file format.',
+        confirmButtonText: 'OK'
+      });
+      
+      // Reset file input
+      if (excelFileInputRef.current) {
+        excelFileInputRef.current.value = '';
+      }
+    }
+  };
+
+  // Handle file input change
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const allowedTypes = [
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+        'application/vnd.ms-excel', // .xls
+        'text/csv' // .csv
+      ];
+      
+      const allowedExtensions = ['.xlsx', '.xls', '.csv'];
+      const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase();
+      
+      if (!allowedTypes.includes(file.type) && !allowedExtensions.includes(fileExtension)) {
+        Swal.fire({
+          icon: 'error',
+          title: 'Invalid File Type',
+          text: 'Please upload a valid Excel file (.xlsx, .xls) or CSV file.',
+          confirmButtonText: 'OK'
+        });
+        return;
+      }
+      
+      handleExcelImport(file);
+    }
   };
 
   // Format time for display
@@ -483,107 +918,313 @@ const ManageShiftsPage = () => {
                 <h3 className="text-lg font-semibold text-gray-900">
                   {editingShift ? 'Edit Shift' : 'Create New Shift'}
                 </h3>
-                <button
-                  onClick={resetForm}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <i className="ri-close-line text-xl"></i>
-                </button>
+                <div className="flex items-center gap-3">
+                  {!editingShift && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-700">Mode:</span>
+                      <button
+                        type="button"
+                        onClick={() => setBulkMode(false)}
+                        className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+                          !bulkMode
+                            ? 'bg-primary text-white'
+                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                        }`}
+                      >
+                        Single
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBulkMode(true)}
+                        className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+                          bulkMode
+                            ? 'bg-primary text-white'
+                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                        }`}
+                      >
+                        Bulk ({bulkShifts.length})
+                      </button>
+                    </div>
+                  )}
+                  <button
+                    onClick={resetForm}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <i className="ri-close-line text-xl"></i>
+                  </button>
+                </div>
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Shift Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-                      placeholder="e.g., Morning Shift, Day Shift"
-                      required
-                      maxLength={200}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Timezone <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={formData.timezone}
-                      onChange={(e) => setFormData({ ...formData, timezone: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-                      required
-                    >
-                      {timezones.map((tz) => (
-                        <option key={tz.value} value={tz.value}>
-                          {tz.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Start Time <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.startTime}
-                      onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-                      placeholder="HH:mm (e.g., 10:00, 22:00)"
-                      pattern="^([01][0-9]|2[0-3]):[0-5][0-9]$"
-                      required
-                    />
-                    <p className="mt-1 text-xs text-gray-500">24-hour format (HH:mm)</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      End Time <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.endTime}
-                      onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-                      placeholder="HH:mm (e.g., 18:00, 06:00)"
-                      pattern="^([01][0-9]|2[0-3]):[0-5][0-9]$"
-                      required
-                    />
-                    <p className="mt-1 text-xs text-gray-500">24-hour format (HH:mm). Can be next day for overnight shifts</p>
-                  </div>
-
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Description
-                    </label>
-                    <textarea
-                      value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-                      placeholder="Shift description..."
-                      rows={3}
-                      maxLength={1000}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={formData.isActive}
-                        onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-                        className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
-                      />
-                      <span className="text-sm font-medium text-gray-700">Active</span>
-                    </label>
+              {/* Excel Import Section - Shown when form is open and not editing */}
+              {!editingShift && (
+                <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-start gap-3">
+                    <i className="ri-file-excel-2-line text-2xl text-blue-600 mt-0.5"></i>
+                    <div className="flex-1">
+                      <h3 className="text-sm font-semibold text-blue-900 mb-2">Import Shifts from Excel</h3>
+                      <p className="text-sm text-blue-800 mb-3">
+                        You can import multiple shifts at once using an Excel file. Download the template, fill in your shift data, and upload it.
+                      </p>
+                      <div className="flex flex-wrap gap-2 mb-3">
+                        <button
+                          type="button"
+                          onClick={downloadExcelTemplate}
+                          className="inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-blue-700 bg-white border border-blue-300 rounded-md hover:bg-blue-50 transition-colors"
+                        >
+                          <i className="ri-download-line me-1"></i>
+                          Download Template
+                        </button>
+                        <label className="inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium text-blue-700 bg-white border border-blue-300 rounded-md hover:bg-blue-50 transition-colors cursor-pointer">
+                          <i className="ri-upload-2-line me-1"></i>
+                          Import Excel File
+                          <input
+                            ref={excelFileInputRef}
+                            type="file"
+                            accept=".xlsx,.xls,.csv"
+                            onChange={handleFileInputChange}
+                            className="hidden"
+                          />
+                        </label>
+                      </div>
+                      <div className="text-xs text-blue-700">
+                        <p className="font-medium mb-1">Excel Template Columns:</p>
+                        <ul className="list-disc list-inside space-y-0.5">
+                          <li><strong>Shift Name</strong> (required) - Name of the shift</li>
+                          <li><strong>Description</strong> (optional) - Shift description</li>
+                          <li><strong>Timezone</strong> (required) - IANA timezone (e.g., America/New_York, Asia/Kolkata)</li>
+                          <li><strong>Start Time (HH:mm)</strong> (required) - 24-hour format (e.g., 09:00, 22:00)</li>
+                          <li><strong>End Time (HH:mm)</strong> (required) - 24-hour format (e.g., 17:00, 06:00)</li>
+                          <li><strong>Is Active</strong> (optional) - true/false (default: true)</li>
+                        </ul>
+                      </div>
+                    </div>
                   </div>
                 </div>
+              )}
+
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {bulkMode && !editingShift ? (
+                  // Bulk Creation Mode
+                  <div className="space-y-4">
+                    <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      <p className="text-sm text-blue-800">
+                        <i className="ri-information-line me-1"></i>
+                        <strong>Bulk Creation Mode:</strong> Create up to 100 shifts at once. Fill in the details for each shift below.
+                      </p>
+                    </div>
+
+                    {bulkShifts.map((shift, index) => (
+                      <div key={index} className="p-4 bg-white border border-gray-300 rounded-lg">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="text-sm font-semibold text-gray-900">Shift {index + 1}</h4>
+                          {bulkShifts.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeBulkShift(index)}
+                              className="text-red-500 hover:text-red-700"
+                              title="Remove this shift"
+                            >
+                              <i className="ri-delete-bin-line text-lg"></i>
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Shift Name <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={shift.name}
+                              onChange={(e) => updateBulkShift(index, 'name', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                              placeholder="e.g., Morning Shift"
+                              maxLength={200}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Timezone <span className="text-red-500">*</span>
+                            </label>
+                            <select
+                              value={shift.timezone}
+                              onChange={(e) => updateBulkShift(index, 'timezone', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                            >
+                              {timezones.map((tz) => (
+                                <option key={tz.value} value={tz.value}>
+                                  {tz.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Start Time <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={shift.startTime}
+                              onChange={(e) => updateBulkShift(index, 'startTime', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                              placeholder="HH:mm (e.g., 10:00)"
+                              pattern="^([01][0-9]|2[0-3]):[0-5][0-9]$"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              End Time <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={shift.endTime}
+                              onChange={(e) => updateBulkShift(index, 'endTime', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                              placeholder="HH:mm (e.g., 18:00)"
+                              pattern="^([01][0-9]|2[0-3]):[0-5][0-9]$"
+                            />
+                          </div>
+
+                          <div className="md:col-span-2">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Description
+                            </label>
+                            <textarea
+                              value={shift.description}
+                              onChange={(e) => updateBulkShift(index, 'description', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                              placeholder="Shift description..."
+                              rows={2}
+                              maxLength={1000}
+                            />
+                          </div>
+
+                          <div>
+                            <label className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={shift.isActive}
+                                onChange={(e) => updateBulkShift(index, 'isActive', e.target.checked)}
+                                className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                              />
+                              <span className="text-sm font-medium text-gray-700">Active</span>
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+
+                    <div className="flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={addBulkShift}
+                        disabled={bulkShifts.length >= 100}
+                        className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <i className="ri-add-line me-1"></i>
+                        Add Another Shift ({bulkShifts.length}/100)
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  // Single Shift Mode
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Shift Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                        placeholder="e.g., Morning Shift, Day Shift"
+                        required
+                        maxLength={200}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Timezone <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={formData.timezone}
+                        onChange={(e) => setFormData({ ...formData, timezone: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                        required
+                      >
+                        {timezones.map((tz) => (
+                          <option key={tz.value} value={tz.value}>
+                            {tz.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Start Time <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.startTime}
+                        onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                        placeholder="HH:mm (e.g., 10:00, 22:00)"
+                        pattern="^([01][0-9]|2[0-3]):[0-5][0-9]$"
+                        required
+                      />
+                      <p className="mt-1 text-xs text-gray-500">24-hour format (HH:mm)</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        End Time <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.endTime}
+                        onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                        placeholder="HH:mm (e.g., 18:00, 06:00)"
+                        pattern="^([01][0-9]|2[0-3]):[0-5][0-9]$"
+                        required
+                      />
+                      <p className="mt-1 text-xs text-gray-500">24-hour format (HH:mm). Can be next day for overnight shifts</p>
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Description
+                      </label>
+                      <textarea
+                        value={formData.description}
+                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                        placeholder="Shift description..."
+                        rows={3}
+                        maxLength={1000}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={formData.isActive}
+                          onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+                          className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                        />
+                        <span className="text-sm font-medium text-gray-700">Active</span>
+                      </label>
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex gap-3">
                   <button
@@ -594,12 +1235,12 @@ const ManageShiftsPage = () => {
                     {submitting ? (
                       <>
                         <i className="ri-loader-4-line animate-spin me-1"></i>
-                        {editingShift ? 'Updating...' : 'Creating...'}
+                        {editingShift ? 'Updating...' : bulkMode ? `Creating ${bulkShifts.length} shift(s)...` : 'Creating...'}
                       </>
                     ) : (
                       <>
                         <i className={editingShift ? 'ri-save-line me-1' : 'ri-add-line me-1'}></i>
-                        {editingShift ? 'Update Shift' : 'Create Shift'}
+                        {editingShift ? 'Update Shift' : bulkMode ? `Create ${bulkShifts.length} Shift(s)` : 'Create Shift'}
                       </>
                     )}
                   </button>

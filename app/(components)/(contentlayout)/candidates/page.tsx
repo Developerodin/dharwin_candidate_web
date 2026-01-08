@@ -2742,7 +2742,8 @@ const Candidates = () => {
                                             { id: 'documents', label: 'Documents', icon: 'ri-file-line' },
                                             { id: 'salary', label: 'Salary Slips', icon: 'ri-money-dollar-box-line' },
                                             { id: 'social', label: 'Social Links', icon: 'ri-links-line' },
-                                            ...((userRole === 'admin' || userRole === 'recruiter') ? [{ id: 'notes', label: 'Notes & Feedback', icon: 'ri-file-text-line' }] : [])
+                                            ...((userRole === 'admin' || userRole === 'recruiter') ? [{ id: 'notes', label: 'Notes & Feedback', icon: 'ri-file-text-line' }] : []),
+                                            { id: 'leaves', label: 'Leave History', icon: 'ri-calendar-check-line' }
                                         ].map((tab) => (
                                             <button
                                                 key={tab.id}
@@ -3215,6 +3216,177 @@ const Candidates = () => {
                                                     </div>
                                                 )}
                                             </div>
+                                        </div>
+                                    )}
+
+                                    {activeTab === 'leaves' && (
+                                        <div className="space-y-4">
+                                            <div className="flex items-center justify-between mb-4">
+                                                <h4 className="text-lg font-semibold text-gray-900 dark:text-white">Leave History</h4>
+                                            </div>
+
+                                            {Array.isArray(selectedCandidate?.leaves) && selectedCandidate.leaves.length > 0 ? (
+                                                <div className="overflow-x-auto">
+                                                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                                                        <thead className="bg-gray-50 dark:bg-gray-800">
+                                                            <tr>
+                                                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                                                    Date
+                                                                </th>
+                                                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                                                    Leave Type
+                                                                </th>
+                                                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                                                    Notes
+                                                                </th>
+                                                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                                                    Assigned At
+                                                                </th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                                                            {selectedCandidate.leaves
+                                                                .sort((a: any, b: any) => {
+                                                                    const dateA = new Date(a.date).getTime();
+                                                                    const dateB = new Date(b.date).getTime();
+                                                                    return dateB - dateA; // Sort descending (newest first)
+                                                                })
+                                                                .map((leave: any, index: number) => {
+                                                                    const leaveDate = new Date(leave.date);
+                                                                    const assignedDate = leave.assignedAt ? new Date(leave.assignedAt) : null;
+                                                                    
+                                                                    const getLeaveTypeColor = (type: string) => {
+                                                                        switch (type) {
+                                                                            case 'casual':
+                                                                                return 'bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-400';
+                                                                            case 'sick':
+                                                                                return 'bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400';
+                                                                            case 'unpaid':
+                                                                                return 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400';
+                                                                            default:
+                                                                                return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-400';
+                                                                        }
+                                                                    };
+
+                                                                    const getLeaveTypeLabel = (type: string) => {
+                                                                        switch (type) {
+                                                                            case 'casual':
+                                                                                return 'Casual Leave';
+                                                                            case 'sick':
+                                                                                return 'Sick Leave';
+                                                                            case 'unpaid':
+                                                                                return 'Unpaid Leave';
+                                                                            default:
+                                                                                return type;
+                                                                        }
+                                                                    };
+
+                                                                    return (
+                                                                        <tr key={leave._id || index} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                                                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                                                                                <div className="flex items-center">
+                                                                                    <i className="ri-calendar-line me-2 text-gray-400"></i>
+                                                                                    {leaveDate.toLocaleDateString('en-US', {
+                                                                                        year: 'numeric',
+                                                                                        month: 'short',
+                                                                                        day: 'numeric'
+                                                                                    })}
+                                                                                </div>
+                                                                                <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                                                                    {leaveDate.toLocaleDateString('en-US', { weekday: 'long' })}
+                                                                                </div>
+                                                                            </td>
+                                                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getLeaveTypeColor(leave.leaveType)}`}>
+                                                                                    <i className={`ri-${leave.leaveType === 'casual' ? 'sun' : leave.leaveType === 'sick' ? 'heart-pulse' : 'money-dollar-circle'}-line me-1`}></i>
+                                                                                    {getLeaveTypeLabel(leave.leaveType)}
+                                                                                </span>
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
+                                                                                {leave.notes ? (
+                                                                                    <div className="flex items-start">
+                                                                                        <i className="ri-file-text-line me-2 mt-0.5 text-gray-400"></i>
+                                                                                        <span className="max-w-xs truncate" title={leave.notes}>
+                                                                                            {leave.notes}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                ) : (
+                                                                                    <span className="text-gray-400 dark:text-gray-500 italic">No notes</span>
+                                                                                )}
+                                                                            </td>
+                                                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                                                                                {assignedDate ? (
+                                                                                    <div className="flex items-center">
+                                                                                        <i className="ri-time-line me-1"></i>
+                                                                                        {assignedDate.toLocaleDateString('en-US', {
+                                                                                            year: 'numeric',
+                                                                                            month: 'short',
+                                                                                            day: 'numeric'
+                                                                                        })}
+                                                                                        <span className="mx-1">•</span>
+                                                                                        {assignedDate.toLocaleTimeString('en-US', {
+                                                                                            hour: '2-digit',
+                                                                                            minute: '2-digit'
+                                                                                        })}
+                                                                                    </div>
+                                                                                ) : (
+                                                                                    <span className="text-gray-400 dark:text-gray-500">N/A</span>
+                                                                                )}
+                                                                            </td>
+                                                                        </tr>
+                                                                    );
+                                                                })}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            ) : (
+                                                <div className="text-center py-12 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800">
+                                                    <i className="ri-calendar-check-line text-5xl text-gray-400 dark:text-gray-500 mb-4"></i>
+                                                    <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No Leave History</h4>
+                                                    <p className="text-gray-500 dark:text-gray-400">
+                                                        This candidate doesn't have any leave records yet.
+                                                    </p>
+                                                </div>
+                                            )}
+
+                                            {/* Leave Statistics */}
+                                            {Array.isArray(selectedCandidate?.leaves) && selectedCandidate.leaves.length > 0 && (
+                                                <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                                    <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-4 border border-orange-200 dark:border-orange-800">
+                                                        <div className="flex items-center justify-between">
+                                                            <div>
+                                                                <p className="text-sm text-orange-600 dark:text-orange-400 font-medium">Casual Leaves</p>
+                                                                <p className="text-2xl font-bold text-orange-700 dark:text-orange-300 mt-1">
+                                                                    {selectedCandidate.leaves.filter((l: any) => l.leaveType === 'casual').length}
+                                                                </p>
+                                                            </div>
+                                                            <i className="ri-sun-line text-3xl text-orange-600 dark:text-orange-400"></i>
+                                                        </div>
+                                                    </div>
+                                                    <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4 border border-purple-200 dark:border-purple-800">
+                                                        <div className="flex items-center justify-between">
+                                                            <div>
+                                                                <p className="text-sm text-purple-600 dark:text-purple-400 font-medium">Sick Leaves</p>
+                                                                <p className="text-2xl font-bold text-purple-700 dark:text-purple-300 mt-1">
+                                                                    {selectedCandidate.leaves.filter((l: any) => l.leaveType === 'sick').length}
+                                                                </p>
+                                                            </div>
+                                                            <i className="ri-heart-pulse-line text-3xl text-purple-600 dark:text-purple-400"></i>
+                                                        </div>
+                                                    </div>
+                                                    <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-4 border border-red-200 dark:border-red-800">
+                                                        <div className="flex items-center justify-between">
+                                                            <div>
+                                                                <p className="text-sm text-red-600 dark:text-red-400 font-medium">Unpaid Leaves</p>
+                                                                <p className="text-2xl font-bold text-red-700 dark:text-red-300 mt-1">
+                                                                    {selectedCandidate.leaves.filter((l: any) => l.leaveType === 'unpaid').length}
+                                                                </p>
+                                                            </div>
+                                                            <i className="ri-money-dollar-circle-line text-3xl text-red-600 dark:text-red-400"></i>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
 
@@ -3940,7 +4112,7 @@ const Candidates = () => {
                                                 title="Add Back-Dated Attendance"
                                             >
                                                 <i className="ri-calendar-line"></i>
-                                                Add Back-Dated
+                                                Regularization
                                             </button>
                                         )}
                                         <button

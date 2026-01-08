@@ -382,14 +382,14 @@ export const assignShiftToCandidates = async (
  * Assign leaves to multiple candidates
  * @param candidateIds - Array of candidate MongoDB ObjectIds
  * @param dates - Array of dates for leave (ISO 8601 format)
- * @param leaveType - Type of leave: "casual" or "sick"
+ * @param leaveType - Type of leave: "casual", "sick", or "unpaid"
  * @param notes - Optional notes for the leave
  * @returns Promise with assignment results
  */
 export const assignLeavesToCandidates = async (
   candidateIds: string[],
   dates: string[],
-  leaveType: 'casual' | 'sick',
+  leaveType: 'casual' | 'sick' | 'unpaid',
   notes?: string
 ): Promise<any> => {
   const response = await api.post(`${Attendance_API}/leaves`, {
@@ -398,6 +398,54 @@ export const assignLeavesToCandidates = async (
     leaveType,
     notes
   });
+  return response.data;
+};
+
+/**
+ * Update an existing leave for a candidate
+ * @param candidateId - MongoDB ObjectId of the candidate
+ * @param leaveId - MongoDB ObjectId of the leave entry (from candidate.leaves array)
+ * @param updates - Partial leave data to update (date, leaveType, or notes)
+ * @returns Promise with updated leave data
+ */
+export const updateLeave = async (
+  candidateId: string,
+  leaveId: string,
+  updates: {
+    date?: string;
+    leaveType?: 'casual' | 'sick' | 'unpaid';
+    notes?: string;
+  }
+): Promise<any> => {
+  const response = await api.patch(`${Attendance_API}/leaves/${candidateId}/${leaveId}`, updates);
+  return response.data;
+};
+
+/**
+ * Delete an existing leave for a candidate
+ * @param candidateId - MongoDB ObjectId of the candidate
+ * @param leaveId - MongoDB ObjectId of the leave entry (from candidate.leaves array)
+ * @returns Promise with deletion confirmation
+ */
+export const deleteLeave = async (
+  candidateId: string,
+  leaveId: string
+): Promise<any> => {
+  const response = await api.delete(`${Attendance_API}/leaves/${candidateId}/${leaveId}`);
+  return response.data;
+};
+
+/**
+ * Cancel an existing leave for a candidate
+ * @param candidateId - MongoDB ObjectId of the candidate
+ * @param leaveId - MongoDB ObjectId of the leave entry (from candidate.leaves array)
+ * @returns Promise with cancellation confirmation
+ */
+export const cancelLeave = async (
+  candidateId: string,
+  leaveId: string
+): Promise<any> => {
+  const response = await api.post(`${Attendance_API}/leaves/${candidateId}/${leaveId}/cancel`, {});
   return response.data;
 };
 

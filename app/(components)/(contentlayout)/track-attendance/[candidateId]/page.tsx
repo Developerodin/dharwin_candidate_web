@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { getAttendanceByCandidate, fetchAllCandidates, fetchCandidateById } from '@/shared/lib/candidates';
+import { useParams } from 'next/navigation';
+import { getAttendanceByCandidate, fetchCandidateById } from '@/shared/lib/candidates';
 import { getAllHolidays } from '@/shared/lib/holidays';
 import { getShiftById } from '@/shared/lib/shifts';
 import Pageheader from '@/shared/layout-components/page-header/pageheader';
@@ -26,36 +27,47 @@ type AttendanceRecord = {
   updatedAt: string;
 };
 
-type ApiResponse = {
-  success?: boolean;
-  data?: {
-    results: AttendanceRecord[];
-    page: number;
-    limit: number;
-    totalPages: number;
-    totalResults: number;
-  };
-  results?: AttendanceRecord[];
-  page?: number;
-  limit?: number;
-  totalPages?: number;
-  totalResults?: number;
+type Shift = {
+  _id?: string;
+  id?: string;
+  name: string;
+  description?: string;
+  startTime: string; // HH:mm format
+  endTime: string; // HH:mm format
+  timezone: string;
 };
 
-export default function AttendancePage() {
+type Candidate = {
+  id?: string;
+  _id?: string;
+  fullName?: string;
+  email?: string;
+  shift?: string | Shift;
+  weekOff?: string[];
+  holidays?: string[];
+  joiningDate?: string;
+  resignDate?: string;
+  leaves?: Array<{
+    _id: string;
+    date: string;
+    leaveType: 'casual' | 'sick';
+    notes: string | null;
+    assignedAt: string;
+  }>;
+};
+
+export default function CandidateAttendancePage() {
+  const params = useParams();
+  const candidateId = params?.candidateId as string;
+
+  const [candidate, setCandidate] = useState<Candidate | null>(null);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
+  const [shift, setShift] = useState<Shift | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [currentUser, setCurrentUser] = useState<any>(null);
-  const [candidateId, setCandidateId] = useState<string>('');
-  const [candidateData, setCandidateData] = useState<any>(null);
-  const [shift, setShift] = useState<any>(null);
-  const [totalResults, setTotalResults] = useState<number>(0);
-  const [page, setPage] = useState<number>(1);
-  const [totalPages, setTotalPages] = useState<number>(1);
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('calendar');
-
-  // Calendar & statistics state (to match admin candidate calendar view)
+  
+  // Calendar state
   const [attendanceYear, setAttendanceYear] = useState<number>(new Date().getFullYear());
   const [attendanceMonth, setAttendanceMonth] = useState<number>(new Date().getMonth());
   const [showAdvancedFilter, setShowAdvancedFilter] = useState<boolean>(false);
@@ -63,187 +75,145 @@ export default function AttendancePage() {
   const [endDate, setEndDate] = useState<string>('');
   const [candidateHolidaysByDate, setCandidateHolidaysByDate] = useState<Record<string, { title: string; date: string }>>({});
 
-  // Load current user and find candidate ID
+  // Load candidate data
   useEffect(() => {
-    try {
-      const data = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
-      setCurrentUser(data ? JSON.parse(data) : null);
-    } catch {
-      setCurrentUser(null);
-    }
-  }, []);
-
-  // Resolve candidate ID from user data
-  useEffect(() => {
-    const resolveCandidateId = async () => {
-      if (!currentUser) return;
+    const loadCandidate = async () => {
+      if (!candidateId) return;
       
       try {
-        // If user role is 'user', try to find their candidate record
-        if (currentUser.role === 'user') {
-          const allCandidates = await fetchAllCandidates();
-          const list = Array.isArray(allCandidates) ? allCandidates : (Array.isArray((allCandidates as any)?.results) ? (allCandidates as any).results : []);
-          
-          // Find candidate by owner ID or email
-          const match = list.find((c: any) => {
-            const byOwner = String(c?.owner) === String(currentUser.id || currentUser._id);
-            const byEmail = (c?.email || '').toLowerCase() === (currentUser?.email || '').toLowerCase();
-            return byOwner || byEmail;
-          });
-          
-          // Handle both id and _id fields
-          const matchedCandidateId = match?.id || match?._id;
-          if (matchedCandidateId) {
-            setCandidateId(matchedCandidateId);
-            setCandidateData(match); // Store candidate data to access joiningDate
+        const candidateData = await fetchCandidateById(candidateId);
+        setCandidate(candidateData);
+        
+        // Load shift if candidate has one
+        if (candidateData?.shift) {
+          // Check if shift is already a populated object with name property
+          if (typeof candidateData.shift === 'object' && candidateData.shift.name) {
+            // Shift is already populated, use it directly
+            setShift(candidateData.shift);
+          } else {
+            // Shift is an ID (string or object with _id/id), fetch it
+            const shiftId = typeof candidateData.shift === 'string' 
+              ? candidateData.shift 
+              : (candidateData.shift?._id || candidateData.shift?.id);
             
-            // Load full candidate data to get leaves and shift
-            try {
-              const fullCandidateData = await fetchCandidateById(matchedCandidateId);
-              setCandidateData(fullCandidateData);
-              
-              // Load shift if candidate has one
-              if (fullCandidateData?.shift) {
-                // Check if shift is already a populated object
-                if (typeof fullCandidateData.shift === 'object' && fullCandidateData.shift.name) {
-                  setShift(fullCandidateData.shift);
+            if (shiftId) {
+              try {
+                const shiftResponse = await getShiftById(shiftId);
+                // Handle response that might be wrapped in data property (some APIs wrap it)
+                const shiftData = shiftResponse?.data || shiftResponse;
+                if (shiftData && (shiftData.name || shiftData._id || shiftData.id)) {
+                  setShift(shiftData);
                 } else {
-                  // Shift is an ID, fetch it
-                  const shiftId = typeof fullCandidateData.shift === 'string' 
-                    ? fullCandidateData.shift 
-                    : (fullCandidateData.shift?._id || fullCandidateData.shift?.id);
-                  
-                  if (shiftId) {
-                    try {
-                      const shiftResponse = await getShiftById(shiftId);
-                      const shiftData = shiftResponse?.data || shiftResponse;
-                      if (shiftData && (shiftData.name || shiftData._id || shiftData.id)) {
-                        setShift(shiftData);
-                      }
-                    } catch (e) {
-                      console.warn('Failed to load shift:', e);
-                    }
-                  }
+                  console.warn('Shift data structure unexpected:', shiftData);
+                  setShift(null);
                 }
+              } catch (e) {
+                console.error('Failed to load shift:', e);
+                setShift(null);
               }
-            } catch (e) {
-              console.warn('Failed to load full candidate data:', e);
+            } else {
+              console.warn('No valid shift ID found in candidate data. Shift value:', candidateData.shift);
+              setShift(null);
             }
           }
+        } else {
+          console.log('No shift found for candidate');
+          setShift(null);
         }
-      } catch (e) {
-        console.warn('Failed to resolve candidate ID', e);
+        
+        // Load holidays
+        const holidayIds: string[] = candidateData.holidays || [];
+        if (holidayIds.length > 0) {
+          try {
+            const response = await getAllHolidays({
+              isActive: true,
+              sortBy: 'date:asc',
+              limit: 1000,
+            });
+
+            const holidaysList =
+              response?.data?.results ||
+              (Array.isArray(response?.data) ? response.data : []);
+
+            const idSet = new Set(holidayIds.map((id: any) => String(id)));
+            const map: Record<string, { title: string; date: string }> = {};
+
+            holidaysList.forEach((holiday: any) => {
+              const id = String(holiday._id || holiday.id || '');
+              if (!id || !idSet.has(id)) return;
+
+              try {
+                const dateObj = new Date(holiday.date);
+                if (isNaN(dateObj.getTime())) return;
+
+                const key = getLocalDateKey(dateObj);
+                map[key] = {
+                  title: holiday.title || 'Holiday',
+                  date: holiday.date,
+                };
+              } catch {
+                // Ignore invalid dates
+              }
+            });
+
+            setCandidateHolidaysByDate(map);
+          } catch (e) {
+            console.error('Failed to load holidays:', e);
+          }
+        }
+      } catch (e: any) {
+        setError(e?.response?.data?.message || e?.message || 'Failed to load candidate');
       }
     };
-    
-    resolveCandidateId();
-  }, [currentUser]);
 
-  const loadAttendance = async () => {
-    if (!candidateId) return;
-    
-    setLoading(true);
-    setError(null);
-    try {
-      const params: any = {};
+    loadCandidate();
+  }, [candidateId]);
 
-      // Match candidate modal logic: use either advanced filter range or current month range
-      if (showAdvancedFilter && startDate && endDate) {
-        params.startDate = startDate;
-        params.endDate = endDate;
-      } else {
-        const firstDay = new Date(attendanceYear, attendanceMonth, 1);
-        const lastDay = new Date(attendanceYear, attendanceMonth + 1, 0);
-        params.startDate = firstDay.toISOString().split('T')[0];
-        params.endDate = lastDay.toISOString().split('T')[0];
-      }
-
-      params.limit = 1000;
-
-      const response: ApiResponse = await getAttendanceByCandidate(candidateId, params);
-
-      const records =
-        (response?.data?.results as AttendanceRecord[] | undefined) ??
-        response?.results ??
-        [];
-
-      setAttendance(records);
-      const total = response?.data?.totalResults ?? response?.totalResults ?? records.length;
-      const totalPages = response?.data?.totalPages ?? response?.totalPages ?? 1;
-
-      setTotalResults(total || 0);
-      setPage(response?.data?.page ?? response?.page ?? 1);
-      setTotalPages(totalPages || 1);
-    } catch (e: any) {
-      setError(e?.response?.data?.message || e?.message || 'Failed to load attendance');
-      setAttendance([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Load attendance data
   useEffect(() => {
+    const loadAttendance = async () => {
+      if (!candidateId) return;
+      
+      setLoading(true);
+      setError(null);
+      try {
+        const params: any = {};
+
+        // Match candidate modal logic: use either advanced filter range or current month range
+        if (showAdvancedFilter && startDate && endDate) {
+          params.startDate = startDate;
+          params.endDate = endDate;
+        } else {
+          const firstDay = new Date(attendanceYear, attendanceMonth, 1);
+          const lastDay = new Date(attendanceYear, attendanceMonth + 1, 0);
+          params.startDate = firstDay.toISOString().split('T')[0];
+          params.endDate = lastDay.toISOString().split('T')[0];
+        }
+
+        params.limit = 1000;
+
+        const response = await getAttendanceByCandidate(candidateId, params);
+
+        const records =
+          (response?.data?.results as AttendanceRecord[] | undefined) ??
+          response?.results ??
+          [];
+
+        setAttendance(records);
+      } catch (e: any) {
+        setError(e?.response?.data?.message || e?.message || 'Failed to load attendance');
+        setAttendance([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
     if (candidateId) {
       loadAttendance();
     }
   }, [candidateId, attendanceYear, attendanceMonth, showAdvancedFilter, startDate, endDate]);
 
-  // Load holidays for this candidate (to show in calendar & stats)
-  useEffect(() => {
-    const loadCandidateHolidays = async () => {
-      if (!candidateData) {
-        setCandidateHolidaysByDate({});
-        return;
-      }
-
-      const holidayIds: string[] = candidateData.holidays || [];
-      if (!holidayIds.length) {
-        setCandidateHolidaysByDate({});
-        return;
-      }
-
-      try {
-        const response = await getAllHolidays({
-          isActive: true,
-          sortBy: 'date:asc',
-          limit: 1000,
-        });
-
-        const holidaysList =
-          response?.data?.results ||
-          (Array.isArray(response?.data) ? response.data : []);
-
-        const idSet = new Set(holidayIds.map((id: any) => String(id)));
-        const map: Record<string, { title: string; date: string }> = {};
-
-        holidaysList.forEach((holiday: any) => {
-          const id = String(holiday._id || holiday.id || '');
-          if (!id || !idSet.has(id)) return;
-
-          try {
-            const dateObj = new Date(holiday.date);
-            if (isNaN(dateObj.getTime())) return;
-
-            const key = getLocalDateKey(dateObj);
-            map[key] = {
-              title: holiday.title || 'Holiday',
-              date: holiday.date,
-            };
-          } catch {
-            // Ignore invalid dates
-          }
-        });
-
-        setCandidateHolidaysByDate(map);
-      } catch (e) {
-        console.error('Failed to load holidays for attendance calendar:', e);
-        setCandidateHolidaysByDate({});
-      }
-    };
-
-    loadCandidateHolidays();
-  }, [candidateData]);
-
+  // Helper functions
   const formatDate = (dateString?: string | null) => {
     if (!dateString) return 'N/A';
     try {
@@ -262,11 +232,14 @@ export default function AttendancePage() {
     }
   };
 
-  const formatDuration = (duration: number | null | undefined) => {
-    if (duration === null || duration === undefined || duration === 0) return 'N/A';
+  const formatDurationHours = (milliseconds: number) => {
+    if (!milliseconds || milliseconds === 0) return 0;
+    return Math.round((milliseconds / (1000 * 60 * 60)) * 100) / 100;
+  };
+
+  const formatDuration = (milliseconds: number) => {
+    if (!milliseconds || milliseconds === 0) return 'N/A';
     
-    // Assume duration is in milliseconds
-    const milliseconds = duration;
     const hours = Math.floor(milliseconds / (1000 * 60 * 60));
     const minutes = Math.floor((milliseconds % (1000 * 60 * 60)) / (1000 * 60));
     
@@ -313,21 +286,6 @@ export default function AttendancePage() {
     }
   };
 
-  // ===== Calendar Helpers (similar to admin candidate calendar) =====
-
-  // Convert duration (ms) to hours with 2 decimal precision
-  const formatDurationHours = (milliseconds: number) => {
-    if (!milliseconds || milliseconds === 0) return 0;
-    return Math.round((milliseconds / (1000 * 60 * 60)) * 100) / 100;
-  };
-
-  // Get week-off days from candidate data
-  const getWeekOffDays = (): string[] => {
-    if (!candidateData) return [];
-    return candidateData.weekOff || [];
-  };
-
-  // Build a local (non-UTC) date key in YYYY-MM-DD format
   const getLocalDateKey = (date: Date): string => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -335,26 +293,28 @@ export default function AttendancePage() {
     return `${year}-${month}-${day}`;
   };
 
-  // Check if a date is a week-off day
+  const getWeekOffDays = (): string[] => {
+    if (!candidate) return [];
+    return candidate.weekOff || [];
+  };
+
   const isWeekOffDay = (date: Date): boolean => {
     const weekOffDays = getWeekOffDays();
     if (weekOffDays.length === 0) return false;
     
-    // Get day name (e.g., "Sunday", "Monday")
     const dayName = date.toLocaleDateString('en-US', { weekday: 'long' });
     return weekOffDays.includes(dayName);
   };
 
   // Get effective joining date: from candidate data or first punchIn date
   const getEffectiveJoiningDate = (): Date | null => {
-    if (!candidateData) return null;
+    if (!candidate) return null;
     
     // First priority: Use joiningDate from candidate data if available and valid
-    const joiningDate = candidateData?.joiningDate;
+    const joiningDate = candidate?.joiningDate;
     if (joiningDate) {
       try {
         const date = new Date(joiningDate);
-        // Check if date is valid
         if (!isNaN(date.getTime())) {
           date.setHours(0, 0, 0, 0);
           return date;
@@ -385,25 +345,23 @@ export default function AttendancePage() {
       return earliestPunchIn;
     }
     
-    // If neither available, return null
     return null;
   };
 
   // Get resign date from candidate data
   const getResignDate = (): Date | null => {
-    if (!candidateData) return null;
+    if (!candidate) return null;
     
-    const resignDate = candidateData?.resignDate;
+    const resignDate = candidate?.resignDate;
     if (resignDate) {
       try {
         const date = new Date(resignDate);
-        // Check if date is valid
         if (!isNaN(date.getTime())) {
           date.setHours(0, 0, 0, 0);
           return date;
         }
       } catch (e) {
-        // Invalid date, return null
+        // Invalid date
       }
     }
     
@@ -435,17 +393,14 @@ export default function AttendancePage() {
     )) : null;
 
     // Map attendance records by punchIn date (not date field)
-    // Extract date using UTC to avoid timezone shifts
     const attendanceMap = new Map<string, AttendanceRecord>();
     attendance.forEach((record) => {
       if (record.punchIn) {
-        // Use UTC methods to get the exact date from punchIn timestamp
         const punchInDate = new Date(record.punchIn);
         const year = punchInDate.getUTCFullYear();
         const month = String(punchInDate.getUTCMonth() + 1).padStart(2, '0');
         const day = String(punchInDate.getUTCDate()).padStart(2, '0');
         const dateKey = `${year}-${month}-${day}`;
-        // If multiple records for same date, keep the one with punchOut (complete attendance)
         const existing = attendanceMap.get(dateKey);
         if (!existing || (record.punchOut && !existing.punchOut)) {
           attendanceMap.set(dateKey, record);
@@ -455,7 +410,7 @@ export default function AttendancePage() {
 
     // Map leaves
     const leavesMap = new Map<string, { _id: string; date: string; leaveType: 'casual' | 'sick'; notes: string | null; assignedAt: string }>();
-    const candidateLeaves = candidateData?.leaves || [];
+    const candidateLeaves = candidate?.leaves || [];
     candidateLeaves.forEach((leave: any) => {
       if (leave.date) {
         try {
@@ -470,7 +425,13 @@ export default function AttendancePage() {
       }
     });
 
-    const calendarDays: Array<{ day: number; date: Date; attendance: AttendanceRecord | null; holiday?: { title: string; date: string } | null; leave?: { _id: string; date: string; leaveType: 'casual' | 'sick'; notes: string | null; assignedAt: string } | null }> = [];
+    const calendarDays: Array<{ 
+      day: number; 
+      date: Date; 
+      attendance: AttendanceRecord | null; 
+      holiday?: { title: string; date: string } | null;
+      leave?: { _id: string; date: string; leaveType: 'casual' | 'sick'; notes: string | null; assignedAt: string } | null;
+    }> = [];
 
     const startDayOfWeek = firstDay.getDay();
     for (let i = 0; i < startDayOfWeek; i++) {
@@ -479,8 +440,6 @@ export default function AttendancePage() {
 
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(year, month, day);
-      // Create date key using UTC to match punchIn date extraction
-      // Use Date.UTC to create date at midnight UTC, then extract date parts
       const utcDate = new Date(Date.UTC(year, month, day));
       
       // Skip dates before joining date
@@ -501,7 +460,6 @@ export default function AttendancePage() {
       const dateKey = `${yearUTC}-${monthUTC}-${dayUTC}`;
       const record = attendanceMap.get(dateKey) || null;
 
-      // Holiday matching is done with local date key so it aligns with the visual calendar
       const holidayKey = getLocalDateKey(date);
       const holiday = candidateHolidaysByDate[holidayKey] || null;
       const leave = leavesMap.get(holidayKey) || null;
@@ -512,8 +470,7 @@ export default function AttendancePage() {
     return calendarDays;
   };
 
-  // Calculate statistics for selected period using calendar data,
-  // treating week-offs and holidays as non-working days.
+  // Calculate statistics for selected period using calendar data
   const getMonthStatistics = () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -572,7 +529,6 @@ export default function AttendancePage() {
       if (!isWeekOff && !isHoliday) {
         workingDays += 1;
         if (isLeave) {
-          // Leave days are counted separately and not as absent
           leaveDays += 1;
         } else if (isPresent) {
           presentDays += 1;
@@ -585,18 +541,50 @@ export default function AttendancePage() {
     });
 
     const totalHours = formatDurationHours(totalDuration);
-    // Absent days = working days - present days - leave days
     const absentDays = Math.max(0, workingDays - presentDays - leaveDays);
 
     return { totalHours, presentDays, absentDays, leaveDays };
   };
 
+  const handleApplyAdvancedFilter = () => {
+    if (startDate && endDate) {
+      // Trigger attendance reload by updating state
+      setShowAdvancedFilter(true);
+    }
+  };
+
+  if (!candidateId) {
+    return (
+      <>
+        <Seo title="Candidate Attendance" />
+        <Pageheader currentpage="Candidate Attendance" activepage="Track Attendance" mainpage="Candidate Attendance" />
+        <div className="space-y-6 mt-3">
+          <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            Invalid candidate ID
+          </div>
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
-      <Seo title="Attendance" />
-      <Pageheader currentpage="Attendance" activepage="Pages" mainpage="Attendance" />
+      <Seo title="Candidate Attendance" />
+      <Pageheader currentpage="Candidate Attendance" activepage="Track Attendance" mainpage="Candidate Attendance" />
       <div className="space-y-6 mt-3">
-          <h1 className="text-2xl font-semibold">Attendance Records</h1>
+        {/* Header */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 px-4 sm:px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Attendance Details - {candidate?.fullName || 'N/A'}
+              </h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                {candidate?.email || 'N/A'}
+              </p>
+            </div>
+          </div>
+        </div>
 
         {error && (
           <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -604,18 +592,12 @@ export default function AttendancePage() {
           </div>
         )}
 
-        {!candidateId && !loading && (
-          <div className="rounded-md border border-yellow-200 bg-yellow-50 px-3 py-2 text-sm text-yellow-700">
-            Please log in as a candidate to view attendance records.
-          </div>
-        )}
-
-        {/* Calendar & statistics layout (similar to admin candidate view) */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+        {/* Main Content */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
           {loading ? (
             <div className="text-center py-12">
               <i className="ri-loader-4-line animate-spin text-3xl text-primary mb-2"></i>
-              <p className="text-gray-600">Loading attendance data...</p>
+              <p className="text-gray-600 dark:text-gray-400">Loading attendance data...</p>
             </div>
           ) : (
             <div className="space-y-6 p-4 sm:p-6">
@@ -624,48 +606,48 @@ export default function AttendancePage() {
                 const monthStats = getMonthStatistics();
                 return (
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div className="bg-blue-50 rounded-lg p-4">
+                    <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm text-gray-600">Total Working Hours</p>
-                          <p className="text-2xl font-bold text-blue-600 mt-1">
+                          <p className="text-sm text-gray-600 dark:text-gray-400">Total Working Hours</p>
+                          <p className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1">
                             {monthStats.totalHours.toFixed(2)}h
                           </p>
                         </div>
-                        <i className="ri-time-line text-3xl text-blue-600"></i>
+                        <i className="ri-time-line text-3xl text-blue-600 dark:text-blue-400"></i>
                       </div>
                     </div>
-                    <div className="bg-green-50 rounded-lg p-4">
+                    <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm text-gray-600">Present Days</p>
-                          <p className="text-2xl font-bold text-green-600 mt-1">
+                          <p className="text-sm text-gray-600 dark:text-gray-400">Present Days</p>
+                          <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">
                             {monthStats.presentDays}
                           </p>
                         </div>
-                        <i className="ri-checkbox-circle-line text-3xl text-green-600"></i>
+                        <i className="ri-checkbox-circle-line text-3xl text-green-600 dark:text-green-400"></i>
                       </div>
                     </div>
-                    <div className="bg-red-50 rounded-lg p-4">
+                    <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-4">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm text-gray-600">Absent Days</p>
-                          <p className="text-2xl font-bold text-red-600 mt-1">
+                          <p className="text-sm text-gray-600 dark:text-gray-400">Absent Days</p>
+                          <p className="text-2xl font-bold text-red-600 dark:text-red-400 mt-1">
                             {monthStats.absentDays}
                           </p>
                         </div>
-                        <i className="ri-close-circle-line text-3xl text-red-600"></i>
+                        <i className="ri-close-circle-line text-3xl text-red-600 dark:text-red-400"></i>
                       </div>
                     </div>
-                    <div className="bg-orange-50 rounded-lg p-4">
+                    <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-4">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm text-gray-600">Leave Days</p>
-                          <p className="text-2xl font-bold text-orange-600 mt-1">
+                          <p className="text-sm text-gray-600 dark:text-gray-400">Leave Days</p>
+                          <p className="text-2xl font-bold text-orange-600 dark:text-orange-400 mt-1">
                             {monthStats.leaveDays || 0}
                           </p>
                         </div>
-                        <i className="ri-calendar-check-line text-3xl text-orange-600"></i>
+                        <i className="ri-calendar-check-line text-3xl text-orange-600 dark:text-orange-400"></i>
                       </div>
                     </div>
                   </div>
@@ -673,49 +655,49 @@ export default function AttendancePage() {
               })()}
 
               {/* Shift Details Section */}
-              {(candidateData?.shift || shift) && (
-                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                  <h4 className="text-md font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              {(candidate?.shift || shift) && (
+                <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 border border-gray-200 dark:border-gray-600">
+                  <h4 className="text-md font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
                     <i className="ri-time-zone-line text-primary"></i>
                     Shift Details
                   </h4>
                   {shift ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                       <div>
-                        <p className="text-xs text-gray-500 mb-1">Shift Name</p>
-                        <p className="text-sm font-medium text-gray-900">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Shift Name</p>
+                        <p className="text-sm font-medium text-gray-900 dark:text-white">
                           {shift.name || 'N/A'}
                         </p>
                       </div>
                       <div>
-                        <p className="text-xs text-gray-500 mb-1">Start Time</p>
-                        <p className="text-sm font-medium text-gray-900">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Start Time</p>
+                        <p className="text-sm font-medium text-gray-900 dark:text-white">
                           {shift.startTime || 'N/A'}
                         </p>
                       </div>
                       <div>
-                        <p className="text-xs text-gray-500 mb-1">End Time</p>
-                        <p className="text-sm font-medium text-gray-900">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">End Time</p>
+                        <p className="text-sm font-medium text-gray-900 dark:text-white">
                           {shift.endTime || 'N/A'}
                         </p>
                       </div>
                       <div>
-                        <p className="text-xs text-gray-500 mb-1">Timezone</p>
-                        <p className="text-sm font-medium text-gray-900">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Timezone</p>
+                        <p className="text-sm font-medium text-gray-900 dark:text-white">
                           {shift.timezone || 'N/A'}
                         </p>
                       </div>
                       {shift.description && (
                         <div className="md:col-span-2 lg:col-span-4">
-                          <p className="text-xs text-gray-500 mb-1">Description</p>
-                          <p className="text-sm text-gray-700">
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Description</p>
+                          <p className="text-sm text-gray-700 dark:text-gray-300">
                             {shift.description}
                           </p>
                         </div>
                       )}
                     </div>
                   ) : (
-                    <p className="text-sm text-gray-500">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
                       Shift details not available
                     </p>
                   )}
@@ -723,14 +705,14 @@ export default function AttendancePage() {
               )}
 
               {/* View Mode Toggle */}
-              <div className="flex items-center gap-4 rounded-lg border border-gray-200 bg-white px-4 py-3">
-                <span className="text-sm font-medium text-gray-700">View:</span>
+              <div className="flex items-center gap-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">View:</span>
                 <button
                   onClick={() => setViewMode('list')}
                   className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                     viewMode === 'list'
                       ? 'bg-primary text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                   }`}
                 >
                   List View
@@ -740,7 +722,7 @@ export default function AttendancePage() {
                   className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                     viewMode === 'calendar'
                       ? 'bg-primary text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                   }`}
                 >
                   Calendar View
@@ -749,68 +731,68 @@ export default function AttendancePage() {
 
               {/* List View */}
               {viewMode === 'list' && (
-                <div className="overflow-hidden rounded-lg border border-gray-200">
-                  <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
-                    <h3 className="text-sm font-semibold text-gray-900">Attendance Records</h3>
+                <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
+                  <div className="bg-gray-50 dark:bg-gray-700 px-4 py-3 border-b border-gray-200 dark:border-gray-600">
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Attendance Records</h3>
                   </div>
                   <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200 text-left text-sm">
-                      <thead className="bg-gray-50">
+                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700 text-left text-sm">
+                      <thead className="bg-gray-50 dark:bg-gray-700">
                         <tr>
-                          <th className="px-4 py-2 font-medium text-gray-700">Name</th>
-                          <th className="px-4 py-2 font-medium text-gray-700">Email</th>
-                          <th className="px-4 py-2 font-medium text-gray-700">Date</th>
-                          <th className="px-4 py-2 font-medium text-gray-700">Day</th>
-                          <th className="px-4 py-2 font-medium text-gray-700">Punch In</th>
-                          <th className="px-4 py-2 font-medium text-gray-700">Punch Out</th>
-                          <th className="px-4 py-2 font-medium text-gray-700">Hours Worked</th>
-                          <th className="px-4 py-2 font-medium text-gray-700">Arrival Status</th>
-                          <th className="px-4 py-2 font-medium text-gray-700">Notes</th>
+                          <th className="px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Name</th>
+                          <th className="px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Email</th>
+                          <th className="px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Date</th>
+                          <th className="px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Day</th>
+                          <th className="px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Punch In</th>
+                          <th className="px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Punch Out</th>
+                          <th className="px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Hours Worked</th>
+                          <th className="px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Arrival Status</th>
+                          <th className="px-4 py-2 font-medium text-gray-700 dark:text-gray-300">Notes</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-200 bg-white">
+                      <tbody className="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-800">
                         {attendance.length === 0 ? (
                           <tr>
-                            <td colSpan={9} className="px-4 py-6 text-center text-sm text-gray-500">
+                            <td colSpan={9} className="px-4 py-6 text-center text-sm text-gray-500 dark:text-gray-400">
                               No attendance records found
                             </td>
                           </tr>
                         ) : (
                           attendance.map((record) => (
-                            <tr key={record.id} className="hover:bg-gray-50">
-                              <td className="px-4 py-2 text-gray-700">
-                                {record.candidate?.fullName || candidateData?.fullName || 'N/A'}
+                            <tr key={record.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                              <td className="px-4 py-2 text-gray-700 dark:text-gray-300">
+                                {record.candidate?.fullName || candidate?.fullName || 'N/A'}
                               </td>
-                              <td className="px-4 py-2 text-gray-700">
-                                {record.candidateEmail || candidateData?.email || 'N/A'}
+                              <td className="px-4 py-2 text-gray-700 dark:text-gray-300">
+                                {record.candidateEmail || candidate?.email || 'N/A'}
                               </td>
-                              <td className="px-4 py-2 text-gray-700">
+                              <td className="px-4 py-2 text-gray-700 dark:text-gray-300">
                                 {formatDate(record.date)}
                               </td>
-                              <td className="px-4 py-2 text-gray-700">
+                              <td className="px-4 py-2 text-gray-700 dark:text-gray-300">
                                 {record.day || 'N/A'}
                               </td>
-                              <td className="px-4 py-2 text-gray-700">
+                              <td className="px-4 py-2 text-gray-700 dark:text-gray-300">
                                 {formatTime(record.punchIn)}
                               </td>
-                              <td className="px-4 py-2 text-gray-700">
+                              <td className="px-4 py-2 text-gray-700 dark:text-gray-300">
                                 {formatTime(record.punchOut)}
                               </td>
-                              <td className="px-4 py-2 text-gray-700">
+                              <td className="px-4 py-2 text-gray-700 dark:text-gray-300">
                                 {formatDuration(record.duration)}
                               </td>
-                              <td className="px-4 py-2 text-gray-700">
+                              <td className="px-4 py-2 text-gray-700 dark:text-gray-300">
                                 <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
                                   getArrivalStatus(record) === 'On time'
-                                    ? 'bg-green-100 text-green-800'
+                                    ? 'bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-400'
                                     : getArrivalStatus(record) === 'Late'
-                                      ? 'bg-red-100 text-red-800'
-                                      : 'bg-gray-100 text-gray-800'
+                                      ? 'bg-red-100 dark:bg-red-900/20 text-red-800 dark:text-red-400'
+                                      : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300'
                                 }`}>
                                   {getArrivalStatus(record)}
                                 </span>
                               </td>
-                              <td className="px-4 py-2 text-gray-700">
+                              <td className="px-4 py-2 text-gray-700 dark:text-gray-300">
                                 <span className="block max-w-md truncate" title={record.notes || 'N/A'}>
                                   {record.notes || 'N/A'}
                                 </span>
@@ -828,22 +810,22 @@ export default function AttendancePage() {
               {viewMode === 'calendar' && (
               <div>
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-4">
-                  <h4 className="text-md font-semibold text-gray-900">
+                  <h4 className="text-md font-semibold text-gray-900 dark:text-white">
                     Calendar View - {new Date(attendanceYear, attendanceMonth).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
                   </h4>
-
+                  
                   {/* Year/Month Selectors and Advanced Filter */}
                   <div className="flex flex-wrap items-center gap-3">
                     {/* Year Dropdown */}
                     <div className="flex items-center gap-2">
-                      <label className="text-sm text-gray-600">Year:</label>
+                      <label className="text-sm text-gray-600 dark:text-gray-400">Year:</label>
                       <select
                         value={attendanceYear}
                         onChange={(e) => {
                           setAttendanceYear(parseInt(e.target.value));
                           setShowAdvancedFilter(false);
                         }}
-                        className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
+                        className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-bodydark dark:text-white"
                       >
                         {(() => {
                           const joiningDate = getEffectiveJoiningDate();
@@ -863,17 +845,17 @@ export default function AttendancePage() {
                         })()}
                       </select>
                     </div>
-
+                    
                     {/* Month Dropdown */}
                     <div className="flex items-center gap-2">
-                      <label className="text-sm text-gray-600">Month:</label>
+                      <label className="text-sm text-gray-600 dark:text-gray-400">Month:</label>
                       <select
                         value={attendanceMonth}
                         onChange={(e) => {
                           setAttendanceMonth(parseInt(e.target.value));
                           setShowAdvancedFilter(false);
                         }}
-                        className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent"
+                        className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-bodydark dark:text-white"
                       >
                         {[
                           'January', 'February', 'March', 'April', 'May', 'June',
@@ -885,7 +867,7 @@ export default function AttendancePage() {
                         ))}
                       </select>
                     </div>
-
+                    
                     {/* Advanced Filter Toggle */}
                     <button
                       onClick={() => {
@@ -895,71 +877,76 @@ export default function AttendancePage() {
                           setEndDate('');
                         }
                       }}
-                      className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                      className="px-3 py-1.5 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                     >
                       {showAdvancedFilter ? 'Hide' : 'Advanced'} Filter
                     </button>
                   </div>
                 </div>
-
+                
                 {/* Advanced Filter Section */}
                 {showAdvancedFilter && (
-                  <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
                     <div className="flex flex-col sm:flex-row gap-4 items-end">
                       <div className="flex-1">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           Start Date
                         </label>
                         <input
                           type="date"
                           value={startDate}
                           onChange={(e) => setStartDate(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-bodydark dark:text-white"
                         />
                       </div>
                       <div className="flex-1">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                           End Date
                         </label>
                         <input
                           type="date"
                           value={endDate}
                           onChange={(e) => setEndDate(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-bodydark dark:text-white"
                         />
                       </div>
-              </div>
-          </div>
+                      <button
+                        onClick={handleApplyAdvancedFilter}
+                        className="px-4 py-2 bg-primary text-white rounded-lg hover:opacity-90 transition-colors"
+                      >
+                        Apply Filter
+                      </button>
+                    </div>
+                  </div>
                 )}
-
-                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                
+                <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
                   {/* Month Navigation */}
-                  <div className="flex items-center justify-between bg-gray-50 px-4 py-3 border-b border-gray-200">
+                  <div className="flex items-center justify-between bg-gray-50 dark:bg-gray-700 px-4 py-3 border-b border-gray-200 dark:border-gray-600">
                     <button
                       onClick={() => {
                         let newMonth = attendanceMonth - 1;
                         let newYear = attendanceYear;
-
+                        
                         if (newMonth < 0) {
                           newMonth = 11;
                           newYear = attendanceYear - 1;
                         }
-
-                        // Check if new date is before joining date
+                        
                         const joiningDate = getEffectiveJoiningDate();
                         if (joiningDate) {
                           const joiningYear = joiningDate.getUTCFullYear();
                           const joiningMonth = joiningDate.getUTCMonth();
                           if (newYear < joiningYear || (newYear === joiningYear && newMonth < joiningMonth)) {
-                            return; // Don't navigate before joining date
+                            return;
                           }
                         }
-
+                        
                         setAttendanceMonth(newMonth);
                         setAttendanceYear(newYear);
                         setShowAdvancedFilter(false);
                       }}
-                      className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-gray-200 transition-colors text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-gray-700 dark:text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
                       title="Previous Month"
                       disabled={(() => {
                         const joiningDate = getEffectiveJoiningDate();
@@ -977,36 +964,35 @@ export default function AttendancePage() {
                     >
                       <i className="ri-arrow-left-s-line text-xl"></i>
                     </button>
-
-                    <h5 className="text-lg font-semibold text-gray-900">
+                    
+                    <h5 className="text-lg font-semibold text-gray-900 dark:text-white">
                       {new Date(attendanceYear, attendanceMonth).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
                     </h5>
-
+                    
                     <button
                       onClick={() => {
                         let newMonth = attendanceMonth + 1;
                         let newYear = attendanceYear;
-
+                        
                         if (newMonth > 11) {
                           newMonth = 0;
                           newYear = attendanceYear + 1;
                         }
-
-                        // Check if new date is after resign date
+                        
                         const resignDate = getResignDate();
                         if (resignDate) {
                           const resignYear = resignDate.getUTCFullYear();
                           const resignMonth = resignDate.getUTCMonth();
                           if (newYear > resignYear || (newYear === resignYear && newMonth > resignMonth)) {
-                            return; // Don't navigate after resign date
+                            return;
                           }
                         }
-
+                        
                         setAttendanceMonth(newMonth);
                         setAttendanceYear(newYear);
                         setShowAdvancedFilter(false);
                       }}
-                      className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-gray-200 transition-colors text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-gray-700 dark:text-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
                       title="Next Month"
                       disabled={(() => {
                         const resignDate = getResignDate();
@@ -1025,17 +1011,17 @@ export default function AttendancePage() {
                       <i className="ri-arrow-right-s-line text-xl"></i>
                     </button>
                   </div>
-
+                  
                   {/* Calendar Header */}
-                  <div className="grid grid-cols-7 bg-gray-50">
+                  <div className="grid grid-cols-7 bg-gray-50 dark:bg-gray-700">
                     {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-                      <div key={day} className="p-2 text-center text-sm font-medium text-gray-700">
+                      <div key={day} className="p-2 text-center text-sm font-medium text-gray-700 dark:text-gray-300">
                         {day}
                       </div>
                     ))}
                   </div>
                   {/* Calendar Grid */}
-                  <div className="grid grid-cols-7 bg-white">
+                  <div className="grid grid-cols-7 bg-white dark:bg-gray-800">
                     {getCalendarData().map((item, index) => {
                       const hasAttendance = item.attendance && (item.attendance.punchIn || item.attendance.punchOut);
                       const isPresent = item.attendance && item.attendance.punchIn && item.attendance.punchOut;
@@ -1049,28 +1035,28 @@ export default function AttendancePage() {
                       const isHoliday = !!item.holiday;
                       const isLeave = !!item.leave;
                       const leaveType = item.leave?.leaveType || null;
-
+                      
                       return (
                         <div
                           key={index}
-                          className={`min-h-[80px] p-2 border border-gray-200 ${
+                          className={`min-h-[80px] p-2 border border-gray-200 dark:border-gray-700 ${
                             item.day === 0 
-                              ? 'bg-gray-50' 
+                              ? 'bg-gray-50 dark:bg-gray-900' 
                               : isLeave
                                   ? leaveType === 'sick' 
-                                      ? 'bg-purple-50'
-                                      : 'bg-orange-50'
+                                      ? 'bg-purple-50 dark:bg-purple-900/20'
+                                      : 'bg-orange-50 dark:bg-orange-900/20'
                                   : isPresent 
-                                      ? 'bg-green-50' 
+                                      ? 'bg-green-50 dark:bg-green-900/20' 
                                       : hasAttendance && !isPresent
-                                          ? 'bg-yellow-50'
+                                          ? 'bg-yellow-50 dark:bg-yellow-900/20'
                                           : isHoliday
-                                              ? 'bg-emerald-50'
+                                              ? 'bg-emerald-50 dark:bg-emerald-900/20'
                                               : isWeekOff
-                                                  ? 'bg-blue-50'
+                                                  ? 'bg-blue-50 dark:bg-blue-900/20'
                                                   : isPastDate
-                                                      ? 'bg-red-50'
-                                                      : 'bg-white'
+                                                      ? 'bg-red-50 dark:bg-red-900/20'
+                                                      : 'bg-white dark:bg-gray-800'
                           }`}
                         >
                           {item.day > 0 && (
@@ -1080,63 +1066,63 @@ export default function AttendancePage() {
                                   ? 'text-gray-400' 
                                   : isLeave
                                       ? leaveType === 'sick'
-                                          ? 'text-purple-700'
-                                          : 'text-orange-700'
+                                          ? 'text-purple-700 dark:text-purple-400'
+                                          : 'text-orange-700 dark:text-orange-400'
                                       : isPresent 
-                                          ? 'text-green-700' 
+                                          ? 'text-green-700 dark:text-green-400' 
                                           : hasAttendance && !isPresent
-                                              ? 'text-yellow-700'
+                                              ? 'text-yellow-700 dark:text-yellow-400'
                                               : isWeekOff
-                                                  ? 'text-blue-700'
+                                                  ? 'text-blue-700 dark:text-blue-400'
                                                   : isHoliday
-                                                      ? 'text-emerald-700'
+                                                      ? 'text-emerald-700 dark:text-emerald-400'
                                                       : isPastDate
-                                                          ? 'text-red-700'
-                                                          : 'text-gray-600'
+                                                          ? 'text-red-700 dark:text-red-400'
+                                                          : 'text-gray-600 dark:text-gray-400'
                               }`}>
                                 {item.day}
                               </span>
                               {isLeave && (
                                 <span className={`text-xs font-semibold mt-1 ${
                                   leaveType === 'sick'
-                                      ? 'text-purple-600'
-                                      : 'text-orange-600'
+                                      ? 'text-purple-600 dark:text-purple-400'
+                                      : 'text-orange-600 dark:text-orange-400'
                                 }`}>
                                   {leaveType === 'sick' ? 'Sick Leave' : 'Casual Leave'}
                                 </span>
                               )}
                               {isPresent && !isLeave && (
                                 <>
-                                  <span className="text-xs font-semibold text-green-600 mt-1">
+                                  <span className="text-xs font-semibold text-green-600 dark:text-green-400 mt-1">
                                     Present
                                   </span>
-                                  <span className="text-xs text-green-600">
+                                  <span className="text-xs text-green-600 dark:text-green-400">
                                     {hours.toFixed(1)}h
                                   </span>
                                 </>
                               )}
                               {hasAttendance && !isPresent && !isLeave && (
-                                <span className="text-xs text-yellow-600 mt-1">
+                                <span className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
                                   Incomplete
                                 </span>
                               )}
                               {isHoliday && !isLeave && (
-                                <span className="text-xs font-semibold text-emerald-600 mt-1">
+                                <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-1">
                                   {item.holiday?.title ? `${item.holiday.title} (Holiday)` : 'Holiday'}
                                 </span>
                               )}
                               {isWeekOff && !hasAttendance && !isHoliday && !isLeave && (
-                                <span className="text-xs font-semibold text-blue-600 mt-1">
+                                <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 mt-1">
                                   Week-Off
                                 </span>
                               )}
                               {!hasAttendance && !isWeekOff && !isHoliday && !isLeave && isPastDate && (
-                                <span className="text-xs text-red-500 mt-1">
+                                <span className="text-xs text-red-500 dark:text-red-400 mt-1">
                                   Absent
                                 </span>
                               )}
                               {!hasAttendance && !isWeekOff && !isHoliday && !isLeave && !isPastDate && (
-                                <span className="text-xs text-gray-400 mt-1">
+                                <span className="text-xs text-gray-400 dark:text-gray-500 mt-1">
                                   -
                                 </span>
                               )}
@@ -1156,4 +1142,3 @@ export default function AttendancePage() {
     </>
   );
 }
-

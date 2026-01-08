@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { fetchAllCandidates, updateWeekOffCalendar, getCandidateWeekOff } from '@/shared/lib/candidates';
 import Pageheader from '@/shared/layout-components/page-header/pageheader';
 import Seo from '@/shared/layout-components/seo/seo';
 import Swal from 'sweetalert2';
 import dynamic from 'next/dynamic';
+import * as XLSX from 'xlsx';
 
 const Select = dynamic(() => import("react-select"), { ssr: false });
 
@@ -36,6 +37,7 @@ const WeekOffPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [candidateWeekOffs, setCandidateWeekOffs] = useState<Record<string, WeekOffData>>({});
   const [hasUserSelectedDays, setHasUserSelectedDays] = useState(false);
+  const excelFileInputRef = useRef<HTMLInputElement>(null);
 
   const daysOfWeek = [
     'Sunday',
@@ -266,6 +268,281 @@ const WeekOffPage = () => {
     }
   }, [candidateWeekOffs, selectedCandidates, getCommonWeekOffDays, hasUserSelectedDays]);
 
+  // Download Excel template
+  const downloadExcelTemplate = () => {
+    const templateData = [
+      {
+        'Candidate Email': 'john.doe@example.com',
+        'Week-Off Days (comma-separated)': 'Saturday, Sunday',
+        'Notes': 'Weekend off'
+      },
+      {
+        'Candidate Email': 'jane.smith@example.com',
+        'Week-Off Days (comma-separated)': 'Sunday',
+        'Notes': 'Sunday only'
+      },
+      {
+        'Candidate Email': 'candidate@example.com',
+        'Week-Off Days (comma-separated)': 'Friday, Saturday',
+        'Notes': 'Weekend off'
+      }
+    ];
+
+    const ws = XLSX.utils.json_to_sheet(templateData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Week-Off');
+
+    // Set column widths
+    const colWidths = [
+      { wch: 30 }, // Candidate Email
+      { wch: 40 }, // Week-Off Days
+      { wch: 25 }  // Notes
+    ];
+    ws['!cols'] = colWidths;
+
+    // Generate Excel file
+    XLSX.writeFile(wb, 'week_off_import_template.xlsx');
+  };
+
+  // Handle Excel file import
+  const handleExcelImport = async (file: File) => {
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: 'array' });
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+      if (!jsonData || jsonData.length === 0) {
+        await Swal.fire({
+          icon: 'error',
+          title: 'Invalid File',
+          text: 'The Excel file is empty or invalid.',
+          confirmButtonText: 'OK'
+        });
+        return;
+      }
+
+      const importResults: Array<{
+        candidateId: string;
+        candidateEmail: string;
+        candidateName: string;
+        weekOff: string[];
+      }> = [];
+
+      const errors: string[] = [];
+      const warnings: string[] = [];
+
+      // Create a map of email to candidate for quick lookup
+      const emailToCandidate = new Map<string, any>();
+      candidates.forEach((candidateOption: any) => {
+        const candidate = candidateOption.candidate;
+        if (candidate?.email) {
+          emailToCandidate.set(candidate.email.toLowerCase(), {
+            id: candidateOption.value,
+            candidate: candidate
+          });
+        }
+      });
+
+      jsonData.forEach((row: any, index: number) => {
+        const rowNum = index + 2; // +2 because Excel rows start at 1 and we have header
+
+        // Get values from various possible column names (case-insensitive matching)
+        const email = row['Candidate Email'] || row['candidate email'] || row['Email'] || row['email'] || row['CandidateEmail'] || row['candidateEmail'];
+        const weekOffDays = row['Week-Off Days (comma-separated)'] || row['Week-Off Days'] || row['week-off days'] || row['WeekOff Days'] || row['weekOffDays'] || row['Week-Off'] || row['week-off'] || row['WeekOff'] || row['weekOff'] || row['Days'] || row['days'];
+
+        // Validate required fields
+        if (!email || !email.toString().trim()) {
+          errors.push(`Row ${rowNum}: Candidate Email is required`);
+          return;
+        }
+
+        if (!weekOffDays || !weekOffDays.toString().trim()) {
+          errors.push(`Row ${rowNum}: Week-Off Days is required`);
+          return;
+        }
+
+        // Find candidate by email
+        const normalizedEmail = email.toString().trim().toLowerCase();
+        const candidateMatch = emailToCandidate.get(normalizedEmail);
+
+        if (!candidateMatch) {
+          errors.push(`Row ${rowNum}: Candidate with email "${email}" not found`);
+          return;
+        }
+
+        // Parse week-off days
+        const daysString = weekOffDays.toString().trim();
+        const parsedDays = daysString
+          .split(',')
+          .map((day: string) => day.trim())
+          .filter((day: string) => day.length > 0);
+
+        if (parsedDays.length === 0) {
+          errors.push(`Row ${rowNum}: No valid week-off days found`);
+          return;
+        }
+
+        // Validate day names
+        const validDays: string[] = [];
+        const invalidDays: string[] = [];
+
+        parsedDays.forEach((day: string) => {
+          // Case-insensitive matching
+          const normalizedDay = day.charAt(0).toUpperCase() + day.slice(1).toLowerCase();
+          if (daysOfWeek.includes(normalizedDay)) {
+            validDays.push(normalizedDay);
+          } else {
+            invalidDays.push(day);
+          }
+        });
+
+        if (invalidDays.length > 0) {
+          warnings.push(`Row ${rowNum}: Invalid day names "${invalidDays.join(', ')}" will be ignored. Valid days: ${daysOfWeek.join(', ')}`);
+        }
+
+        if (validDays.length === 0) {
+          errors.push(`Row ${rowNum}: No valid week-off days found. Valid days: ${daysOfWeek.join(', ')}`);
+          return;
+        }
+
+        // Remove duplicates
+        const uniqueDays = Array.from(new Set(validDays));
+
+        importResults.push({
+          candidateId: candidateMatch.id,
+          candidateEmail: candidateMatch.candidate.email || email.toString().trim(),
+          candidateName: candidateMatch.candidate.fullName || 'Unknown',
+          weekOff: uniqueDays
+        });
+      });
+
+      if (errors.length > 0) {
+        await Swal.fire({
+          icon: 'error',
+          title: 'Import Errors',
+          html: `Found ${errors.length} error(s):<br><br>${errors.slice(0, 10).join('<br>')}${errors.length > 10 ? '<br>... and more' : ''}`,
+          confirmButtonText: 'OK'
+        });
+        return;
+      }
+
+      if (importResults.length === 0) {
+        await Swal.fire({
+          icon: 'error',
+          title: 'No Valid Data',
+          text: 'No valid week-off data could be imported from the file.',
+          confirmButtonText: 'OK'
+        });
+        return;
+      }
+
+      // Show warnings if any
+      if (warnings.length > 0) {
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Import Warnings',
+          html: `Found ${warnings.length} warning(s):<br><br>${warnings.slice(0, 10).join('<br>')}${warnings.length > 10 ? '<br>... and more' : ''}`,
+          confirmButtonText: 'Continue'
+        });
+      }
+
+      // Group by week-off days to batch update candidates with same week-off
+      const weekOffGroups = new Map<string, string[]>();
+      importResults.forEach((result) => {
+        const key = result.weekOff.sort().join(',');
+        if (!weekOffGroups.has(key)) {
+          weekOffGroups.set(key, []);
+        }
+        weekOffGroups.get(key)!.push(result.candidateId);
+      });
+
+      // Update week-offs in batches
+      setUpdating(true);
+      setError(null);
+
+      try {
+        const updatePromises = Array.from(weekOffGroups.entries()).map(([daysKey, candidateIds]) => {
+          const weekOffDays = daysKey.split(',');
+          return updateWeekOffCalendar(candidateIds, weekOffDays);
+        });
+
+        await Promise.all(updatePromises);
+
+        await Swal.fire({
+          icon: 'success',
+          title: 'Import Successful',
+          text: `Successfully imported week-off data for ${importResults.length} candidate(s).`,
+          confirmButtonText: 'OK'
+        });
+
+        // Refresh candidates and week-off data
+        await fetchCandidates();
+        if (selectedCandidates.length > 0) {
+          await fetchCandidateWeekOffs();
+        }
+      } catch (err: any) {
+        const errorMessage = err?.response?.data?.message || err?.message || 'Failed to update week-off calendar';
+        setError(errorMessage);
+        
+        await Swal.fire({
+          icon: 'error',
+          title: 'Update Failed',
+          text: errorMessage,
+          confirmButtonText: 'OK'
+        });
+      } finally {
+        setUpdating(false);
+      }
+
+      // Reset file input
+      if (excelFileInputRef.current) {
+        excelFileInputRef.current.value = '';
+      }
+    } catch (error: any) {
+      console.error('Excel import error:', error);
+      await Swal.fire({
+        icon: 'error',
+        title: 'Import Failed',
+        text: error?.message || 'Failed to import Excel file. Please check the file format.',
+        confirmButtonText: 'OK'
+      });
+      
+      // Reset file input
+      if (excelFileInputRef.current) {
+        excelFileInputRef.current.value = '';
+      }
+    }
+  };
+
+  // Handle file input change
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const allowedTypes = [
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+        'application/vnd.ms-excel', // .xls
+        'text/csv' // .csv
+      ];
+      
+      const allowedExtensions = ['.xlsx', '.xls', '.csv'];
+      const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase();
+      
+      if (!allowedTypes.includes(file.type) && !allowedExtensions.includes(fileExtension)) {
+        Swal.fire({
+          icon: 'error',
+          title: 'Invalid File Type',
+          text: 'Please upload a valid Excel file (.xlsx, .xls) or CSV file.',
+          confirmButtonText: 'OK'
+        });
+        return;
+      }
+      
+      handleExcelImport(file);
+    }
+  };
+
   if (!isAdmin) {
     return (
       <>
@@ -292,13 +569,57 @@ const WeekOffPage = () => {
       <Pageheader currentpage="Week-Off Calendar" activepage="Master" mainpage="Week-Off Calendar" />
       <div className="space-y-6 mt-3">
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-6">Manage Week-Off Calendar</h2>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
+            <h2 className="text-xl font-semibold text-gray-900">Manage Week-Off Calendar</h2>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={downloadExcelTemplate}
+                className="inline-flex items-center justify-center px-3 py-2 text-sm font-medium text-green-700 bg-green-50 border border-green-300 rounded-lg hover:bg-green-100 transition-colors"
+                title="Download Excel template"
+              >
+                <i className="ri-download-line me-1.5"></i>
+                Download Template
+              </button>
+              <label className="inline-flex items-center justify-center px-3 py-2 text-sm font-medium text-green-700 bg-green-50 border border-green-300 rounded-lg hover:bg-green-100 transition-colors cursor-pointer">
+                <i className="ri-upload-2-line me-1.5"></i>
+                Import Excel
+                <input
+                  ref={excelFileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  onChange={handleFileInputChange}
+                  className="hidden"
+                />
+              </label>
+            </div>
+          </div>
 
           {error && (
             <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               {error}
             </div>
           )}
+
+          {/* Excel Import Info Section */}
+          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-start gap-3">
+              <i className="ri-file-excel-2-line text-2xl text-blue-600 mt-0.5"></i>
+              <div className="flex-1">
+                <h3 className="text-sm font-semibold text-blue-900 mb-2">Import Week-Offs from Excel</h3>
+                <p className="text-sm text-blue-800 mb-3">
+                  You can import week-off data for multiple candidates at once using an Excel file. Download the template, fill in candidate emails and their week-off days, and upload it.
+                </p>
+                <div className="text-xs text-blue-700">
+                  <p className="font-medium mb-1">Excel Template Columns:</p>
+                  <ul className="list-disc list-inside space-y-0.5">
+                    <li><strong>Candidate Email</strong> (required) - Email address of the candidate</li>
+                    <li><strong>Week-Off Days (comma-separated)</strong> (required) - Days like "Saturday, Sunday" or "Sunday" (valid: Sunday, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday)</li>
+                    <li><strong>Notes</strong> (optional) - Any additional notes</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
 
           {/* Candidate Selection */}
           <div className="mb-6">

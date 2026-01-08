@@ -2,18 +2,31 @@ import api from './api';
 import { Shifts_API } from './constants';
 
 /**
- * Create a new shift
- * @param shiftData - Shift data with name, timezone, startTime, endTime, and optional fields
+ * Create a new shift or multiple shifts (bulk creation)
+ * @param shiftData - Single shift object or array of shift objects (1-100 shifts)
  * @returns Promise with created shift data
+ * 
+ * Supports both:
+ * - Single shift creation: Pass a single shift object (backward compatible)
+ * - Bulk creation: Pass an array of 1-100 shift objects
  */
-export const createShift = async (shiftData: {
-  name: string;
-  description?: string;
-  timezone: string; // IANA timezone identifier
-  startTime: string; // HH:mm format (24-hour)
-  endTime: string; // HH:mm format (24-hour)
-  isActive?: boolean;
-}): Promise<any> => {
+export const createShift = async (
+  shiftData: {
+    name: string;
+    description?: string;
+    timezone: string; // IANA timezone identifier
+    startTime: string; // HH:mm format (24-hour)
+    endTime: string; // HH:mm format (24-hour)
+    isActive?: boolean;
+  } | Array<{
+    name: string;
+    description?: string;
+    timezone: string;
+    startTime: string;
+    endTime: string;
+    isActive?: boolean;
+  }>
+): Promise<any> => {
   const response = await api.post(Shifts_API, shiftData);
   return response.data;
 };
