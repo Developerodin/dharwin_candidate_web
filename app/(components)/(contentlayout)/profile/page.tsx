@@ -1096,7 +1096,7 @@ const profile = () => {
                                         </span>
                                         {profileData?.phoneNumber}
                                     </p>
-                                    <p className="mb-0">
+                                    <p className="mb-2">
                                         <span className="avatar avatar-sm avatar-rounded me-2 bg-light text-[#8c9097] dark:text-white/50">
                                             <i className="ri-map-pin-line align-middle text-[.875rem] text-[#8c9097] dark:text-white/50"></i>
                                         </span>
@@ -1104,6 +1104,21 @@ const profile = () => {
                                             `${profileData.address.streetAddress || ''} ${profileData.address.city || ''} ${profileData.address.state || ''} ${profileData.address.country || ''} ${profileData.address.zipCode || ''}`.trim() || 'Address not provided'
                                         ) : (
                                             'Address not provided'
+                                        )}
+                                    </p>
+                                    <p className="mb-0">
+                                        <span className="avatar avatar-sm avatar-rounded me-2 bg-light text-[#8c9097] dark:text-white/50">
+                                            <i className="ri-calendar-line align-middle text-[.875rem] text-[#8c9097] dark:text-white/50"></i>
+                                        </span>
+                                        <span className="font-medium">Joining Date: </span>
+                                        {profileData?.joiningDate ? (
+                                            new Date(profileData.joiningDate).toLocaleDateString('en-US', { 
+                                                year: 'numeric', 
+                                                month: 'long', 
+                                                day: 'numeric' 
+                                            })
+                                        ) : (
+                                            'Not provided'
                                         )}
                                     </p>
                                 </div>

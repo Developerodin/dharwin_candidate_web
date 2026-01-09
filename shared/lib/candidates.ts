@@ -1,5 +1,5 @@
 import api from './api';
-import { Attendance_API, Candidate_SalarySlips_API, Candidates_API, Documents_API, Export_Candidates_API, Fetch_Candidate_Documents_API, Forgot_Password_API, Join_Meeting_API, Logs_API, Meeting_API, Onboard_Candidate_API, Register_User_API, Share_Candidate_API, Transcription_API, Transcription_Download_API, Transcription_Start_API, Transcription_Status_API, Users_API, Verify_Document_API } from './constants';
+import { Attendance_API, Backdated_Attendance_Requests_API, Candidate_SalarySlips_API, Candidates_API, Documents_API, Export_Candidates_API, Fetch_Candidate_Documents_API, Forgot_Password_API, Join_Meeting_API, Leave_Requests_API, Logs_API, Meeting_API, Onboard_Candidate_API, Register_User_API, Share_Candidate_API, Transcription_API, Transcription_Download_API, Transcription_Start_API, Transcription_Status_API, Users_API, Verify_Document_API } from './constants';
 
 // Fetch all leads with optional query parameters
 export const fetchAllCandidates = async (params?: {
@@ -612,5 +612,281 @@ export const updateWeekOffCalendar = async (candidateIds: string[], weekOff: str
  */
 export const getCandidateWeekOff = async (candidateId: string): Promise<any> => {
   const response = await api.get(`${Candidates_API}/${candidateId}/week-off`);
+  return response.data;
+};
+
+// ==================== Leave Request API Functions ====================
+
+/**
+ * Create a leave request for a candidate
+ * @param candidateId - MongoDB ObjectId of the candidate
+ * @param leaveRequestData - Leave request data (dates, leaveType, notes)
+ * @returns Promise with created leave request data
+ */
+export const createLeaveRequest = async (
+  candidateId: string,
+  leaveRequestData: {
+    dates: string[]; // Array of ISO 8601 date strings
+    leaveType: 'casual' | 'sick' | 'unpaid';
+    notes?: string; // Optional notes (max 1000 characters)
+  }
+): Promise<any> => {
+  const response = await api.post(`${Leave_Requests_API}/candidate/${candidateId}`, leaveRequestData);
+  return response.data;
+};
+
+/**
+ * Get leave requests for a specific candidate
+ * @param candidateId - MongoDB ObjectId of the candidate
+ * @param params - Optional query parameters (status, sortBy, limit, page)
+ * @returns Promise with leave requests data
+ */
+export const getLeaveRequestsByCandidate = async (
+  candidateId: string,
+  params?: {
+    status?: 'pending' | 'approved' | 'rejected' | 'cancelled';
+    sortBy?: string;
+    limit?: number;
+    page?: number;
+  }
+): Promise<any> => {
+  const queryParams = new URLSearchParams();
+  if (params?.status) queryParams.append('status', params.status);
+  if (params?.sortBy) queryParams.append('sortBy', params.sortBy);
+  if (params?.limit) queryParams.append('limit', params.limit.toString());
+  if (params?.page) queryParams.append('page', params.page.toString());
+  
+  const queryString = queryParams.toString();
+  const url = `${Leave_Requests_API}/candidate/${candidateId}${queryString ? `?${queryString}` : ''}`;
+  const response = await api.get(url);
+  return response.data;
+};
+
+/**
+ * Get all leave requests (candidates see only their own, admins see all)
+ * @param params - Optional query parameters (candidate, status, leaveType, sortBy, limit, page)
+ * @returns Promise with leave requests data
+ */
+export const getAllLeaveRequests = async (params?: {
+  candidate?: string; // Filter by candidate ID (admin only)
+  status?: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  leaveType?: 'casual' | 'sick' | 'unpaid';
+  sortBy?: string;
+  limit?: number;
+  page?: number;
+}): Promise<any> => {
+  const queryParams = new URLSearchParams();
+  if (params?.candidate) queryParams.append('candidate', params.candidate);
+  if (params?.status) queryParams.append('status', params.status);
+  if (params?.leaveType) queryParams.append('leaveType', params.leaveType);
+  if (params?.sortBy) queryParams.append('sortBy', params.sortBy);
+  if (params?.limit) queryParams.append('limit', params.limit.toString());
+  if (params?.page) queryParams.append('page', params.page.toString());
+  
+  const queryString = queryParams.toString();
+  const url = `${Leave_Requests_API}${queryString ? `?${queryString}` : ''}`;
+  const response = await api.get(url);
+  return response.data;
+};
+
+/**
+ * Get a specific leave request by ID
+ * @param requestId - MongoDB ObjectId of the leave request
+ * @returns Promise with leave request data
+ */
+export const getLeaveRequestById = async (requestId: string): Promise<any> => {
+  const response = await api.get(`${Leave_Requests_API}/${requestId}`);
+  return response.data;
+};
+
+/**
+ * Approve a leave request (admin only)
+ * @param requestId - MongoDB ObjectId of the leave request
+ * @param adminComment - Optional admin comment (max 1000 characters)
+ * @returns Promise with approved leave request and leave assignment data
+ */
+export const approveLeaveRequest = async (
+  requestId: string,
+  adminComment?: string
+): Promise<any> => {
+  const response = await api.patch(`${Leave_Requests_API}/${requestId}/approve`, {
+    adminComment
+  });
+  return response.data;
+};
+
+/**
+ * Reject a leave request (admin only)
+ * @param requestId - MongoDB ObjectId of the leave request
+ * @param adminComment - Optional admin comment explaining rejection (max 1000 characters)
+ * @returns Promise with rejected leave request data
+ */
+export const rejectLeaveRequest = async (
+  requestId: string,
+  adminComment?: string
+): Promise<any> => {
+  const response = await api.patch(`${Leave_Requests_API}/${requestId}/reject`, {
+    adminComment
+  });
+  return response.data;
+};
+
+/**
+ * Cancel a leave request (candidate can cancel own pending requests, admin can cancel any pending)
+ * @param requestId - MongoDB ObjectId of the leave request
+ * @returns Promise with cancelled leave request data
+ */
+export const cancelLeaveRequest = async (requestId: string): Promise<any> => {
+  const response = await api.post(`${Leave_Requests_API}/${requestId}/cancel`, {});
+  return response.data;
+};
+
+// ==================== Backdated Attendance Request API Functions ====================
+
+/**
+ * Create a backdated attendance request for a candidate
+ * @param candidateId - MongoDB ObjectId of the candidate
+ * @param requestData - Backdated attendance request data (date, punchIn, punchOut, timezone, notes)
+ * @returns Promise with created backdated attendance request data
+ */
+export const createBackdatedAttendanceRequest = async (
+  candidateId: string,
+  requestData: {
+    attendanceEntries: Array<{
+      date: string; // ISO 8601 date string (must be in the past)
+      punchIn: string; // ISO 8601 date string
+      punchOut?: string | null; // ISO 8601 date string (optional)
+      timezone?: string; // IANA timezone (e.g., 'Asia/Kolkata', 'UTC')
+    }>;
+    notes?: string; // Optional notes for the entire request (max 1000 characters)
+  }
+): Promise<any> => {
+  const response = await api.post(`${Backdated_Attendance_Requests_API}/candidate/${candidateId}`, requestData);
+  return response.data;
+};
+
+/**
+ * Get backdated attendance requests for a specific candidate
+ * @param candidateId - MongoDB ObjectId of the candidate
+ * @param params - Optional query parameters (status, sortBy, limit, page)
+ * @returns Promise with backdated attendance requests data
+ */
+export const getBackdatedAttendanceRequestsByCandidate = async (
+  candidateId: string,
+  params?: {
+    status?: 'pending' | 'approved' | 'rejected' | 'cancelled';
+    sortBy?: string;
+    limit?: number;
+    page?: number;
+  }
+): Promise<any> => {
+  const queryParams = new URLSearchParams();
+  if (params?.status) queryParams.append('status', params.status);
+  if (params?.sortBy) queryParams.append('sortBy', params.sortBy);
+  if (params?.limit) queryParams.append('limit', params.limit.toString());
+  if (params?.page) queryParams.append('page', params.page.toString());
+  
+  const queryString = queryParams.toString();
+  const url = `${Backdated_Attendance_Requests_API}/candidate/${candidateId}${queryString ? `?${queryString}` : ''}`;
+  const response = await api.get(url);
+  return response.data;
+};
+
+/**
+ * Get all backdated attendance requests (candidates see only their own, admins see all)
+ * @param params - Optional query parameters (candidate, status, sortBy, limit, page)
+ * @returns Promise with backdated attendance requests data
+ */
+export const getAllBackdatedAttendanceRequests = async (params?: {
+  candidate?: string; // Filter by candidate ID (admin only)
+  status?: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  sortBy?: string;
+  limit?: number;
+  page?: number;
+}): Promise<any> => {
+  const queryParams = new URLSearchParams();
+  if (params?.candidate) queryParams.append('candidate', params.candidate);
+  if (params?.status) queryParams.append('status', params.status);
+  if (params?.sortBy) queryParams.append('sortBy', params.sortBy);
+  if (params?.limit) queryParams.append('limit', params.limit.toString());
+  if (params?.page) queryParams.append('page', params.page.toString());
+  
+  const queryString = queryParams.toString();
+  const url = `${Backdated_Attendance_Requests_API}${queryString ? `?${queryString}` : ''}`;
+  const response = await api.get(url);
+  return response.data;
+};
+
+/**
+ * Get a specific backdated attendance request by ID
+ * @param requestId - MongoDB ObjectId of the backdated attendance request
+ * @returns Promise with backdated attendance request data
+ */
+export const getBackdatedAttendanceRequestById = async (requestId: string): Promise<any> => {
+  const response = await api.get(`${Backdated_Attendance_Requests_API}/${requestId}`);
+  return response.data;
+};
+
+/**
+ * Update a backdated attendance request (admin only)
+ * @param requestId - MongoDB ObjectId of the backdated attendance request
+ * @param updates - Partial request data to update (date, punchIn, punchOut, timezone, notes)
+ * @returns Promise with updated backdated attendance request data
+ */
+export const updateBackdatedAttendanceRequest = async (
+  requestId: string,
+  updates: {
+    attendanceEntries?: Array<{
+      date: string; // ISO 8601 date string (must be in the past)
+      punchIn: string; // ISO 8601 date string
+      punchOut?: string | null; // ISO 8601 date string (optional)
+      timezone?: string; // IANA timezone (e.g., 'Asia/Kolkata', 'UTC')
+    }>;
+    notes?: string; // Optional notes for the entire request (max 1000 characters)
+  }
+): Promise<any> => {
+  const response = await api.patch(`${Backdated_Attendance_Requests_API}/${requestId}`, updates);
+  return response.data;
+};
+
+/**
+ * Approve a backdated attendance request (admin only)
+ * @param requestId - MongoDB ObjectId of the backdated attendance request
+ * @param adminComment - Optional admin comment (max 1000 characters)
+ * @returns Promise with approved request and attendance data
+ */
+export const approveBackdatedAttendanceRequest = async (
+  requestId: string,
+  adminComment?: string
+): Promise<any> => {
+  const response = await api.patch(`${Backdated_Attendance_Requests_API}/${requestId}/approve`, {
+    adminComment
+  });
+  return response.data;
+};
+
+/**
+ * Reject a backdated attendance request (admin only)
+ * @param requestId - MongoDB ObjectId of the backdated attendance request
+ * @param adminComment - Optional admin comment explaining rejection (max 1000 characters)
+ * @returns Promise with rejected backdated attendance request data
+ */
+export const rejectBackdatedAttendanceRequest = async (
+  requestId: string,
+  adminComment?: string
+): Promise<any> => {
+  const response = await api.patch(`${Backdated_Attendance_Requests_API}/${requestId}/reject`, {
+    adminComment
+  });
+  return response.data;
+};
+
+/**
+ * Cancel a backdated attendance request (candidate can cancel own pending requests, admin can cancel any pending)
+ * @param requestId - MongoDB ObjectId of the backdated attendance request
+ * @returns Promise with cancelled backdated attendance request data
+ */
+export const cancelBackdatedAttendanceRequest = async (requestId: string): Promise<any> => {
+  const response = await api.post(`${Backdated_Attendance_Requests_API}/${requestId}/cancel`, {});
   return response.data;
 };

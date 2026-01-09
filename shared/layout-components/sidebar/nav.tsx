@@ -16,6 +16,7 @@ const JobIcon = <i className="bx bx-briefcase side-menu__icon"></i>;
 const ATSIcon = <i className="bx bx-group side-menu__icon"></i>;
 const MasterIcon = <i className="bx bx-cog side-menu__icon"></i>;
 const SupportTicketsIcon = <i className="bx bx-support side-menu__icon"></i>;
+const LeaveIcon = <i className="bx bx-calendar-check side-menu__icon"></i>;
 
 // Helper function to normalize paths (remove trailing slashes)
 const normalizePath = (path: string): string => {
@@ -187,6 +188,8 @@ export const useMenuItems = () => {
           "/master/attendance/manage-shift",
           "/master/attendance/assign-shift",
           "/master/attendance/assign-leave",
+          "/master/attendance/leave-requests",
+          "/master/attendance/backdated-attendance-requests",
         ];
         const isMasterAttendanceSectionActive = masterAttendanceRoutes.some(
           (route) => isRouteMatch(route, pathname ?? "")
@@ -429,6 +432,22 @@ export const useMenuItems = () => {
                         selected: isRouteMatch("/master/attendance/assign-leave", pathname ?? ""),
                         dirchange: false,
                       },
+                      {
+                        path: "/master/attendance/leave-requests",
+                        title: "Leave Requests",
+                        type: "link",
+                        active: true,
+                        selected: isRouteMatch("/master/attendance/leave-requests", pathname ?? ""),
+                        dirchange: false,
+                      },
+                      {
+                        path: "/master/attendance/backdated-attendance-requests",
+                        title: "Backdated Attendance",
+                        type: "link",
+                        active: true,
+                        selected: isRouteMatch("/master/attendance/backdated-attendance-requests", pathname ?? ""),
+                        dirchange: false,
+                      },
                     ],
                   },
                 ],
@@ -584,6 +603,24 @@ export const useMenuItems = () => {
           type: "link",
           active: true,
           selected: isRouteMatch("/attendance", pathname ?? ""),
+          dirchange: false,
+        },
+        {
+          path: "/backdated-attendance",
+          title: "Backdated Attendance",
+          icon: AttendanceIcon,
+          type: "link",
+          active: true,
+          selected: isRouteMatch("/backdated-attendance", pathname ?? ""),
+          dirchange: false,
+        },
+        {
+          path: "/leaves",
+          title: "Leaves",
+          icon: LeaveIcon,
+          type: "link",
+          active: true,
+          selected: isRouteMatch("/leaves", pathname ?? ""),
           dirchange: false,
         },
         {

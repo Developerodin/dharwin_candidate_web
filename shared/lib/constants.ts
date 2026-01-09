@@ -96,3 +96,9 @@ export const Holidays_API = `${BASE_API_URL}/holidays`;
 
 // Shifts API
 export const Shifts_API = `${BASE_API_URL}/shifts`;
+
+// Leave Requests API
+export const Leave_Requests_API = `${BASE_API_URL}/leave-requests`;
+
+// Backdated Attendance Requests API
+export const Backdated_Attendance_Requests_API = `${BASE_API_URL}/backdated-attendance-requests`;
