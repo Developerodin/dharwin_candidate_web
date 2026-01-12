@@ -1410,10 +1410,18 @@ const Candidates = () => {
                     return;
                 }
 
-                // Validate punch-out is after punch-in
+                // Validate punch-out is after punch-in (handle night shifts)
                 const punchInDateTime = new Date(`${formattedDate}T${formattedPunchIn}`);
-                const punchOutDateTime = new Date(`${formattedDate}T${formattedPunchOut}`);
+                let punchOutDateTime = new Date(`${formattedDate}T${formattedPunchOut}`);
                 
+                // If punch-out time is earlier than punch-in time, it's likely a night shift (next day)
+                if (punchOutDateTime <= punchInDateTime) {
+                    // Add one day to punch-out for night shift scenario
+                    punchOutDateTime = new Date(punchOutDateTime);
+                    punchOutDateTime.setDate(punchOutDateTime.getDate() + 1);
+                }
+                
+                // Final validation: punch-out must be after punch-in
                 if (punchOutDateTime <= punchInDateTime) {
                     errors.push(`Row ${rowNum}: Punch-out time must be after punch-in time`);
                     return;
@@ -1545,7 +1553,7 @@ const Candidates = () => {
                     
                     // Combine date and punch-out time (ensure proper format)
                     const punchOutTimeStr = entry.punchOutTime.includes(':') ? entry.punchOutTime : `${entry.punchOutTime}:00`;
-                    const punchOutDateTime = new Date(`${entry.date}T${punchOutTimeStr}`);
+                    let punchOutDateTime = new Date(`${entry.date}T${punchOutTimeStr}`);
                     
                     // Validate date
                     if (isNaN(punchOutDateTime.getTime())) {
@@ -1553,13 +1561,20 @@ const Candidates = () => {
                         continue;
                     }
                     
-                    const punchOutISO = punchOutDateTime.toISOString();
+                    // If punch-out time is earlier than punch-in time, it's likely a night shift (next day)
+                    if (punchOutDateTime <= punchInDateTime) {
+                        // Add one day to punch-out for night shift scenario
+                        punchOutDateTime = new Date(punchOutDateTime);
+                        punchOutDateTime.setDate(punchOutDateTime.getDate() + 1);
+                    }
                     
-                    // Validate that punch-out is after punch-in
+                    // Final validation: punch-out must be after punch-in
                     if (punchOutDateTime <= punchInDateTime) {
                         results.push({ date: entry.date, success: false, error: 'Punch-out time must be after punch-in time' });
                         continue;
                     }
+                    
+                    const punchOutISO = punchOutDateTime.toISOString();
                     
                     // Punch in
                     await punchInAttendance(candidateId, {

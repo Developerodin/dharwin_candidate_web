@@ -287,8 +287,16 @@ const BackdatedAttendancePage = () => {
 
       if (entry.punchOutTime) {
         const punchInDateTime = new Date(`${entry.date}T${entry.punchInTime}`);
-        const punchOutDateTime = new Date(`${entry.date}T${entry.punchOutTime}`);
+        let punchOutDateTime = new Date(`${entry.date}T${entry.punchOutTime}`);
         
+        // If punch-out time is earlier than punch-in time, it's likely a night shift (next day)
+        if (punchOutDateTime <= punchInDateTime) {
+          // Add one day to punch-out for night shift scenario
+          punchOutDateTime = new Date(punchOutDateTime);
+          punchOutDateTime.setDate(punchOutDateTime.getDate() + 1);
+        }
+        
+        // Final validation: punch-out must be after punch-in
         if (punchOutDateTime <= punchInDateTime) {
           errors.push(`Entry ${index + 1}: Punch out time must be after punch in time`);
         }
@@ -352,7 +360,21 @@ const BackdatedAttendancePage = () => {
       const attendanceEntriesAPI = validEntries.map(entry => {
         const dateISO = new Date(entry.date).toISOString();
         const punchInISO = new Date(`${entry.date}T${entry.punchInTime}`).toISOString();
-        const punchOutISO = entry.punchOutTime ? new Date(`${entry.date}T${entry.punchOutTime}`).toISOString() : null;
+        
+        // Handle night shifts where punch-out is on the next day
+        let punchOutISO = null;
+        if (entry.punchOutTime) {
+          let punchOutDateTime = new Date(`${entry.date}T${entry.punchOutTime}`);
+          const punchInDateTime = new Date(`${entry.date}T${entry.punchInTime}`);
+          
+          // If punch-out time is earlier than punch-in time, it's a night shift (next day)
+          if (punchOutDateTime <= punchInDateTime) {
+            punchOutDateTime = new Date(punchOutDateTime);
+            punchOutDateTime.setDate(punchOutDateTime.getDate() + 1);
+          }
+          
+          punchOutISO = punchOutDateTime.toISOString();
+        }
         
         return {
           date: dateISO,
@@ -652,9 +674,18 @@ const BackdatedAttendancePage = () => {
               return;
             }
 
-            // Validate punch out is after punch in
+            // Validate punch out is after punch in (handle night shifts)
             const punchInDate = new Date(`${formattedDate}T${formattedPunchIn}`);
-            const punchOutDate = new Date(`${formattedDate}T${formattedPunchOut}`);
+            let punchOutDate = new Date(`${formattedDate}T${formattedPunchOut}`);
+            
+            // If punch-out time is earlier than punch-in time, it's likely a night shift (next day)
+            if (punchOutDate <= punchInDate) {
+              // Add one day to punch-out for night shift scenario
+              punchOutDate = new Date(punchOutDate);
+              punchOutDate.setDate(punchOutDate.getDate() + 1);
+            }
+            
+            // Final validation: punch-out must be after punch-in
             if (punchOutDate <= punchInDate) {
               errors.push(`Row ${rowNum}: Punch out time must be after punch in time`);
               return;

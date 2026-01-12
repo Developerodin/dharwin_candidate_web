@@ -17,6 +17,9 @@ export const Onboard_Candidate_API = `${AUTH_URL}/send-candidate-invitation`;
 export const Forgot_Password_API = `${AUTH_URL}/forgot-password`;
 export const REGISTER_SUPERVISOR_API = `${AUTH_URL}/register-supervisor`;
 export const REGISTER_RECRUITER_API = `${AUTH_URL}/register-recruiter`;
+export const REGISTER_USER_API = `${AUTH_URL}/register-user`;
+export const UPDATE_REGISTERED_USER_API = (userId: string) => `${AUTH_URL}/register-user/${userId}`;
+export const DELETE_REGISTERED_USER_API = (userId: string) => `${AUTH_URL}/register-user/${userId}`;
 
 // Jobs API
 export const Jobs_API = `${BASE_API_URL}/jobs`;

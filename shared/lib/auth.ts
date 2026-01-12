@@ -1,6 +1,6 @@
 "use client";
 import api from './api';
-import { Login_User_API, Logout_User_API, Register_User_API, REGISTER_SUPERVISOR_API, REGISTER_RECRUITER_API } from './constants';
+import { Login_User_API, Logout_User_API, Register_User_API, REGISTER_SUPERVISOR_API, REGISTER_RECRUITER_API, REGISTER_USER_API } from './constants';
 
 // Login user
 export const loginUser = async (credentials: { email: string; password: string }) => {
@@ -55,5 +55,11 @@ export const registerSupervisor = async (supervisorData: any) => {
 // Register recruiter
 export const registerRecruiter = async (recruiterData: any) => {
   const response = await api.post(REGISTER_RECRUITER_API, recruiterData);
+  return response.data;
+};
+
+// Register admin user (with navigation permissions)
+export const registerAdminUser = async (userData: any) => {
+  const response = await api.post(REGISTER_USER_API, userData);
   return response.data;
 };
