@@ -542,7 +542,7 @@ const Kanbanboard = () => {
                                         <Link 
                                             className="ti-dropdown-item !py-2 !px-[0.9375rem] !text-[0.8125rem] !font-medium !inline-flex" 
                                             href={`/tasks/task-details?id=${task.id || task._id}`} 
-                                            scroll={false}
+                                            scroll={false} title='View Task'
                                         >
                                             <i className="ri-eye-line me-1 align-middle"></i>View
                                         </Link>
@@ -550,7 +550,7 @@ const Kanbanboard = () => {
                                     <li>
                                         <Link 
                                             className="ti-dropdown-item !py-2 !px-[0.9375rem] !text-[0.8125rem] !font-medium !inline-flex" 
-                                            href="#!" 
+                                            href="#!" title='Delete Task'
                                             scroll={false}
                                             onClick={(e) => {
                                                 e.preventDefault();
@@ -564,7 +564,7 @@ const Kanbanboard = () => {
                                         <Link 
                                             className="ti-dropdown-item !py-2 !px-[0.9375rem] !text-[0.8125rem] !font-medium !inline-flex" 
                                             href={`/tasks/task-details?id=${task.id || task._id}`} 
-                                            scroll={false}
+                                            scroll={false} title='Edit Task'
                                         >
                                             <i className="ri-edit-line me-1 align-middle"></i>Edit
                                         </Link>

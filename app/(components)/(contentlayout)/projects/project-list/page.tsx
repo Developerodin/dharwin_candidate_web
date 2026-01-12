@@ -447,7 +447,7 @@ const Projectlist = () => {
                                             >
                                                 <li>
                                                     <Link 
-                                                        className="ti-dropdown-item" 
+                                                        className="ti-dropdown-item" title="View Project" 
                                                         href={`/projects/project-overview?id=${project.id}`}
                                                     >
                                                         <i className="ri-eye-line align-middle me-1 inline-flex"></i>View
@@ -455,7 +455,7 @@ const Projectlist = () => {
                                                 </li>
                                                 <li>
                                                     <Link 
-                                                        className="ti-dropdown-item" 
+                                                        className="ti-dropdown-item" title="Edit Project" 
                                                         href={`/projects/create-project?id=${project.id}`}
                                                     >
                                                         <i className="ri-edit-line align-middle me-1 inline-flex"></i>Edit
@@ -463,7 +463,7 @@ const Projectlist = () => {
                                                 </li>
                                                 <li>
                                                     <Link 
-                                                        className="ti-dropdown-item" 
+                                                        className="ti-dropdown-item" title="Delete Project" 
                                                         href="#!"
                                                         scroll={false}
                                                         onClick={(e) => {

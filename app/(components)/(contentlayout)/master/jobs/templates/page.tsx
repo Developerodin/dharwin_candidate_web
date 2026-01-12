@@ -520,7 +520,7 @@ const JobTemplates = () => {
                                     type="button"
                                     onClick={() => handleViewTemplate(template.id)}
                                     className="ti-btn ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-info/10 text-info hover:bg-info hover:text-white hover:border-info"
-                                    aria-label="View"
+                                    aria-label="View" title="View Template"
                                   >
                                     <i className="ri-eye-line"></i>
                                   </button>
@@ -528,7 +528,7 @@ const JobTemplates = () => {
                                     type="button"
                                     onClick={() => handleEditTemplate(template.id)}
                                     className="ti-btn ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-primary/10 text-primary hover:bg-primary hover:text-white hover:border-primary"
-                                    aria-label="Edit"
+                                    aria-label="Edit" title="Edit Template"
                                   >
                                     <i className="ri-edit-line"></i>
                                   </button>
@@ -536,7 +536,7 @@ const JobTemplates = () => {
                                     type="button"
                                     onClick={() => handleDeleteTemplate(template.id, template.title)}
                                     className="ti-btn ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-danger/10 text-danger hover:bg-danger hover:text-white hover:border-danger disabled:opacity-60 disabled:cursor-not-allowed"
-                                    aria-label="Delete"
+                                    aria-label="Delete" title="Delete Template"
                                     disabled={deletingTemplateId === template.id}
                                   >
                                     {deletingTemplateId === template.id ? (

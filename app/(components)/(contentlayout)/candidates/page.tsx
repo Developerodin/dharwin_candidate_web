@@ -2420,7 +2420,7 @@ const Candidates = () => {
                                                                 <i className="ri-user-line"></i>
                                                             </button> */}
                                                             {userRole === 'admin' && (
-                                                                <Link aria-label="anchor" href={`/candidates/edit?id=${encodeURIComponent(String(can?.id ?? can?._id))}`} scroll={false} className="ti-btn ti-btn-icon ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-info/10 text-info hover:bg-info hover:text-white hover:border-info">
+                                                                <Link aria-label="anchor" href={`/candidates/edit?id=${encodeURIComponent(String(can?.id ?? can?._id))}`} scroll={false} className="ti-btn ti-btn-icon ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-info/10 text-info hover:bg-info hover:text-white hover:border-info" title="Edit Candidate">
                                                                     <i className="ri-pencil-line"></i>
                                                                 </Link>
                                                             )}
@@ -2554,7 +2554,7 @@ const Candidates = () => {
                                                                             }
                                                                         });
                                                                     }}
-                                                                    className="ti-btn ti-btn-icon ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-danger/10 text-danger hover:bg-danger hover:text-white hover:border-danger"
+                                                                    className="ti-btn ti-btn-icon ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-danger/10 text-danger hover:bg-danger hover:text-white hover:border-danger" title="Delete Candidate"
                                                                 >
                                                                     <i className="ri-delete-bin-line"></i>
                                                                 </button>
