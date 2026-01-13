@@ -9,6 +9,7 @@ import { fetchAllCandidates } from '@/shared/lib/candidates';
 import { getAllTasks } from '@/shared/lib/tasks';
 import { useRouter } from 'next/navigation';
 import { IStaticMethods } from "preline/preline";
+import { canAccessButton, ButtonPermissions, getNavigationFromStorage } from '@/shared/lib/navigation-permissions';
 
 declare global {
   interface Window {
@@ -66,6 +67,7 @@ const Projectlist = () => {
     const [status, setStatus] = useState<string | null>(null);
     const [priority, setPriority] = useState<string | null>(null);
     const [sortBy, setSortBy] = useState<string>('createdAt:desc');
+    const [navigation, setNavigation] = useState<any>(null);
     
     // Status options
     const statusOptions = [
@@ -190,6 +192,14 @@ const Projectlist = () => {
         fetchTaskCounts();
     }, []);
 
+    // Get navigation from localStorage
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const nav = getNavigationFromStorage();
+            setNavigation(nav);
+        }
+    }, []);
+
     // Fetch on mount and when filters/pagination change
     useEffect(() => {
         fetchProjects();
@@ -308,9 +318,11 @@ const Projectlist = () => {
                         <div className="box-body p-4">
                             <div className="flex items-center justify-between flex-wrap gap-4">
                                 <div className="flex flex-wrap gap-1 newproject">
-                                    <Link href="/projects/create-project/" className="ti-btn ti-btn-primary-full me-2 !mb-0">
-                                        <i className="ri-add-line me-1 font-semibold align-middle"></i>New Project
-                                    </Link>
+                                    {canAccessButton(ButtonPermissions.PROJECTS_NEW, navigation) && (
+                                        <Link href="/projects/create-project/" className="ti-btn ti-btn-primary-full me-2 !mb-0">
+                                            <i className="ri-add-line me-1 font-semibold align-middle"></i>New Project
+                                        </Link>
+                                    )}
                                     <Select 
                                         name="sortBy" 
                                         options={sortOptions} 
@@ -445,35 +457,41 @@ const Projectlist = () => {
                                                 className="hs-dropdown-menu ti-dropdown-menu hidden"
                                                 aria-labelledby={`dropdown-${project.id}`}
                                             >
-                                                <li>
-                                                    <Link 
-                                                        className="ti-dropdown-item" title="View Project" 
-                                                        href={`/projects/project-overview?id=${project.id}`}
-                                                    >
-                                                        <i className="ri-eye-line align-middle me-1 inline-flex"></i>View
-                                                    </Link>
-                                                </li>
-                                                <li>
-                                                    <Link 
-                                                        className="ti-dropdown-item" title="Edit Project" 
-                                                        href={`/projects/create-project?id=${project.id}`}
-                                                    >
-                                                        <i className="ri-edit-line align-middle me-1 inline-flex"></i>Edit
-                                                    </Link>
-                                                </li>
-                                                <li>
-                                                    <Link 
-                                                        className="ti-dropdown-item" title="Delete Project" 
-                                                        href="#!"
-                                                        scroll={false}
-                                                        onClick={(e) => {
-                                                            e.preventDefault();
-                                                            handleDelete(project.id);
-                                                        }}
-                                                    >
-                                                        <i className="ri-delete-bin-line me-1 align-middle inline-flex"></i>Delete
-                                                    </Link>
-                                                </li>
+                                                {canAccessButton(ButtonPermissions.PROJECTS_VIEW, navigation) && (
+                                                    <li>
+                                                        <Link 
+                                                            className="ti-dropdown-item" title="View Project" 
+                                                            href={`/projects/project-overview?id=${project.id}`}
+                                                        >
+                                                            <i className="ri-eye-line align-middle me-1 inline-flex"></i>View
+                                                        </Link>
+                                                    </li>
+                                                )}
+                                                {canAccessButton(ButtonPermissions.PROJECTS_EDIT, navigation) && (
+                                                    <li>
+                                                        <Link 
+                                                            className="ti-dropdown-item" title="Edit Project" 
+                                                            href={`/projects/create-project?id=${project.id}`}
+                                                        >
+                                                            <i className="ri-edit-line align-middle me-1 inline-flex"></i>Edit
+                                                        </Link>
+                                                    </li>
+                                                )}
+                                                {canAccessButton(ButtonPermissions.PROJECTS_DELETE, navigation) && (
+                                                    <li>
+                                                        <Link 
+                                                            className="ti-dropdown-item" title="Delete Project" 
+                                                            href="#!"
+                                                            scroll={false}
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                handleDelete(project.id);
+                                                            }}
+                                                        >
+                                                            <i className="ri-delete-bin-line me-1 align-middle inline-flex"></i>Delete
+                                                        </Link>
+                                                    </li>
+                                                )}
                                             </ul>
                                         </div>
                                     </div>

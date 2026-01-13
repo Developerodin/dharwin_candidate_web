@@ -10,6 +10,7 @@ import { fetchAllCandidates, deleteCandidate, addCandidateSalarySlips, uploadDoc
 import { getAllHolidays } from '@/shared/lib/holidays';
 import { getShiftById } from '@/shared/lib/shifts';
 import * as XLSX from 'xlsx';
+import { canAccessButton, ButtonPermissions, getNavigationFromStorage } from '@/shared/lib/navigation-permissions';
 
 const Candidates = () => {
     const [canData, setCanData] = useState<any[]>([]);
@@ -53,6 +54,7 @@ const Candidates = () => {
     const [salarySlipYear, setSalarySlipYear] = useState<string>('');
     const [uploadingSalarySlip, setUploadingSalarySlip] = useState<boolean>(false);
     const [userRole, setUserRole] = useState<string>('user');
+    const [navigation, setNavigation] = useState<any>(null);
     const [showDocumentsModal, setShowDocumentsModal] = useState<boolean>(false);
     const [selectedCandidateForDocuments, setSelectedCandidateForDocuments] = useState<any>(null);
     const [candidateDocuments, setCandidateDocuments] = useState<any[]>([]);
@@ -315,7 +317,7 @@ const Candidates = () => {
         setActiveTab('personal');
     };
 
-    // Get user role from localStorage
+    // Get user role and navigation from localStorage
     useEffect(() => {
         if (typeof window !== 'undefined') {
             const userData = localStorage.getItem('user');
@@ -323,9 +325,11 @@ const Candidates = () => {
                 try {
                     const parsedUser = JSON.parse(userData);
                     setUserRole(parsedUser.role || 'user');
+                    setNavigation(parsedUser.navigation || null);
                 } catch (error) {
                     console.error('Error parsing user data:', error);
                     setUserRole('user');
+                    setNavigation(null);
                 }
             }
         }
@@ -2092,16 +2096,20 @@ const Candidates = () => {
                                 >
                                     <i className={`ri-filter-${showAdvancedFilters ? 'off' : 'line'} font-semibold align-middle`}></i> {showAdvancedFilters ? 'Hide' : 'Advanced'} Filters
                                 </button>
-                                <button 
-                                    type="button" 
-                                    onClick={exportCandidates}
-                                    className="ti-btn ti-btn-success !bg-success !text-white !py-1 !px-2 !text-[0.75rem] !m-0 !gap-0 !font-medium me-2"
-                                >
-                                    <i className="ri-download-line font-semibold align-middle"></i> Export Candidates
-                                </button>
-                                <button type="button" className="ti-btn ti-btn-primary !bg-primary !text-white !py-1 !px-2 !text-[0.75rem] !m-0 !gap-0 !font-medium" data-hs-overlay="#create-task">
-                                    <i className="ri-add-line font-semibold align-middle"></i> <Link href="/candidates/add">Add Candidate</Link>
-                                </button>
+                                {canAccessButton(ButtonPermissions.CANDIDATES_EXPORT, navigation) && (
+                                    <button 
+                                        type="button" 
+                                        onClick={exportCandidates}
+                                        className="ti-btn ti-btn-success !bg-success !text-white !py-1 !px-2 !text-[0.75rem] !m-0 !gap-0 !font-medium me-2"
+                                    >
+                                        <i className="ri-download-line font-semibold align-middle"></i> Export Candidates
+                                    </button>
+                                )}
+                                {canAccessButton(ButtonPermissions.CANDIDATES_ADD, navigation) && (
+                                    <button type="button" className="ti-btn ti-btn-primary !bg-primary !text-white !py-1 !px-2 !text-[0.75rem] !m-0 !gap-0 !font-medium" data-hs-overlay="#create-task">
+                                        <i className="ri-add-line font-semibold align-middle"></i> <Link href="/candidates/add">Add Candidate</Link>
+                                    </button>
+                                )}
                             </div>
                         </div>
                         {/* Advanced Filters Section */}
@@ -2399,16 +2407,18 @@ const Candidates = () => {
                                                     </td>
                                                     <td>
                                                         <div className="flex flex-row items-center !gap-2 text-[0.9375rem]" onClick={(e) => e.stopPropagation()}>
-                                                            <button 
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    openCandidateModal(can);
-                                                                }}
-                                                                className="ti-btn ti-btn-icon ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-success/10 text-success hover:bg-success hover:text-white hover:border-success"
-                                                                title="View Details"
-                                                            >
-                                                                <i className="ri-eye-line"></i>
-                                                            </button>
+                                                            {canAccessButton(ButtonPermissions.CANDIDATES_VIEW_DETAILS, navigation) && (
+                                                                <button 
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        openCandidateModal(can);
+                                                                    }}
+                                                                    className="ti-btn ti-btn-icon ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-success/10 text-success hover:bg-success hover:text-white hover:border-success"
+                                                                    title="View Details"
+                                                                >
+                                                                    <i className="ri-eye-line"></i>
+                                                                </button>
+                                                            )}
                                                             {/* <button 
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
@@ -2419,22 +2429,24 @@ const Candidates = () => {
                                                             >
                                                                 <i className="ri-user-line"></i>
                                                             </button> */}
-                                                            {userRole === 'admin' && (
+                                                            {userRole === 'admin' && canAccessButton(ButtonPermissions.CANDIDATES_EDIT, navigation) && (
                                                                 <Link aria-label="anchor" href={`/candidates/edit?id=${encodeURIComponent(String(can?.id ?? can?._id))}`} scroll={false} className="ti-btn ti-btn-icon ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-info/10 text-info hover:bg-info hover:text-white hover:border-info" title="Edit Candidate">
                                                                     <i className="ri-pencil-line"></i>
                                                                 </Link>
                                                             )}
-                                                            <button 
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    openDocumentsModal(can);
-                                                                }}
-                                                                className="ti-btn ti-btn-icon ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-secondary/10 text-secondary hover:bg-secondary hover:text-white hover:border-secondary"
-                                                                title="View Documents"
-                                                            >
-                                                                <i className="ri-file-list-line"></i>
-                                                            </button>
-                                                            {userRole === 'admin' && (
+                                                            {canAccessButton(ButtonPermissions.CANDIDATES_VIEW_DOCUMENTS, navigation) && (
+                                                                <button 
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        openDocumentsModal(can);
+                                                                    }}
+                                                                    className="ti-btn ti-btn-icon ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-secondary/10 text-secondary hover:bg-secondary hover:text-white hover:border-secondary"
+                                                                    title="View Documents"
+                                                                >
+                                                                    <i className="ri-file-list-line"></i>
+                                                                </button>
+                                                            )}
+                                                            {userRole === 'admin' && canAccessButton(ButtonPermissions.CANDIDATES_UPLOAD_SALARY_SLIP, navigation) && (
                                                                 <button 
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();
@@ -2446,7 +2458,7 @@ const Candidates = () => {
                                                                     <i className="ri-file-add-line"></i>
                                                                 </button>
                                                             )}
-                                                            {userRole === 'admin' && (
+                                                            {userRole === 'admin' && canAccessButton(ButtonPermissions.CANDIDATES_SHARE, navigation) && (
                                                                 <button 
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();
@@ -2458,16 +2470,18 @@ const Candidates = () => {
                                                                     <i className="ri-share-line"></i>
                                                                 </button>
                                                             )}
-                                                            <button 
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    openAttendanceModal(can);
-                                                                }}
-                                                                className="ti-btn ti-btn-icon ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-purple-500/10 text-purple-500 hover:bg-purple-500 hover:text-white hover:border-purple-500"
-                                                                title="View Attendance"
-                                                            >
-                                                                <i className="ri-calendar-line"></i>
-                                                            </button>
+                                                            {canAccessButton(ButtonPermissions.CANDIDATES_VIEW_ATTENDANCE, navigation) && (
+                                                                <button 
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        openAttendanceModal(can);
+                                                                    }}
+                                                                    className="ti-btn ti-btn-icon ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-purple-500/10 text-purple-500 hover:bg-purple-500 hover:text-white hover:border-purple-500"
+                                                                    title="View Attendance"
+                                                                >
+                                                                    <i className="ri-calendar-line"></i>
+                                                                </button>
+                                                            )}
                                                             {!can?.isEmailVerified && (
                                                                 <button 
                                                                     onClick={async (e) => {
@@ -2498,30 +2512,34 @@ const Candidates = () => {
 
                                                             {(userRole === 'admin' || userRole === 'recruiter') && (
                                                                 <>
-                                                                    <button 
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            openNotesModal(can);
-                                                                        }}
-                                                                        className="ti-btn ti-btn-icon ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500 hover:text-white hover:border-indigo-500"
-                                                                        title="Add Note"
-                                                                    >
-                                                                        <i className="ri-file-text-line"></i>
-                                                                    </button>
-                                                                    <button 
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            openFeedbackModal(can);
-                                                                        }}
-                                                                        className="ti-btn ti-btn-icon ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-amber-500/10 text-amber-500 hover:bg-amber-500 hover:text-white hover:border-amber-500"
-                                                                        title="Add Feedback"
-                                                                    >
-                                                                        <i className="ri-feedback-line"></i>
-                                                                    </button>
+                                                                    {canAccessButton(ButtonPermissions.CANDIDATES_ADD_NOTE, navigation) && (
+                                                                        <button 
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                openNotesModal(can);
+                                                                            }}
+                                                                            className="ti-btn ti-btn-icon ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-indigo-500/10 text-indigo-500 hover:bg-indigo-500 hover:text-white hover:border-indigo-500"
+                                                                            title="Add Note"
+                                                                        >
+                                                                            <i className="ri-file-text-line"></i>
+                                                                        </button>
+                                                                    )}
+                                                                    {canAccessButton(ButtonPermissions.CANDIDATES_ADD_FEEDBACK, navigation) && (
+                                                                        <button 
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                openFeedbackModal(can);
+                                                                            }}
+                                                                            className="ti-btn ti-btn-icon ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-amber-500/10 text-amber-500 hover:bg-amber-500 hover:text-white hover:border-amber-500"
+                                                                            title="Add Feedback"
+                                                                        >
+                                                                            <i className="ri-feedback-line"></i>
+                                                                        </button>
+                                                                    )}
                                                                 </>
                                                             )}
 
-                                                            {userRole === 'admin' && (
+                                                            {userRole === 'admin' && canAccessButton(ButtonPermissions.CANDIDATES_DELETE, navigation) && (
                                                                 <button type="button"
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();
@@ -3485,7 +3503,7 @@ const Candidates = () => {
                                 >
                                     Close
                                 </button>
-                                {userRole === 'admin' && (
+                                {userRole === 'admin' && canAccessButton(ButtonPermissions.CANDIDATES_EDIT, navigation) && (
                                     <Link
                                         href={`/candidates/edit?id=${encodeURIComponent(String(selectedCandidate?.id ?? selectedCandidate?._id))}`}
                                         className="ti-btn ti-btn-primary w-full sm:w-auto"

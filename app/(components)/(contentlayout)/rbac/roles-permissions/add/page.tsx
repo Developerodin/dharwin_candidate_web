@@ -1,11 +1,12 @@
 "use client";
 
-import React, { Fragment, useState } from 'react';
+import React, { Fragment, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Pageheader from '@/shared/layout-components/page-header/pageheader';
 import Seo from '@/shared/layout-components/seo/seo';
 import { registerAdminUser } from '@/shared/lib/auth';
+import { fetchSubRoles, fetchSubRoleById, SubRole } from '@/shared/lib/sub-roles';
 import Swal from 'sweetalert2';
 
 interface NavigationPermissions {
@@ -18,7 +19,7 @@ interface FormData {
   password: string;
   phoneNumber: string;
   countryCode: string;
-  subRole: string;
+  subRoleId: string;
   navigation: NavigationPermissions;
 }
 
@@ -27,12 +28,34 @@ const defaultNavigationStructure: NavigationPermissions = {
   Dashboard: false,
   ATS: {
     Candidates: {
-      Candidates: false,
+      Candidates: {
+        "Export Candidates": false,
+        "Add Candidate": false,
+        "Actions": {
+          "View Details": false,
+          "Edit Candidate": false,
+          "View Documents": false,
+          "Upload Salary Slip": false,
+          "Share Candidate": false,
+          "View Attendance": false,
+          "Add Note": false,
+          "Add Feedback": false,
+          "Delete Candidate": false
+        }
+      },
       "Share Candidate Form": false,
       "Track Attendance": false
     },
     Jobs: {
-      "Manage Jobs": false
+      "Manage Jobs": {
+        "Create Job": false,
+        "Export Excel": false,
+        "Actions": {
+          "Edit Job": false,
+          "View Job": false,
+          "Delete Job": false
+        }
+      }
     },
     Interviews: {
       "Generate Meeting Link": false,
@@ -40,14 +63,38 @@ const defaultNavigationStructure: NavigationPermissions = {
     }
   },
   "Project management": {
-    "Manage Projects": false,
-    "Manage Tasks": false
+    "Manage Projects": {
+      "New Project": false,
+      "View Project": false,
+      "Edit Project": false,
+      "Delete Project": false
+    },
+    "Manage Tasks": {
+      "New Board": false,
+      "Add Task": false,
+      "View Task": false,
+      "Edit Task": false,
+      "Delete Task": false
+    }
   },
-  "Support Tickets": false,
+  "Support Tickets": {
+    "Create Ticket": false,
+    "Actions": {
+      "View Details": false,
+      "Delete Ticket": false
+    }
+  },
   Settings: {
     Master: {
       Jobs: {
-        "Manage Jobs Templates": false
+        "Manage Jobs Templates": {
+          "Create Template": false,
+          "Actions": {
+            "View Template": false,
+            "Edit Template": false,
+            "Delete Template": false
+          }
+        }
       },
       Attendance: {
         "Manage Week Off": false,
@@ -65,6 +112,7 @@ const defaultNavigationStructure: NavigationPermissions = {
       "Recruiter Logs": false
     },
     RBAC: {
+      "Roles": false,
       "Manage Roles & Permissions": false
     }
   }
@@ -74,6 +122,9 @@ const AddAdminUser = () => {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [subRoles, setSubRoles] = useState<SubRole[]>([]);
+  const [loadingSubRoles, setLoadingSubRoles] = useState(true);
+  const [loadingNavigation, setLoadingNavigation] = useState(false);
   
   // Form state
   const [formData, setFormData] = useState<FormData>({
@@ -82,11 +133,103 @@ const AddAdminUser = () => {
     password: '',
     phoneNumber: '',
     countryCode: '+1',
-    subRole: '',
+    subRoleId: '',
     navigation: JSON.parse(JSON.stringify(defaultNavigationStructure))
   });
   
   const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({});
+
+  // Fetch available sub-roles
+  useEffect(() => {
+    const loadSubRoles = async () => {
+      try {
+        setLoadingSubRoles(true);
+        const data = await fetchSubRoles({ isActive: true, limit: 1000 });
+        const roles = Array.isArray(data) ? data : (data as any).results || [];
+        setSubRoles(roles);
+      } catch (err: any) {
+        console.error('Failed to load sub-roles:', err);
+        setSubRoles([]);
+      } finally {
+        setLoadingSubRoles(false);
+      }
+    };
+
+    loadSubRoles();
+  }, []);
+
+  // Fetch navigation structure when sub-role is selected
+  useEffect(() => {
+    const loadSubRoleNavigation = async () => {
+      if (!formData.subRoleId) {
+        // Reset to default navigation when sub-role is cleared
+        setFormData(prev => ({
+          ...prev,
+          navigation: JSON.parse(JSON.stringify(defaultNavigationStructure))
+        }));
+        return;
+      }
+
+      try {
+        setLoadingNavigation(true);
+        const subRoleData = await fetchSubRoleById(formData.subRoleId);
+        
+        // Merge sub-role navigation with default structure to ensure all fields are present
+        const mergeNavigationStructures = (
+          existing: NavigationPermissions | null | undefined,
+          defaultStructure: NavigationPermissions
+        ): NavigationPermissions => {
+          const merged: NavigationPermissions = JSON.parse(JSON.stringify(defaultStructure));
+          
+          if (!existing || typeof existing !== 'object') {
+            return merged;
+          }
+          
+          const mergeRecursive = (target: any, source: any) => {
+            for (const key in source) {
+              if (source.hasOwnProperty(key)) {
+                const sourceValue = source[key];
+                const targetValue = target[key];
+                
+                if (typeof sourceValue === 'boolean') {
+                  target[key] = sourceValue;
+                } else if (typeof sourceValue === 'object' && sourceValue !== null && !Array.isArray(sourceValue)) {
+                  if (targetValue && typeof targetValue === 'object' && targetValue !== null && !Array.isArray(targetValue)) {
+                    mergeRecursive(target[key], sourceValue);
+                  }
+                }
+              }
+            }
+          };
+          
+          mergeRecursive(merged, existing);
+          return merged;
+        };
+
+        const mergedNavigation = mergeNavigationStructures(
+          subRoleData.navigation,
+          defaultNavigationStructure
+        );
+
+        setFormData(prev => ({
+          ...prev,
+          navigation: mergedNavigation
+        }));
+      } catch (err: any) {
+        console.error('Failed to load sub-role navigation:', err);
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: 'Failed to load navigation permissions from selected sub-role',
+          confirmButtonText: 'OK'
+        });
+      } finally {
+        setLoadingNavigation(false);
+      }
+    };
+
+    loadSubRoleNavigation();
+  }, [formData.subRoleId]);
 
   // Validate form
   const validateForm = (): boolean => {
@@ -98,6 +241,10 @@ const AddAdminUser = () => {
 
     if (!formData.email.trim()) {
       errors.email = 'Email is required';
+    }
+
+    if (!formData.subRoleId) {
+      errors.subRoleId = 'Please select a sub-role';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       errors.email = 'Invalid email format';
     }
@@ -190,7 +337,7 @@ const AddAdminUser = () => {
   };
 
   // Render navigation permissions recursively
-  const renderNavigationPermissions = (obj: NavigationPermissions, path: string[] = []): JSX.Element[] => {
+  const renderNavigationPermissions = (obj: NavigationPermissions, path: string[] = [], disabled: boolean = false): JSX.Element[] => {
     const elements: JSX.Element[] = [];
     
     Object.keys(obj).forEach(key => {
@@ -206,7 +353,7 @@ const AddAdminUser = () => {
               {key}
             </div>
             <div className="ml-4 border-l-2 border-gray-200 dark:border-gray-700 pl-3">
-              {renderNavigationPermissions(value as NavigationPermissions, currentPath)}
+              {renderNavigationPermissions(value as NavigationPermissions, currentPath, disabled)}
             </div>
           </div>
         );
@@ -220,9 +367,9 @@ const AddAdminUser = () => {
               isEnabled 
                 ? 'bg-primary/5 border-primary/20 hover:bg-primary/10' 
                 : 'bg-white dark:bg-bodydark border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-bodydark'
-            }`}
+            } ${disabled ? 'opacity-75' : ''}`}
           >
-            <label className="text-xs font-medium text-gray-800 dark:text-white/90 cursor-pointer flex-1 flex items-center gap-1.5">
+            <label className={`text-xs font-medium text-gray-800 dark:text-white/90 flex-1 flex items-center gap-1.5 ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
               <i className={`ri-${isEnabled ? 'check-line' : 'close-line'} ${isEnabled ? 'text-primary' : 'text-gray-400'} text-xs`}></i>
               {key}
             </label>
@@ -237,14 +384,15 @@ const AddAdminUser = () => {
               </span>
               
               {/* Toggle Switch */}
-              <label className="relative inline-flex items-center cursor-pointer">
+              <label className={`relative inline-flex items-center ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
                 <input
                   type="checkbox"
                   checked={isEnabled}
-                  onChange={() => handleNavigationToggle(currentPath)}
+                  onChange={() => !disabled && handleNavigationToggle(currentPath)}
+                  disabled={disabled}
                   className="sr-only peer"
                 />
-                <div className="w-10 h-5 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary shadow-sm"></div>
+                <div className={`w-10 h-5 bg-gray-200 dark:bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary shadow-sm ${disabled ? 'opacity-50' : ''}`}></div>
               </label>
             </div>
           </div>
@@ -286,10 +434,12 @@ const AddAdminUser = () => {
       if (formData.countryCode.trim()) {
         payload.countryCode = formData.countryCode.trim();
       }
-      if (formData.subRole.trim()) {
-        payload.subRole = formData.subRole.trim();
-      }
-      if (Object.keys(formData.navigation).length > 0) {
+
+      // If a sub-role is selected, send subRoleId only
+      // Otherwise, send navigation for manual configuration
+      if (formData.subRoleId) {
+        payload.subRoleId = formData.subRoleId;
+      } else if (Object.keys(formData.navigation).length > 0) {
         payload.navigation = formData.navigation;
       }
 
@@ -441,25 +591,43 @@ const AddAdminUser = () => {
                           )}
                         </div>
 
-                        {/* Sub Role */}
+                        {/* Sub Role (from existing Sub-Roles) */}
                         <div className="md:col-span-6 col-span-12">
                           <label className="form-label mb-2 flex items-center gap-1">
                             <i className="ri-user-settings-line text-[0.875rem] text-gray-500"></i>
-                            Sub Role
+                            Assign Sub-Role
                           </label>
                           <div className="input-group">
                             <span className="input-group-text bg-light border-e-0 dark:bg-bodybg dark:border-white/10">
-                              <i className="ri-user-settings-line text-gray-500"></i>
+                              <i className="ri-shield-user-line text-gray-500"></i>
                             </span>
-                            <input
-                              type="text"
-                              className="ti-form-control border-s-0 w-full"
-                              name="subRole"
-                              value={formData.subRole}
+                            <select
+                              className={`ti-form-control border-s-0 w-full ${formErrors.subRoleId ? 'border-danger' : ''}`}
+                              name="subRoleId"
+                              value={formData.subRoleId}
                               onChange={handleInputChange}
-                              placeholder="e.g., Senior Admin, HR Admin"
-                            />
+                              disabled={loadingSubRoles}
+                            >
+                              <option value="">Select</option>
+                              {subRoles.map((role) => (
+                                <option key={role.id || role._id} value={role.id || role._id}>
+                                  {role.name} {role.description ? `- ${role.description}` : ''}
+                                </option>
+                              ))}
+                            </select>
                           </div>
+                          {formErrors.subRoleId && (
+                            <small className="text-danger text-[0.75rem] mt-1 block">
+                              <i className="ri-error-warning-line me-1"></i>
+                              {formErrors.subRoleId}
+                            </small>
+                          )}
+                          {!formErrors.subRoleId && (
+                            <small className="text-muted text-[0.75rem] mt-1 block">
+                              <i className="ri-information-line me-1"></i>
+                              Please select a sub-role. This admin's permissions will be derived from that sub-role template.
+                            </small>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -525,16 +693,31 @@ const AddAdminUser = () => {
                       </div>
                     </div>
                     
-                    {/* Navigation Permissions Section */}
-                    <div className="border-t border-defaultborder dark:border-defaultborder/10 pt-6">
-                      <h6 className="text-sm font-semibold text-gray-800 dark:text-white mb-3 flex items-center gap-2">
-                        <i className="ri-menu-line text-primary"></i>
-                        Navigation Permissions
-                      </h6>
-                      <div className="border-2 border-gray-200 dark:border-gray-700 rounded-lg p-3 max-h-[500px] overflow-y-auto bg-white dark:bg-bodydark shadow-sm">
-                        {renderNavigationPermissions(formData.navigation)}
+                    {/* Navigation Permissions Section - Only show when sub-role is selected */}
+                    {formData.subRoleId && (
+                      <div className="border-t border-defaultborder dark:border-defaultborder/10 pt-6">
+                        <h6 className="text-sm font-semibold text-gray-800 dark:text-white mb-3 flex items-center gap-2">
+                          <i className="ri-menu-line text-primary"></i>
+                          Navigation Permissions
+                          <span className="ml-2 px-2 py-0.5 bg-info/10 text-info text-[10px] font-semibold rounded">
+                            From Sub-Role Template (Read-Only)
+                          </span>
+                        </h6>
+                        <p className="text-xs text-gray-500 mb-3">
+                          Navigation permissions are automatically loaded from the selected sub-role. These permissions are read-only.
+                        </p>
+                        {loadingNavigation ? (
+                          <div className="border-2 border-gray-200 dark:border-gray-700 rounded-lg p-8 text-center">
+                            <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-primary mb-2"></div>
+                            <p className="text-xs text-gray-500">Loading navigation permissions...</p>
+                          </div>
+                        ) : (
+                          <div className="border-2 border-gray-200 dark:border-gray-700 rounded-lg p-3 max-h-[500px] overflow-y-auto bg-gray-50 dark:bg-black/20 shadow-sm">
+                            {renderNavigationPermissions(formData.navigation, [], true)}
+                          </div>
+                        )}
                       </div>
-                    </div>
+                    )}
                   </div>
 
                   {/* Form Actions */}

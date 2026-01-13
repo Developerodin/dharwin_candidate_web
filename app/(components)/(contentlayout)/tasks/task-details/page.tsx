@@ -16,6 +16,7 @@ import { setHours, setMinutes } from "date-fns";
 import { FilePond, registerPlugin } from 'react-filepond';
 import FilePondPluginImageExifOrientation from 'filepond-plugin-image-exif-orientation';
 import FilePondPluginImagePreview from 'filepond-plugin-image-preview';
+import { canAccessButton, ButtonPermissions, getNavigationFromStorage } from '@/shared/lib/navigation-permissions';
 registerPlugin(FilePondPluginImagePreview, FilePondPluginImageExifOrientation);
 
 const Taskdetails = () => {
@@ -47,6 +48,7 @@ const Taskdetails = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [projectOptions, setProjectOptions] = useState<{ value: string; label: string }[]>([]);
     const [candidateOptions, setCandidateOptions] = useState<{ value: string; label: string }[]>([]);
+    const [navigation, setNavigation] = useState<any>(null);
     
     const statusOptions = [
         { value: 'New', label: 'New' },
@@ -76,6 +78,14 @@ const Taskdetails = () => {
     ];
 
     // Fetch task data
+    // Get navigation from localStorage
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const nav = getNavigationFromStorage();
+            setNavigation(nav);
+        }
+    }, []);
+
     useEffect(() => {
         const fetchTask = async () => {
             if (!taskId) {
@@ -570,22 +580,26 @@ const Taskdetails = () => {
                         <div className="box-header justify-between">
                             <div className="box-title">Task Summary</div>
                             <div className="btn-list">
-                                <button 
-                                    aria-label="button" 
-                                    type="button" 
-                                    className="ti-btn bg-success !py-1 !px-2 !font-medium text-white !text-[0.75rem] me-2"
-                                    onClick={() => setIsEditModalOpen(true)}
-                                >
-                                    <i className="ri-edit-line me-1 align-middle"></i>Edit Task
-                                </button>
-                                <button 
-                                    aria-label="button" 
-                                    type="button" 
-                                    className="ti-btn bg-danger !py-1 !px-2 !font-medium text-white !text-[0.75rem] me-0"
-                                    onClick={() => handleDeleteTask()}
-                                >
-                                    <i className="ri-delete-bin-line me-1 align-middle"></i>Delete Task
-                                </button>
+                                {canAccessButton(ButtonPermissions.TASKS_EDIT, navigation) && (
+                                    <button 
+                                        aria-label="button" 
+                                        type="button" 
+                                        className="ti-btn bg-success !py-1 !px-2 !font-medium text-white !text-[0.75rem] me-2"
+                                        onClick={() => setIsEditModalOpen(true)}
+                                    >
+                                        <i className="ri-edit-line me-1 align-middle"></i>Edit Task
+                                    </button>
+                                )}
+                                {canAccessButton(ButtonPermissions.TASKS_DELETE, navigation) && (
+                                    <button 
+                                        aria-label="button" 
+                                        type="button" 
+                                        className="ti-btn bg-danger !py-1 !px-2 !font-medium text-white !text-[0.75rem] me-0"
+                                        onClick={() => handleDeleteTask()}
+                                    >
+                                        <i className="ri-delete-bin-line me-1 align-middle"></i>Delete Task
+                                    </button>
+                                )}
                             </div>
                         </div>
                         <div className="box-body">

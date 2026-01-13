@@ -18,6 +18,7 @@ import { createTask, uploadTaskDocuments, getKanbanBoard, deleteTask } from '@/s
 import { getAllProjects } from '@/shared/lib/projects';
 import { fetchAllCandidates } from '@/shared/lib/candidates';
 import Swal from 'sweetalert2';
+import { canAccessButton, ButtonPermissions, getNavigationFromStorage } from '@/shared/lib/navigation-permissions';
 
 const Kanbanboard = () => {
 
@@ -86,6 +87,7 @@ const Kanbanboard = () => {
         Completed?: any[];
     }>({});
     const [loadingKanban, setLoadingKanban] = useState(false);
+    const [navigation, setNavigation] = useState<any>(null);
     
     const tagOptions = [
         { value: 'UI/UX', label: 'UI/UX' },
@@ -136,6 +138,14 @@ const Kanbanboard = () => {
         const reordered = updated.map((task, i) => ({ ...task, order: i + 1 }));
         setSubTasks(reordered);
     };
+
+    // Get navigation from localStorage
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const nav = getNavigationFromStorage();
+            setNavigation(nav);
+        }
+    }, []);
 
     // Fetch projects for dropdown
     useEffect(() => {
@@ -538,37 +548,43 @@ const Kanbanboard = () => {
                                     <i className="fe fe-more-vertical"></i>
                                 </button>
                                 <ul className="hs-dropdown-menu ti-dropdown-menu hidden">
-                                    <li>
-                                        <Link 
-                                            className="ti-dropdown-item !py-2 !px-[0.9375rem] !text-[0.8125rem] !font-medium !inline-flex" 
-                                            href={`/tasks/task-details?id=${task.id || task._id}`} 
-                                            scroll={false} title='View Task'
-                                        >
-                                            <i className="ri-eye-line me-1 align-middle"></i>View
-                                        </Link>
-                                    </li>
-                                    <li>
-                                        <Link 
-                                            className="ti-dropdown-item !py-2 !px-[0.9375rem] !text-[0.8125rem] !font-medium !inline-flex" 
-                                            href="#!" title='Delete Task'
-                                            scroll={false}
-                                            onClick={(e) => {
-                                                e.preventDefault();
-                                                handleDeleteTask(task);
-                                            }}
-                                        >
-                                            <i className="ri-delete-bin-line me-1 align-middle"></i>Delete
-                                        </Link>
-                                    </li>
-                                    <li>
-                                        <Link 
-                                            className="ti-dropdown-item !py-2 !px-[0.9375rem] !text-[0.8125rem] !font-medium !inline-flex" 
-                                            href={`/tasks/task-details?id=${task.id || task._id}`} 
-                                            scroll={false} title='Edit Task'
-                                        >
-                                            <i className="ri-edit-line me-1 align-middle"></i>Edit
-                                        </Link>
-                                    </li>
+                                    {canAccessButton(ButtonPermissions.TASKS_VIEW, navigation) && (
+                                        <li>
+                                            <Link 
+                                                className="ti-dropdown-item !py-2 !px-[0.9375rem] !text-[0.8125rem] !font-medium !inline-flex" 
+                                                href={`/tasks/task-details?id=${task.id || task._id}`} 
+                                                scroll={false} title='View Task'
+                                            >
+                                                <i className="ri-eye-line me-1 align-middle"></i>View
+                                            </Link>
+                                        </li>
+                                    )}
+                                    {canAccessButton(ButtonPermissions.TASKS_DELETE, navigation) && (
+                                        <li>
+                                            <Link 
+                                                className="ti-dropdown-item !py-2 !px-[0.9375rem] !text-[0.8125rem] !font-medium !inline-flex" 
+                                                href="#!" title='Delete Task'
+                                                scroll={false}
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    handleDeleteTask(task);
+                                                }}
+                                            >
+                                                <i className="ri-delete-bin-line me-1 align-middle"></i>Delete
+                                            </Link>
+                                        </li>
+                                    )}
+                                    {canAccessButton(ButtonPermissions.TASKS_EDIT, navigation) && (
+                                        <li>
+                                            <Link 
+                                                className="ti-dropdown-item !py-2 !px-[0.9375rem] !text-[0.8125rem] !font-medium !inline-flex" 
+                                                href={`/tasks/task-details?id=${task.id || task._id}`} 
+                                                scroll={false} title='Edit Task'
+                                            >
+                                                <i className="ri-edit-line me-1 align-middle"></i>Edit
+                                            </Link>
+                                        </li>
+                                    )}
                                 </ul>
                             </div>
                         </div>
@@ -626,8 +642,10 @@ const Kanbanboard = () => {
                             <div className="md:flex items-center justify-between flex-wrap gap-4">
                                 <div className="grid grid-cols-12 gap-2 md:w-[30%]">
                                     <div className="xl:col-span-5 col-span-12">
-                                        <Link href="#!" scroll={false} className="hs-dropdown-toggle !py-1 ti-btn bg-primary text-white !font-medium " data-hs-overlay="#add-board"><i className="ri-add-line !text-[1rem]"></i>New Board
-                                        </Link>
+                                        {canAccessButton(ButtonPermissions.TASKS_NEW_BOARD, navigation) && (
+                                            <Link href="#!" scroll={false} className="hs-dropdown-toggle !py-1 ti-btn bg-primary text-white !font-medium " data-hs-overlay="#add-board"><i className="ri-add-line !text-[1rem]"></i>New Board
+                                            </Link>
+                                        )}
                                     </div>
                                     <div className="xl:col-span-7 col-span-12">
                                          <Select  name="colors" options={Option1} className="w-full !rounded-md"
@@ -673,8 +691,10 @@ const Kanbanboard = () => {
                         <div className="flex justify-between items-center">
                             <span className="block font-semibold text-[.9375rem]">NEW - {kanbanData.New?.length || 0}</span>
                             <div>
-                                <Link href="#!" scroll={false} className="hs-dropdown-toggle  ti-btn !py-1 !px-2 !font-medium !text-[0.75rem] bg-white dark:bg-bodybg text-default border-0" data-hs-overlay="#add-task"><i className="ri-add-line"></i>Add Task
-                                </Link>
+                                {canAccessButton(ButtonPermissions.TASKS_ADD, navigation) && (
+                                    <Link href="#!" scroll={false} className="hs-dropdown-toggle  ti-btn !py-1 !px-2 !font-medium !text-[0.75rem] bg-white dark:bg-bodybg text-default border-0" data-hs-overlay="#add-task"><i className="ri-add-line"></i>Add Task
+                                    </Link>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -736,8 +756,10 @@ const Kanbanboard = () => {
                         <div className="flex justify-between items-center">
                             <span className="block font-semibold text-[.9375rem]">ON GOING - {kanbanData['On Going']?.length || 0}</span>
                             <div>
-                                <Link href="#!" scroll={false} className="hs-dropdown-toggle  ti-btn !py-1 !px-2 !font-medium !text-[0.75rem] bg-white dark:bg-bodybg text-default border-0" data-hs-overlay="#add-task"><i className="ri-add-line"></i>Add Task
-                                </Link>
+                                {canAccessButton(ButtonPermissions.TASKS_ADD, navigation) && (
+                                    <Link href="#!" scroll={false} className="hs-dropdown-toggle  ti-btn !py-1 !px-2 !font-medium !text-[0.75rem] bg-white dark:bg-bodybg text-default border-0" data-hs-overlay="#add-task"><i className="ri-add-line"></i>Add Task
+                                    </Link>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -766,8 +788,10 @@ const Kanbanboard = () => {
                         <div className="flex justify-between items-center">
                             <span className="block font-semibold text-[.9375rem]">IN REVIEW - {kanbanData['In Review']?.length || 0}</span>
                             <div>
-                                <Link href="#!" scroll={false} className="hs-dropdown-toggle  ti-btn !py-1 !px-2 !font-medium !text-[0.75rem] bg-white dark:bg-bodybg text-default border-0" data-hs-overlay="#add-task"><i className="ri-add-line"></i>Add Task
-                                </Link>
+                                {canAccessButton(ButtonPermissions.TASKS_ADD, navigation) && (
+                                    <Link href="#!" scroll={false} className="hs-dropdown-toggle  ti-btn !py-1 !px-2 !font-medium !text-[0.75rem] bg-white dark:bg-bodybg text-default border-0" data-hs-overlay="#add-task"><i className="ri-add-line"></i>Add Task
+                                    </Link>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -797,8 +821,10 @@ const Kanbanboard = () => {
                         <div className="flex justify-between items-center">
                             <span className="block font-semibold text-[.9375rem]">COMPLETED - {kanbanData.Completed?.length || 0}</span>
                             <div>
-                                <Link href="#!" scroll={false} className="hs-dropdown-toggle  ti-btn !py-1 !px-2 !font-medium !text-[0.75rem] bg-white dark:bg-bodybg text-default border-0" data-hs-overlay="#add-task"><i className="ri-add-line"></i>Add Task
-                                </Link>
+                                {canAccessButton(ButtonPermissions.TASKS_ADD, navigation) && (
+                                    <Link href="#!" scroll={false} className="hs-dropdown-toggle  ti-btn !py-1 !px-2 !font-medium !text-[0.75rem] bg-white dark:bg-bodybg text-default border-0" data-hs-overlay="#add-task"><i className="ri-add-line"></i>Add Task
+                                    </Link>
+                                )}
                             </div>
                         </div>
                     </div>

@@ -12,6 +12,7 @@ import * as XLSX from 'xlsx';
 import { getAllJobs, deleteJob, exportJobsToExcel, importJobsFromExcel } from '@/shared/lib/jobs';
 import api from '@/shared/lib/api';
 import { Users_API } from '@/shared/lib/constants';
+import { canAccessButton, ButtonPermissions, getNavigationFromStorage } from '@/shared/lib/navigation-permissions';
 const ReactApexChart = dynamic(() => import("react-apexcharts"), { ssr: false });
 
 const Jobs = () => {
@@ -56,6 +57,7 @@ const Jobs = () => {
     const [deletingJobId, setDeletingJobId] = useState<string | null>(null);
     const [exporting, setExporting] = useState(false);
     const [importing, setImporting] = useState(false);
+    const [navigation, setNavigation] = useState<any>(null);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
 
     // Fetch jobs
@@ -166,6 +168,14 @@ const Jobs = () => {
     useEffect(() => {
         fetchJobs();
     }, [fetchJobs]);
+
+    // Get navigation from localStorage
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const nav = getNavigationFromStorage();
+            setNavigation(nav);
+        }
+    }, []);
 
     // Handle search with debounce - reset to page 1 when search changes
     useEffect(() => {
@@ -480,22 +490,26 @@ const Jobs = () => {
                                         <option value="title:desc">Title Z-A</option>
                                     </select>
                                 </div>
-                                <button
-                                    type="button"
-                                    className="ti-btn ti-btn-primary-full !py-1 !px-3 !text-[0.75rem] !m-0 !gap-1 !font-medium"
-                                    onClick={handleCreateJobClick}
-                                >
-                                    <i className="ri-add-line"></i> Create Job
-                                </button>
-                                <button
-                                    type="button"
-                                    className="ti-btn ti-btn-secondary !py-1 !px-3 !text-[0.75rem] !m-0 !gap-1 !font-medium disabled:opacity-60 disabled:cursor-not-allowed"
-                                    onClick={handleExportJobs}
-                                    disabled={exporting}
-                                >
-                                    {exporting ? <i className="ri-loader-4-line animate-spin"></i> : <i className="ri-download-2-line"></i>}
-                                    Export Excel
-                                </button>
+                                {canAccessButton(ButtonPermissions.JOBS_CREATE, navigation) && (
+                                    <button
+                                        type="button"
+                                        className="ti-btn ti-btn-primary-full !py-1 !px-3 !text-[0.75rem] !m-0 !gap-1 !font-medium"
+                                        onClick={handleCreateJobClick}
+                                    >
+                                        <i className="ri-add-line"></i> Create Job
+                                    </button>
+                                )}
+                                {canAccessButton(ButtonPermissions.JOBS_EXPORT_EXCEL, navigation) && (
+                                    <button
+                                        type="button"
+                                        className="ti-btn ti-btn-secondary !py-1 !px-3 !text-[0.75rem] !m-0 !gap-1 !font-medium disabled:opacity-60 disabled:cursor-not-allowed"
+                                        onClick={handleExportJobs}
+                                        disabled={exporting}
+                                    >
+                                        {exporting ? <i className="ri-loader-4-line animate-spin"></i> : <i className="ri-download-2-line"></i>}
+                                        Export Excel
+                                    </button>
+                                )}
                                 {/* <button
                                     type="button"
                                     className="ti-btn ti-btn-light !py-1 !px-3 !text-[0.75rem] !m-0 !gap-1 !font-medium disabled:opacity-60 disabled:cursor-not-allowed"
@@ -737,33 +751,39 @@ const Jobs = () => {
                                                             </td>
                                                             <td>
                                                                 <div className="flex flex-row items-center !gap-2 text-[0.9375rem]">
-                                                                    <Link
-                                                                        href={`/jobs/update-jobs/${job.id || job._id}`}
-                                                                        className="ti-btn ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-primary/10 text-primary hover:bg-primary hover:text-white hover:border-primary"
-                                                                        aria-label="Edit" title="Edit Job"
-                                                                    >
-                                                                        <i className="ri-edit-line"></i>
-                                                                    </Link>
-                                                                    <Link
-                                                                        href={`/jobs/manage-jobs/${job.id || job._id}`}
-                                                                        className="ti-btn ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-info/10 text-info hover:bg-info hover:text-white hover:border-info"
-                                                                        aria-label="View" title="View Job"
-                                                                    >
-                                                                        <i className="ri-eye-line"></i>
-                                                                    </Link>
-                                                                    <button
-                                                                        type="button"
-                                                                        className="ti-btn ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-danger/10 text-danger hover:bg-danger hover:text-white hover:border-danger disabled:opacity-60 disabled:cursor-not-allowed"
-                                                                        aria-label="Delete" title="Delete Job"
-                                                                        onClick={() => handleDeleteJob(job.id || job._id)}
-                                                                        disabled={deletingJobId === (job.id || job._id)}
-                                                                    >
-                                                                        {deletingJobId === (job.id || job._id) ? (
-                                                                            <i className="ri-loader-4-line animate-spin"></i>
-                                                                        ) : (
-                                                                            <i className="ri-delete-bin-line"></i>
-                                                                        )}
-                                                                    </button>
+                                                                    {canAccessButton(ButtonPermissions.JOBS_EDIT, navigation) && (
+                                                                        <Link
+                                                                            href={`/jobs/update-jobs/${job.id || job._id}`}
+                                                                            className="ti-btn ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-primary/10 text-primary hover:bg-primary hover:text-white hover:border-primary"
+                                                                            aria-label="Edit" title="Edit Job"
+                                                                        >
+                                                                            <i className="ri-edit-line"></i>
+                                                                        </Link>
+                                                                    )}
+                                                                    {canAccessButton(ButtonPermissions.JOBS_VIEW, navigation) && (
+                                                                        <Link
+                                                                            href={`/jobs/manage-jobs/${job.id || job._id}`}
+                                                                            className="ti-btn ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-info/10 text-info hover:bg-info hover:text-white hover:border-info"
+                                                                            aria-label="View" title="View Job"
+                                                                        >
+                                                                            <i className="ri-eye-line"></i>
+                                                                        </Link>
+                                                                    )}
+                                                                    {canAccessButton(ButtonPermissions.JOBS_DELETE, navigation) && (
+                                                                        <button
+                                                                            type="button"
+                                                                            className="ti-btn ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-danger/10 text-danger hover:bg-danger hover:text-white hover:border-danger disabled:opacity-60 disabled:cursor-not-allowed"
+                                                                            aria-label="Delete" title="Delete Job"
+                                                                            onClick={() => handleDeleteJob(job.id || job._id)}
+                                                                            disabled={deletingJobId === (job.id || job._id)}
+                                                                        >
+                                                                            {deletingJobId === (job.id || job._id) ? (
+                                                                                <i className="ri-loader-4-line animate-spin"></i>
+                                                                            ) : (
+                                                                                <i className="ri-delete-bin-line"></i>
+                                                                            )}
+                                                                        </button>
+                                                                    )}
                                                                 </div>
                                                             </td>
                                                         </tr>

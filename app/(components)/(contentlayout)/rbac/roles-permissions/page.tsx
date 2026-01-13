@@ -37,7 +37,6 @@ const RolesPermissions = () => {
   // Search and pagination
   const [searchFilter, setSearchFilter] = useState<string>('name');
   const [searchValue, setSearchValue] = useState<string>('');
-  const [subRoleFilter, setSubRoleFilter] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
   const [limit] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
@@ -67,11 +66,6 @@ const RolesPermissions = () => {
       }
     }
 
-    // Sub Role filter takes precedence over search filter if both are set
-    if (subRoleFilter.trim()) {
-      params.subRole = subRoleFilter.trim();
-    }
-
     return params;
   };
 
@@ -87,45 +81,59 @@ const RolesPermissions = () => {
     setCurrentPage(1);
   };
 
-  // Get unique sub roles for filter dropdown
-  const getUniqueSubRoles = (): string[] => {
-    if (!adminUsers || adminUsers.length === 0) return [];
-    const subRoles = adminUsers
-      .map(user => user.subRole)
-      .filter((role): role is string => !!role && role.trim() !== '')
-      .filter((role, index, self) => self.indexOf(role) === index)
-      .sort();
-    return subRoles;
-  };
-
   // Fetch admin users
   const fetchUsers = useCallback(async () => {
     setUsersLoading(true);
     setError(null);
     try {
-      const params = buildFilterParams();
+      // Build params without search filter for client-side case-insensitive filtering
+      const params: any = {
+        page: currentPage,
+        limit: searchValue.trim() ? 1000 : limit, // Fetch more if searching to allow client-side filtering
+        sortBy: sortBy,
+      };
+
       const data = await fetchAllAdminUsers(params);
       
+      let users: AdminUser[] = [];
       if (data && data.results) {
-        setAdminUsers(data.results);
-        setTotalPages(data.totalPages || 1);
-        setTotalResults(data.totalResults || 0);
+        users = data.results;
       } else if (Array.isArray(data)) {
-        setAdminUsers(data);
-        setTotalPages(1);
-        setTotalResults(data.length);
-      } else {
-        setAdminUsers([]);
-        setTotalPages(1);
-        setTotalResults(0);
+        users = data;
       }
+
+      // Apply case-insensitive client-side filtering
+      if (searchValue.trim()) {
+        const searchLower = searchValue.trim().toLowerCase();
+        users = users.filter((user) => {
+          if (searchFilter === 'name') {
+            return user.name?.toLowerCase().includes(searchLower);
+          } else if (searchFilter === 'email') {
+            return user.email?.toLowerCase().includes(searchLower);
+          } else if (searchFilter === 'subRole') {
+            return user.subRole?.toLowerCase().includes(searchLower);
+          }
+          return true;
+        });
+      }
+
+      // Apply pagination to filtered results
+      const startIndex = (currentPage - 1) * limit;
+      const endIndex = startIndex + limit;
+      const paginatedUsers = users.slice(startIndex, endIndex);
+
+      setAdminUsers(paginatedUsers);
+      setTotalResults(users.length);
+      setTotalPages(Math.ceil(users.length / limit));
     } catch (err: any) {
       setError(err?.response?.data?.message || err?.message || "Failed to fetch admin users");
       setAdminUsers([]);
+      setTotalPages(1);
+      setTotalResults(0);
     } finally {
       setUsersLoading(false);
     }
-  }, [currentPage, limit, sortBy, searchValue, searchFilter, subRoleFilter]);
+  }, [currentPage, limit, sortBy, searchValue, searchFilter]);
 
   useEffect(() => {
     fetchUsers();
@@ -142,7 +150,7 @@ const RolesPermissions = () => {
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [searchValue, searchFilter, subRoleFilter]);
+  }, [searchValue, searchFilter]);
 
 
   // View user details
@@ -314,31 +322,11 @@ const RolesPermissions = () => {
                     aria-label="Search input"
                   />
                 </div>
-                {getUniqueSubRoles().length > 0 && (
-                  <div className="me-2">
-                    <select
-                      className="ti-form-control form-control-sm w-full me-2"
-                      value={subRoleFilter}
-                      onChange={(e) => {
-                        setSubRoleFilter(e.target.value);
-                        setCurrentPage(1);
-                      }}
-                    >
-                      <option value="">All Sub Roles</option>
-                      {getUniqueSubRoles().map((role) => (
-                        <option key={role} value={role}>
-                          {role}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-                {(searchValue || subRoleFilter) && (
+                {searchValue && (
                   <button 
                     type="button" 
                     onClick={() => {
                       setSearchValue('');
-                      setSubRoleFilter('');
                       setCurrentPage(1);
                     }}
                     className="ti-btn ti-btn-light !bg-light !text-defaulttextcolor !py-1 !px-3 !text-[0.75rem] !m-0 !gap-1 !font-medium me-2"
@@ -373,13 +361,12 @@ const RolesPermissions = () => {
                 <div className="text-center py-8">
                   <i className="ri-user-search-line text-4xl text-gray-400 mb-2"></i>
                   <p className="text-gray-500 font-medium mb-1">
-                    {searchValue || subRoleFilter ? 'No admin users found matching your search' : 'No admin users found'}
+                    {searchValue ? 'No admin users found matching your search' : 'No admin users found'}
                   </p>
-                  {(searchValue || subRoleFilter) && (
+                  {searchValue && (
                     <button
                       onClick={() => {
                         setSearchValue('');
-                        setSubRoleFilter('');
                         setCurrentPage(1);
                       }}
                       className="ti-btn ti-btn-light !mt-3 !gap-2"

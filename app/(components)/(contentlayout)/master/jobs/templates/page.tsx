@@ -6,6 +6,7 @@ import { getJobTemplates, getJobTemplateById, updateJobTemplate, deleteJobTempla
 import Link from 'next/link';
 import Swal from 'sweetalert2';
 import Editordata from '@/shared/data/apps/projects/createprojectdata';
+import { canAccessButton, ButtonPermissions, getNavigationFromStorage } from '@/shared/lib/navigation-permissions';
 
 interface Template {
   id: string;
@@ -50,6 +51,7 @@ const JobTemplates = () => {
   
   // Delete state
   const [deletingTemplateId, setDeletingTemplateId] = useState<string | null>(null);
+  const [navigation, setNavigation] = useState<any>(null);
 
   // Fetch templates - fetch all and filter client-side for partial matching
   const fetchTemplates = useCallback(async () => {
@@ -79,6 +81,14 @@ const JobTemplates = () => {
       setLoading(false);
     }
   }, [sortBy]);
+
+  // Get navigation from localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const nav = getNavigationFromStorage();
+      setNavigation(nav);
+    }
+  }, []);
 
   // Filter templates client-side for partial matching
   useEffect(() => {
@@ -437,12 +447,14 @@ const JobTemplates = () => {
                     <option value="usageCount:asc">Least Used</option>
                   </select>
                 </div>
-                <Link
-                  href="/master/jobs/create-template"
-                  className="ti-btn ti-btn-primary-full !py-1 !px-3 !text-[0.75rem] !m-0 !gap-1 !font-medium"
-                >
-                  <i className="ri-add-line"></i> Create Template
-                </Link>
+                {canAccessButton(ButtonPermissions.TEMPLATES_CREATE, navigation) && (
+                  <Link
+                    href="/master/jobs/create-template"
+                    className="ti-btn ti-btn-primary-full !py-1 !px-3 !text-[0.75rem] !m-0 !gap-1 !font-medium"
+                  >
+                    <i className="ri-add-line"></i> Create Template
+                  </Link>
+                )}
               </div>
             </div>
             <div className="box-body">
@@ -516,35 +528,41 @@ const JobTemplates = () => {
                               </td>
                               <td>
                                 <div className="flex flex-row items-center !gap-2 text-[0.9375rem]">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleViewTemplate(template.id)}
-                                    className="ti-btn ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-info/10 text-info hover:bg-info hover:text-white hover:border-info"
-                                    aria-label="View" title="View Template"
-                                  >
-                                    <i className="ri-eye-line"></i>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleEditTemplate(template.id)}
-                                    className="ti-btn ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-primary/10 text-primary hover:bg-primary hover:text-white hover:border-primary"
-                                    aria-label="Edit" title="Edit Template"
-                                  >
-                                    <i className="ri-edit-line"></i>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteTemplate(template.id, template.title)}
-                                    className="ti-btn ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-danger/10 text-danger hover:bg-danger hover:text-white hover:border-danger disabled:opacity-60 disabled:cursor-not-allowed"
-                                    aria-label="Delete" title="Delete Template"
-                                    disabled={deletingTemplateId === template.id}
-                                  >
-                                    {deletingTemplateId === template.id ? (
-                                      <i className="ri-loader-4-line animate-spin"></i>
-                                    ) : (
-                                      <i className="ri-delete-bin-line"></i>
-                                    )}
-                                  </button>
+                                  {canAccessButton(ButtonPermissions.TEMPLATES_VIEW, navigation) && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleViewTemplate(template.id)}
+                                      className="ti-btn ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-info/10 text-info hover:bg-info hover:text-white hover:border-info"
+                                      aria-label="View" title="View Template"
+                                    >
+                                      <i className="ri-eye-line"></i>
+                                    </button>
+                                  )}
+                                  {canAccessButton(ButtonPermissions.TEMPLATES_EDIT, navigation) && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleEditTemplate(template.id)}
+                                      className="ti-btn ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-primary/10 text-primary hover:bg-primary hover:text-white hover:border-primary"
+                                      aria-label="Edit" title="Edit Template"
+                                    >
+                                      <i className="ri-edit-line"></i>
+                                    </button>
+                                  )}
+                                  {canAccessButton(ButtonPermissions.TEMPLATES_DELETE, navigation) && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteTemplate(template.id, template.title)}
+                                      className="ti-btn ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-danger/10 text-danger hover:bg-danger hover:text-white hover:border-danger disabled:opacity-60 disabled:cursor-not-allowed"
+                                      aria-label="Delete" title="Delete Template"
+                                      disabled={deletingTemplateId === template.id}
+                                    >
+                                      {deletingTemplateId === template.id ? (
+                                        <i className="ri-loader-4-line animate-spin"></i>
+                                      ) : (
+                                        <i className="ri-delete-bin-line"></i>
+                                      )}
+                                    </button>
+                                  )}
                                 </div>
                               </td>
                             </tr>

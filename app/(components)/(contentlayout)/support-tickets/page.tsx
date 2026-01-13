@@ -15,6 +15,7 @@ import {
   type TicketFilters
 } from '@/shared/lib/supportTickets';
 import { fetchAllCandidates } from '@/shared/lib/candidates';
+import { canAccessButton, ButtonPermissions, getNavigationFromStorage } from '@/shared/lib/navigation-permissions';
 
 const SupportTickets = () => {
   // State management
@@ -39,6 +40,7 @@ const SupportTickets = () => {
   const [userRole, setUserRole] = useState<string>('user');
   const [userId, setUserId] = useState<string>('');
   const [candidateId, setCandidateId] = useState<string>(''); // Candidate ID for candidates (role='user')
+  const [navigation, setNavigation] = useState<any>(null);
   
   // Modals
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -79,6 +81,14 @@ const SupportTickets = () => {
   const [updatingTicket, setUpdatingTicket] = useState(false);
   
   // Get user role and ID from localStorage
+  // Get navigation from localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const nav = getNavigationFromStorage();
+      setNavigation(nav);
+    }
+  }, []);
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const userData = localStorage.getItem('user');
@@ -794,15 +804,17 @@ const SupportTickets = () => {
             {totalResults} {totalResults === 1 ? 'ticket' : 'tickets'} found
           </p>
         </div>
-        <button
-          onClick={openCreateModal}
-          className="inline-flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:opacity-90 transition-colors"
-        >
-          <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Create Ticket
-        </button>
+        {canAccessButton(ButtonPermissions.TICKETS_CREATE, navigation) && (
+          <button
+            onClick={openCreateModal}
+            className="inline-flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:opacity-90 transition-colors"
+          >
+            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Create Ticket
+          </button>
+        )}
       </div>
 
       {/* Filters */}
@@ -1000,7 +1012,7 @@ const SupportTickets = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <div className="flex items-center justify-center gap-1">
-                          {canView && (
+                          {canView && canAccessButton(ButtonPermissions.TICKETS_VIEW_DETAILS, navigation) && (
                             <button
                               onClick={() => openTicketModal(ticket)}
                               className="ti-btn ti-btn-icon ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-success/10 text-success hover:bg-success hover:text-white hover:border-success"
@@ -1009,7 +1021,7 @@ const SupportTickets = () => {
                               <i className="ri-eye-line"></i>
                             </button>
                           )}
-                          {isAdmin && (
+                          {isAdmin && canAccessButton(ButtonPermissions.TICKETS_DELETE, navigation) && (
                             <button
                               onClick={() => handleDeleteTicket(ticket)}
                               className="ti-btn ti-btn-icon ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-danger/10 text-danger hover:bg-danger hover:text-white hover:border-danger"

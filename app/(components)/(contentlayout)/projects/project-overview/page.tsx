@@ -6,6 +6,7 @@ import React, { Fragment, useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { getProjectById } from '@/shared/lib/projects'
 import { fetchAllCandidates } from '@/shared/lib/candidates'
+import { canAccessButton, ButtonPermissions, getNavigationFromStorage } from '@/shared/lib/navigation-permissions'
 
 interface Project {
     id: string;
@@ -47,8 +48,17 @@ const Projectoverview = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [candidatesMap, setCandidatesMap] = useState<Map<string, Candidate>>(new Map());
+    const [navigation, setNavigation] = useState<any>(null);
 
     // Fetch candidates
+    // Get navigation from localStorage
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const nav = getNavigationFromStorage();
+            setNavigation(nav);
+        }
+    }, []);
+
     useEffect(() => {
         const fetchCandidates = async () => {
             try {
@@ -270,9 +280,11 @@ const Projectoverview = () => {
                                 Project Details
                             </div>
                             <div>
-                                <Link href={`/projects/create-project?id=${project.id}`} className="ti-btn !py-1 !px-2 !text-[0.75rem] ti-btn-secondary-full btn-wave">
-                                    <i className="ri-edit-line align-middle me-1 font-semibold"></i>Edit Project
-                                </Link>
+                                {canAccessButton(ButtonPermissions.PROJECTS_EDIT, navigation) && (
+                                    <Link href={`/projects/create-project?id=${project.id}`} className="ti-btn !py-1 !px-2 !text-[0.75rem] ti-btn-secondary-full btn-wave">
+                                        <i className="ri-edit-line align-middle me-1 font-semibold"></i>Edit Project
+                                    </Link>
+                                )}
                             </div>
                         </div>
                         <div className="box-body">

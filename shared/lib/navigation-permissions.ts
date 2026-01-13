@@ -32,10 +32,11 @@ const routeToNavigationMap: { [route: string]: string[] } = {
   "/master/attendance/backdated-attendance-requests": ["Settings", "Master", "Attendance", "Backdated Attendance"],
   "/logs": ["Settings", "Logs", "Login Logs"],
   "/logs/recruiter-logs": ["Settings", "Logs", "Recruiter Logs"],
+  "/rbac/roles": ["Settings", "RBAC", "Roles"],
   "/rbac/roles-permissions": ["Settings", "RBAC", "Manage Roles & Permissions"],
 };
 
-// Helper function to check if a navigation path is allowed (for leaf nodes - expects boolean true)
+// Helper function to check if a navigation path is allowed (for leaf nodes - expects boolean true or object)
 export const checkNavigationPermission = (
   navigation: NavigationPermissions | null | undefined,
   path: string[]
@@ -51,9 +52,18 @@ export const checkNavigationPermission = (
       return false;
     }
     
-    // If it's the last key and it's a boolean, return its value
+    // If it's the last key, check if it's a boolean true or an object (object means section exists)
     if (i === path.length - 1) {
-      return current[key] === true;
+      const value = current[key];
+      // If it's a boolean, return true only if it's true
+      if (typeof value === 'boolean') {
+        return value === true;
+      }
+      // If it's an object, it means the section exists (has children), so return true
+      if (typeof value === 'object' && value !== null) {
+        return true;
+      }
+      return false;
     }
     
     // If it's not the last key, it should be an object
@@ -67,7 +77,37 @@ export const checkNavigationPermission = (
   return false;
 };
 
+// Helper function to check if a navigation object has at least one true value
+const hasAnyTrueValue = (obj: any): boolean => {
+  if (typeof obj === 'boolean') {
+    return obj === true;
+  }
+  
+  if (typeof obj !== 'object' || obj === null) {
+    return false;
+  }
+  
+  // Check all values in the object
+  for (const key in obj) {
+    if (obj.hasOwnProperty(key)) {
+      const value = obj[key];
+      if (typeof value === 'boolean' && value === true) {
+        return true;
+      }
+      if (typeof value === 'object' && value !== null) {
+        // Recursively check nested objects
+        if (hasAnyTrueValue(value)) {
+          return true;
+        }
+      }
+    }
+  }
+  
+  return false;
+};
+
 // Helper function to check if a navigation section exists (for parent sections - expects object)
+// Now also checks if the section has at least one true value in its nested structure
 export const checkNavigationSectionExists = (
   navigation: NavigationPermissions | null | undefined,
   path: string[]
@@ -83,11 +123,21 @@ export const checkNavigationSectionExists = (
       return false;
     }
     
-    // If it's the last key, check if it exists (can be object or boolean true)
+    // If it's the last key, check if it exists and has at least one true value
     if (i === path.length - 1) {
-      // For parent sections, we check if it exists and is an object (has children)
-      // or if it's boolean true (direct permission)
-      return typeof current[key] === 'object' && current[key] !== null || current[key] === true;
+      const value = current[key];
+      
+      // If it's a boolean, return true only if it's true
+      if (typeof value === 'boolean') {
+        return value === true;
+      }
+      
+      // If it's an object, check if it has at least one true value in its nested structure
+      if (typeof value === 'object' && value !== null) {
+        return hasAnyTrueValue(value);
+      }
+      
+      return false;
     }
     
     // If it's not the last key, it should be an object
@@ -182,6 +232,14 @@ export const isRouteAllowed = (
     return checkNavigationPermission(navigation, ["Settings", "Logs", "Login Logs"]);
   }
   
+  if (normalizedRoute.startsWith('/rbac/roles') && normalizedRoute !== '/rbac/roles-permissions') {
+    return checkNavigationPermission(navigation, ["Settings", "RBAC", "Roles"]);
+  }
+  
+  if (normalizedRoute.startsWith('/rbac/roles-permissions')) {
+    return checkNavigationPermission(navigation, ["Settings", "RBAC", "Manage Roles & Permissions"]);
+  }
+  
   // If route is not in the map and user is admin, allow by default (for backward compatibility)
   // But we should restrict this - only allow if navigation exists
   return false;
@@ -201,4 +259,93 @@ export const getNavigationFromStorage = (): NavigationPermissions | null => {
     console.warn('Error parsing navigation from localStorage:', error);
     return null;
   }
+};
+
+// Helper function to check button/action permissions
+// This checks if a specific button/action is enabled in the navigation structure
+export const checkButtonPermission = (
+  navigation: NavigationPermissions | null | undefined,
+  path: string[]
+): boolean => {
+  if (!navigation) return false;
+  
+  let current: any = navigation;
+  
+  for (let i = 0; i < path.length; i++) {
+    const key = path[i];
+    
+    if (current[key] === undefined) {
+      return false;
+    }
+    
+    // If it's the last key, check if it's true
+    if (i === path.length - 1) {
+      return current[key] === true;
+    }
+    
+    // If it's not the last key, it should be an object
+    if (typeof current[key] !== 'object' || current[key] === null) {
+      return false;
+    }
+    
+    current = current[key];
+  }
+  
+  return false;
+};
+
+// Button/Action permission paths based on the navigation structure
+export const ButtonPermissions = {
+  // Candidates page buttons
+  CANDIDATES_EXPORT: ["ATS", "Candidates", "Candidates", "Export Candidates"],
+  CANDIDATES_ADD: ["ATS", "Candidates", "Candidates", "Add Candidate"],
+  CANDIDATES_VIEW_DETAILS: ["ATS", "Candidates", "Candidates", "Actions", "View Details"],
+  CANDIDATES_EDIT: ["ATS", "Candidates", "Candidates", "Actions", "Edit Candidate"],
+  CANDIDATES_VIEW_DOCUMENTS: ["ATS", "Candidates", "Candidates", "Actions", "View Documents"],
+  CANDIDATES_UPLOAD_SALARY_SLIP: ["ATS", "Candidates", "Candidates", "Actions", "Upload Salary Slip"],
+  CANDIDATES_SHARE: ["ATS", "Candidates", "Candidates", "Actions", "Share Candidate"],
+  CANDIDATES_VIEW_ATTENDANCE: ["ATS", "Candidates", "Candidates", "Actions", "View Attendance"],
+  CANDIDATES_ADD_NOTE: ["ATS", "Candidates", "Candidates", "Actions", "Add Note"],
+  CANDIDATES_ADD_FEEDBACK: ["ATS", "Candidates", "Candidates", "Actions", "Add Feedback"],
+  CANDIDATES_DELETE: ["ATS", "Candidates", "Candidates", "Actions", "Delete Candidate"],
+  
+  // Jobs page buttons
+  JOBS_CREATE: ["ATS", "Jobs", "Manage Jobs", "Create Job"],
+  JOBS_EXPORT_EXCEL: ["ATS", "Jobs", "Manage Jobs", "Export Excel"],
+  JOBS_EDIT: ["ATS", "Jobs", "Manage Jobs", "Actions", "Edit Job"],
+  JOBS_VIEW: ["ATS", "Jobs", "Manage Jobs", "Actions", "View Job"],
+  JOBS_DELETE: ["ATS", "Jobs", "Manage Jobs", "Actions", "Delete Job"],
+  
+  // Projects page buttons
+  PROJECTS_NEW: ["Project management", "Manage Projects", "New Project"],
+  PROJECTS_VIEW: ["Project management", "Manage Projects", "View Project"],
+  PROJECTS_EDIT: ["Project management", "Manage Projects", "Edit Project"],
+  PROJECTS_DELETE: ["Project management", "Manage Projects", "Delete Project"],
+  
+  // Tasks page buttons
+  TASKS_NEW_BOARD: ["Project management", "Manage Tasks", "New Board"],
+  TASKS_ADD: ["Project management", "Manage Tasks", "Add Task"],
+  TASKS_VIEW: ["Project management", "Manage Tasks", "View Task"],
+  TASKS_EDIT: ["Project management", "Manage Tasks", "Edit Task"],
+  TASKS_DELETE: ["Project management", "Manage Tasks", "Delete Task"],
+  
+  // Support Tickets page buttons
+  TICKETS_CREATE: ["Support Tickets", "Create Ticket"],
+  TICKETS_VIEW_DETAILS: ["Support Tickets", "Actions", "View Details"],
+  TICKETS_DELETE: ["Support Tickets", "Actions", "Delete Ticket"],
+  
+  // Jobs Templates page buttons
+  TEMPLATES_CREATE: ["Settings", "Master", "Jobs", "Manage Jobs Templates", "Create Template"],
+  TEMPLATES_VIEW: ["Settings", "Master", "Jobs", "Manage Jobs Templates", "Actions", "View Template"],
+  TEMPLATES_EDIT: ["Settings", "Master", "Jobs", "Manage Jobs Templates", "Actions", "Edit Template"],
+  TEMPLATES_DELETE: ["Settings", "Master", "Jobs", "Manage Jobs Templates", "Actions", "Delete Template"],
+};
+
+// Convenience function to check button permission
+export const canAccessButton = (
+  buttonPath: string[],
+  navigation?: NavigationPermissions | null
+): boolean => {
+  const nav = navigation !== undefined ? navigation : getNavigationFromStorage();
+  return checkButtonPermission(nav, buttonPath);
 };

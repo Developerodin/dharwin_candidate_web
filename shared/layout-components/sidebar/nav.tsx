@@ -237,7 +237,7 @@ export const useMenuItems = () => {
         );
 
         // RBAC routes (under Settings but outside Master)
-        const rbacRoutes = ["/rbac/roles-permissions"];
+        const rbacRoutes = ["/rbac/roles", "/rbac/roles-permissions"];
         const isRBACSectionActive = rbacRoutes.some((route) =>
           isRouteMatch(route, pathname ?? "")
         );
@@ -303,7 +303,8 @@ export const useMenuItems = () => {
         
         // Jobs section
         if (!navigation || checkNavigationSectionExists(navigation, ["ATS", "Jobs"])) {
-          if (!navigation || checkNavigationPermission(navigation, ["ATS", "Jobs", "Manage Jobs"])) {
+          // Check if "Manage Jobs" exists (it's now an object, not a boolean)
+          if (!navigation || checkNavigationSectionExists(navigation, ["ATS", "Jobs", "Manage Jobs"])) {
             atsChildren.push({
               title: "Jobs",
               type: "sub",
@@ -376,7 +377,8 @@ export const useMenuItems = () => {
         if (!navigation || checkNavigationSectionExists(navigation, ["Project management"])) {
           const projectChildren: any[] = [];
           
-          if (!navigation || checkNavigationPermission(navigation, ["Project management", "Manage Projects"])) {
+          // Check if "Manage Projects" exists (it's now an object, not a boolean)
+          if (!navigation || checkNavigationSectionExists(navigation, ["Project management", "Manage Projects"])) {
             projectChildren.push({
               path: "/projects/project-list",
               title: "Manage Projects",
@@ -387,7 +389,8 @@ export const useMenuItems = () => {
             });
           }
           
-          if (!navigation || checkNavigationPermission(navigation, ["Project management", "Manage Tasks"])) {
+          // Check if "Manage Tasks" exists (it's now an object, not a boolean)
+          if (!navigation || checkNavigationSectionExists(navigation, ["Project management", "Manage Tasks"])) {
             projectChildren.push({
               path: "/tasks/kanban-board",
               title: "Manage Tasks",
@@ -411,7 +414,8 @@ export const useMenuItems = () => {
         }
 
         // Support Tickets
-        if (!navigation || checkNavigationPermission(navigation, ["Support Tickets"])) {
+        // Check if "Support Tickets" exists (it's now an object, not a boolean)
+        if (!navigation || checkNavigationSectionExists(navigation, ["Support Tickets"])) {
           items.push({
             path: "/support-tickets",
             title: "Support Tickets",
@@ -432,7 +436,8 @@ export const useMenuItems = () => {
           
           // Master -> Jobs
           if (!navigation || checkNavigationSectionExists(navigation, ["Settings", "Master", "Jobs"])) {
-            if (!navigation || checkNavigationPermission(navigation, ["Settings", "Master", "Jobs", "Manage Jobs Templates"])) {
+            // Check if "Manage Jobs Templates" exists (it's now an object, not a boolean)
+            if (!navigation || checkNavigationSectionExists(navigation, ["Settings", "Master", "Jobs", "Manage Jobs Templates"])) {
               masterChildren.push({
                 title: "Jobs",
                 type: "sub",
@@ -605,22 +610,37 @@ export const useMenuItems = () => {
         
         // RBAC section
         if (!navigation || checkNavigationSectionExists(navigation, ["Settings", "RBAC"])) {
+          const rbacChildren: any[] = [];
+          
+          if (!navigation || checkNavigationPermission(navigation, ["Settings", "RBAC", "Roles"])) {
+            rbacChildren.push({
+              path: "/rbac/roles",
+              title: "Roles",
+              type: "link",
+              active: true,
+              selected: isRouteMatch("/rbac/roles", pathname ?? ""),
+              dirchange: false,
+            });
+          }
+          
           if (!navigation || checkNavigationPermission(navigation, ["Settings", "RBAC", "Manage Roles & Permissions"])) {
+            rbacChildren.push({
+              path: "/rbac/roles-permissions",
+              title: "Manage Roles & Permissions",
+              type: "link",
+              active: true,
+              selected: isRouteMatch("/rbac/roles-permissions", pathname ?? ""),
+              dirchange: false,
+            });
+          }
+          
+          if (rbacChildren.length > 0) {
             settingsChildren.push({
               title: "RBAC",
               type: "sub",
               active: isRBACSectionActive,
               selected: isRBACSectionActive,
-              children: [
-                {
-                  path: "/rbac/roles-permissions",
-                  title: "Manage Roles & Permissions",
-                  type: "link",
-                  active: true,
-                  selected: isRouteMatch("/rbac/roles-permissions", pathname ?? ""),
-                  dirchange: false,
-                },
-              ],
+              children: rbacChildren,
             });
           }
         }
@@ -636,109 +656,6 @@ export const useMenuItems = () => {
             children: settingsChildren,
           });
         }
-      }
-
-      // Show for recruiters
-      if (userRole === "recruiter") {
-        const recruiterCandidateRoutes = [
-          "/candidates",
-        ];
-        const isRecruiterCandidatesSectionActive = recruiterCandidateRoutes.some((route) =>
-          isRouteMatch(route, pathname ?? "")
-        );
-
-        const recruiterJobRoutes = [
-          "/jobs/manage-jobs",
-        ];
-        const isRecruiterJobsSectionActive = recruiterJobRoutes.some((route) =>
-          isRouteMatch(route, pathname ?? "")
-        );
-
-        const recruiterInterviewRoutes = [
-          "/generate-meeting-link",
-          "/manage-meetings",
-        ];
-        const isRecruiterInterviewsSectionActive = recruiterInterviewRoutes.some((route) =>
-          isRouteMatch(route, pathname ?? "")
-        );
-
-        const recruiterATSRoutes = [
-          "/candidates",
-          "/jobs/manage-jobs",
-          "/generate-meeting-link",
-          "/manage-meetings",
-        ];
-        const isRecruiterATSSectionActive = recruiterATSRoutes.some((route) =>
-          isRouteMatch(route, pathname ?? "")
-        );
-
-        items.push(
-          {
-            icon: JobIcon,
-            title: "ATS",
-            type: "sub",
-            active: isRecruiterATSSectionActive,
-            selected: isRecruiterATSSectionActive,
-            children: [
-              {
-                title: "Candidates",
-                type: "sub",
-                active: isRecruiterCandidatesSectionActive,
-                selected: isRecruiterCandidatesSectionActive,
-                children: [
-                  {
-                    path: "/candidates",
-                    title: "Candidates",
-                    type: "link",
-                    active: true,
-                    selected: isRouteMatch("/candidates", pathname ?? ""),
-                    dirchange: false,
-                  },
-                ],
-              },
-              {
-                title: "Jobs",
-                type: "sub",
-                active: isRecruiterJobsSectionActive,
-                selected: isRecruiterJobsSectionActive,
-                children: [
-                  {
-                    path: "/jobs/manage-jobs",
-                    title: "Manage Jobs",
-                    type: "link",
-                    active: true,
-                    selected: isRouteMatch("/jobs/manage-jobs", pathname ?? ""),
-                    dirchange: false,
-                  },
-                ],
-              },
-              {
-                title: "Interviews",
-                type: "sub",
-                active: isRecruiterInterviewsSectionActive,
-                selected: isRecruiterInterviewsSectionActive,
-                children: [
-                  {
-                    path: "/generate-meeting-link",
-                    title: "Generate Meeting Link",
-                    type: "link",
-                    active: true,
-                    selected: isRouteMatch("/generate-meeting-link", pathname ?? ""),
-                    dirchange: false,
-                  },
-                  {
-                    path: "/manage-meetings",
-                    title: "Manage Meetings",
-                    type: "link",
-                    active: true,
-                    selected: isRouteMatch("/manage-meetings", pathname ?? ""),
-                    dirchange: false,
-                  },
-                ],
-              },
-            ],
-          },
-        );
       }
 
       // Show only for normal user
