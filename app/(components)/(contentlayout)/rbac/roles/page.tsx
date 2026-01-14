@@ -498,8 +498,17 @@ const RolesPage = () => {
       </div>
 
       {showDetailsModal && selectedSubRole && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-bodybg rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-xl">
+        <div 
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => {
+            setShowDetailsModal(false);
+            setSelectedSubRole(null);
+          }}
+        >
+          <div 
+            className="bg-white dark:bg-bodybg rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="p-6 border-b border-defaultborder dark:border-defaultborder/20 flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-semibold text-defaulttextcolor mb-1">

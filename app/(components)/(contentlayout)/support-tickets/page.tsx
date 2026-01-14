@@ -708,6 +708,146 @@ const SupportTickets = () => {
     }
   };
 
+  // Combined handler for update ticket and add comment
+  const handleUpdateAndComment = async () => {
+    if (!selectedTicket) return;
+
+    // Validate comment if provided
+    if (commentText.trim()) {
+      if (commentText.length < 5) {
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Invalid Comment',
+          text: 'Comment must be at least 5 characters long.',
+          confirmButtonText: 'OK'
+        });
+        return;
+      }
+
+      if (commentText.length > 2000) {
+        await Swal.fire({
+          icon: 'warning',
+          title: 'Invalid Comment',
+          text: 'Comment must not exceed 2000 characters.',
+          confirmButtonText: 'OK'
+        });
+        return;
+      }
+    }
+
+    // Check for comment attachment errors
+    if (commentAttachmentErrors.length > 0) {
+      await Swal.fire({
+        icon: 'error',
+        title: 'File Upload Error',
+        html: commentAttachmentErrors.join('<br>'),
+        confirmButtonText: 'OK'
+      });
+      return;
+    }
+
+    // Check if there are any changes to make
+    const updateData: any = {};
+    if (isAdmin) {
+      if (updateForm.status && updateForm.status !== selectedTicket.status) {
+        updateData.status = updateForm.status;
+      }
+      if (updateForm.priority && updateForm.priority !== selectedTicket.priority) {
+        updateData.priority = updateForm.priority;
+      }
+      if (updateForm.category && updateForm.category !== selectedTicket.category) {
+        updateData.category = updateForm.category;
+      }
+      if (updateForm.assignedTo && updateForm.assignedTo !== (selectedTicket.assignedTo?.id || selectedTicket.assignedTo?._id)) {
+        updateData.assignedTo = updateForm.assignedTo;
+      }
+    }
+
+    const hasUpdates = Object.keys(updateData).length > 0;
+    const hasComment = commentText.trim().length >= 5;
+
+    if (!hasUpdates && !hasComment) {
+      await Swal.fire({
+        icon: 'info',
+        title: 'No Changes',
+        text: 'Please make changes to the ticket or add a comment.',
+        confirmButtonText: 'OK'
+      });
+      return;
+    }
+
+    try {
+      setUpdatingTicket(true);
+      setAddingComment(true);
+      const ticketId = selectedTicket.id || selectedTicket._id;
+
+      // Update ticket first if there are changes
+      if (hasUpdates) {
+        await updateSupportTicket(ticketId, updateData);
+      }
+
+      // Add comment if provided
+      if (hasComment) {
+        await addCommentToTicket(
+          ticketId,
+          commentText.trim(),
+          commentAttachments.length > 0 ? commentAttachments : undefined
+        );
+      }
+
+      // Reset comment form
+      setCommentText('');
+      setCommentAttachments([]);
+      setCommentAttachmentErrors([]);
+      if (commentFileInputRef.current) {
+        commentFileInputRef.current.value = '';
+      }
+
+      // Fetch latest ticket data
+      const latestTicket = await getSupportTicketById(ticketId);
+      setSelectedTicket(latestTicket);
+      
+      if (isAdmin) {
+        setUpdateForm({
+          status: latestTicket.status || '',
+          priority: latestTicket.priority || '',
+          category: latestTicket.category || '',
+          assignedTo: latestTicket.assignedTo?.id || latestTicket.assignedTo?._id || ''
+        });
+      }
+
+      // Update ticket in list
+      setTickets(prev => prev.map(t => {
+        const tId = t.id || t._id;
+        return tId === ticketId ? latestTicket : t;
+      }));
+
+      // Show success message
+      const messages = [];
+      if (hasUpdates) messages.push('Ticket updated');
+      if (hasComment) messages.push('Comment added');
+      
+      await Swal.fire({
+        icon: 'success',
+        title: 'Success!',
+        text: messages.join(' and ') + ' successfully.',
+        timer: 2000,
+        showConfirmButton: false
+      });
+    } catch (error: any) {
+      console.error('Update and comment error:', error);
+      await Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: error?.response?.data?.message || error?.message || 'Failed to update ticket or add comment. Please try again.',
+        confirmButtonText: 'OK'
+      });
+    } finally {
+      setUpdatingTicket(false);
+      setAddingComment(false);
+    }
+  };
+
   // Handle delete ticket (admin only)
   const handleDeleteTicket = async (ticket: any) => {
     Swal.fire({
@@ -1120,8 +1260,14 @@ const SupportTickets = () => {
 
       {/* Create Ticket Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-bodydark rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={closeCreateModal}
+        >
+          <div 
+            className="bg-white dark:bg-bodydark rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="p-6">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-bold text-gray-900 dark:text-white">Create Support Ticket</h2>
@@ -1428,8 +1574,14 @@ const SupportTickets = () => {
 
       {/* Ticket Details Modal */}
       {showTicketModal && selectedTicket && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-bodydark rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={closeTicketModal}
+        >
+          <div 
+            className="bg-white dark:bg-bodydark rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="p-6">
               <div className="flex justify-between items-start mb-4">
                 <div>
@@ -1619,13 +1771,6 @@ const SupportTickets = () => {
                       />
                     </div>
                   </div>
-                  <button
-                    onClick={handleUpdateTicket}
-                    disabled={updatingTicket}
-                    className="mt-4 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {updatingTicket ? 'Updating...' : 'Update Ticket'}
-                  </button>
                 </div>
               )}
 
@@ -1856,11 +2001,17 @@ const SupportTickets = () => {
                     </div>
                     
                     <button
-                      onClick={handleAddComment}
-                      disabled={addingComment || !commentText.trim()}
+                      onClick={handleUpdateAndComment}
+                      disabled={updatingTicket || addingComment}
                       className="px-4 py-2 bg-primary text-white rounded-lg hover:opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {addingComment ? 'Adding...' : 'Add Comment'}
+                      {updatingTicket || addingComment ? (
+                        'Processing...'
+                      ) : (
+                        <>
+                          {isAdmin ? 'Update & Add Comment' : 'Add Comment'}
+                        </>
+                      )}
                     </button>
                   </div>
                 )}
