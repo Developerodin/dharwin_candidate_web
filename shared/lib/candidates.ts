@@ -6,6 +6,7 @@ export const fetchAllCandidates = async (params?: {
   owner?: string;
   fullName?: string;
   email?: string;
+  employeeId?: string;
   page?: number;
   limit?: number;
   sortBy?: string;
@@ -27,6 +28,7 @@ export const fetchAllCandidates = async (params?: {
   if (params?.owner) queryParams.append('owner', params.owner);
   if (params?.fullName) queryParams.append('fullName', params.fullName);
   if (params?.email) queryParams.append('email', params.email);
+  if (params?.employeeId) queryParams.append('employeeId', params.employeeId);
   if (params?.page) queryParams.append('page', params.page.toString());
   if (params?.limit) queryParams.append('limit', params.limit.toString());
   if (params?.sortBy) queryParams.append('sortBy', params.sortBy);

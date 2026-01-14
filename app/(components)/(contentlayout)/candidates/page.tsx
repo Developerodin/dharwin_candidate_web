@@ -122,6 +122,8 @@ const Candidates = () => {
                 params.fullName = searchValue.trim();
             } else if (searchFilter === 'email') {
                 params.email = searchValue.trim();
+            } else if (searchFilter === 'employeeId') {
+                params.employeeId = searchValue.trim();
             }
         }
 
@@ -2077,13 +2079,20 @@ const Candidates = () => {
                                     >
                                         <option value="name">Search by Name</option>
                                         <option value="email">Search by Email</option>
+                                        <option value="employeeId">Search by Employee ID</option>
                                     </select>
                                 </div>
                                 <div className="me-3">
                                     <input 
                                         className="ti-form-control form-control-sm" 
                                         type="text" 
-                                        placeholder={`Search ${searchFilter === 'name' ? 'name' : 'email'} here`}
+                                        placeholder={
+                                            searchFilter === 'name'
+                                                ? 'Search name here'
+                                                : searchFilter === 'email'
+                                                    ? 'Search email here'
+                                                    : 'Search employee ID here'
+                                        }
                                         value={searchValue}
                                         onChange={(e) => setSearchValue(e.target.value)}
                                         aria-label="Search input"
@@ -2370,6 +2379,7 @@ const Candidates = () => {
                                         <thead>
                                             <tr>
                                                 <th scope="col" className="text-start">S.No</th>
+                                                <th scope="col" className="text-start">Employee ID</th>
                                                 <th scope="col" className="text-start">Name</th>
                                                 <th scope="col" className="text-start">Email</th>
                                                 <th scope="col" className="text-start">Mobile</th>
@@ -2385,6 +2395,7 @@ const Candidates = () => {
                                                     onClick={() => openCandidateModal(can)}
                                                 >
                                                     <td>{(currentPage - 1) * limit + i + 1}</td>
+                                                    <td>{can?.employeeId || '-'}</td>
                                                     <td>{can?.fullName}</td>
                                                     <td>
                                                         <div className="flex items-center leading-none">
@@ -2680,6 +2691,11 @@ const Candidates = () => {
                                             <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate">
                                                 {selectedCandidate?.email}
                                             </p>
+                                            {selectedCandidate?.employeeId && (
+                                                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate mt-0.5">
+                                                    Employee ID: {selectedCandidate.employeeId}
+                                                </p>
+                                            )}
                                             {selectedCandidate?.shortBio && (
                                                 <p className="text-xs text-gray-600 dark:text-gray-300 truncate mt-1">
                                                     {selectedCandidate.shortBio}

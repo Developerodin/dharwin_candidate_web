@@ -15,6 +15,7 @@ import {
   type TicketFilters
 } from '@/shared/lib/supportTickets';
 import { fetchAllCandidates } from '@/shared/lib/candidates';
+import { fetchAllAdminUsers } from '@/shared/lib/admin-users';
 import { canAccessButton, ButtonPermissions, getNavigationFromStorage } from '@/shared/lib/navigation-permissions';
 
 const SupportTickets = () => {
@@ -64,6 +65,18 @@ const SupportTickets = () => {
   const [candidatesList, setCandidatesList] = useState<any[]>([]);
   const [loadingCandidates, setLoadingCandidates] = useState(false);
   
+  // Admin users list for assignment dropdown (admin only)
+  const [adminUsersList, setAdminUsersList] = useState<any[]>([]);
+  const [loadingAdminUsers, setLoadingAdminUsers] = useState(false);
+  const [userSubRole, setUserSubRole] = useState<string | null>(null);
+  
+  // Assign modal state (admin only)
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [assignTicket, setAssignTicket] = useState<any>(null);
+  const [assignSelectedUserId, setAssignSelectedUserId] = useState<string>('');
+  const [assigningTicketId, setAssigningTicketId] = useState<string | null>(null); // used for in-flight state
+  const [assigningTicket, setAssigningTicket] = useState(false);
+  
   // Comment form
   const [commentText, setCommentText] = useState('');
   const [addingComment, setAddingComment] = useState(false);
@@ -97,6 +110,7 @@ const SupportTickets = () => {
           const parsedUser = JSON.parse(userData);
           setUserRole(parsedUser.role || 'user');
           setUserId(parsedUser.id || parsedUser._id || '');
+          setUserSubRole(parsedUser.subRole || null);
         } catch (error) {
           console.error('Error parsing user data:', error);
           setUserRole('user');
@@ -274,6 +288,47 @@ const SupportTickets = () => {
       setLoadingCandidates(false);
     }
   }, [userRole]);
+
+  // Fetch admin users list for assignment dropdown
+  const fetchAdminUsers = useCallback(async () => {
+    if (userRole !== 'admin') return;
+    
+    setLoadingAdminUsers(true);
+    try {
+      const data = await fetchAllAdminUsers({
+        page: 1,
+        limit: 1000, // Get all admin users for dropdown
+        sortBy: 'name:asc'
+      });
+      
+      let users: any[] = [];
+      if (data && data.results) {
+        users = data.results;
+      } else if (Array.isArray(data)) {
+        users = data;
+      }
+      
+      // Filter based on subRole rules from API:
+      // - If current user has subRole, only show users with subRole
+      // - If current user doesn't have subRole, show all admin users
+      if (userSubRole) {
+        users = users.filter((user: any) => user.subRole && user.subRole.trim() !== '');
+      }
+
+      // UI requirement: exclude users with subRole "Admin"
+      users = users.filter((user: any) => {
+        const sr = String(user?.subRole || '').trim().toLowerCase();
+        return sr !== 'admin';
+      });
+      
+      setAdminUsersList(users);
+    } catch (error) {
+      console.error('Error fetching admin users:', error);
+      setAdminUsersList([]);
+    } finally {
+      setLoadingAdminUsers(false);
+    }
+  }, [userRole, userSubRole]);
 
   // Open create ticket modal
   const openCreateModal = () => {
@@ -848,6 +903,108 @@ const SupportTickets = () => {
     }
   };
 
+  // Handle quick assign ticket (admin only)
+  const handleQuickAssign = async (ticket: any, assignedToUserId: string) => {
+    const ticketId = ticket.id || ticket._id;
+    const currentAssignedTo = ticket.assignedTo?.id || ticket.assignedTo?._id;
+    
+    // If unassigning
+    if (!assignedToUserId) {
+      if (!currentAssignedTo) {
+        await Swal.fire({
+          icon: 'info',
+          title: 'Already Unassigned',
+          text: 'This ticket is already unassigned.',
+          confirmButtonText: 'OK'
+        });
+        return;
+      }
+    } else {
+      // If already assigned to the same user, show info
+      if (currentAssignedTo === assignedToUserId) {
+        await Swal.fire({
+          icon: 'info',
+          title: 'Already Assigned',
+          text: 'This ticket is already assigned to the selected user.',
+          confirmButtonText: 'OK'
+        });
+        return;
+      }
+    }
+
+    try {
+      setAssigningTicket(true);
+      setAssigningTicketId(ticketId);
+      
+      const updateData: any = {};
+      if (assignedToUserId) {
+        updateData.assignedTo = assignedToUserId;
+      } else {
+        updateData.assignedTo = undefined;
+      }
+      
+      await updateSupportTicket(ticketId, updateData);
+      
+      // Fetch updated ticket
+      const updatedTicket = await getSupportTicketById(ticketId);
+      
+      // Update ticket in list
+      setTickets(prev => prev.map(t => {
+        const tId = t.id || t._id;
+        return tId === ticketId ? updatedTicket : t;
+      }));
+      
+      // If this ticket is currently selected in modal, update it
+      if (selectedTicket && (selectedTicket.id || selectedTicket._id) === ticketId) {
+        setSelectedTicket(updatedTicket);
+        setUpdateForm({
+          status: updatedTicket.status || '',
+          priority: updatedTicket.priority || '',
+          category: updatedTicket.category || '',
+          assignedTo: updatedTicket.assignedTo?.id || updatedTicket.assignedTo?._id || ''
+        });
+      }
+      
+      // If this ticket is currently open in assign modal, update it
+      if (assignTicket && (assignTicket.id || assignTicket._id) === ticketId) {
+        // Support both populated object and plain string for assignedTo
+        const updatedAssignedId =
+          typeof updatedTicket.assignedTo === 'string'
+            ? updatedTicket.assignedTo
+            : updatedTicket.assignedTo?.id || updatedTicket.assignedTo?._id || '';
+
+        setAssignTicket(updatedTicket);
+        setAssignSelectedUserId(updatedAssignedId || '');
+      }
+      
+      const assignedUser = assignedToUserId ? adminUsersList.find((u: any) => (u.id || u._id) === assignedToUserId) : null;
+      const assignedUserName = assignedUser?.name || assignedUser?.email || 'User';
+      
+      await Swal.fire({
+        icon: 'success',
+        title: assignedToUserId ? 'Ticket Assigned!' : 'Ticket Unassigned!',
+        text: assignedToUserId 
+          ? `Ticket has been assigned to ${assignedUserName}.`
+          : 'Ticket has been unassigned.',
+        timer: 2000,
+        showConfirmButton: false
+      });
+      
+      setAssigningTicketId(null);
+    } catch (error: any) {
+      console.error('Assign ticket error:', error);
+      await Swal.fire({
+        icon: 'error',
+        title: 'Failed to Assign Ticket',
+        text: error?.response?.data?.message || error?.message || 'Failed to assign ticket. Please try again.',
+        confirmButtonText: 'OK'
+      });
+    } finally {
+      setAssigningTicket(false);
+      setAssigningTicketId(null);
+    }
+  };
+
   // Handle delete ticket (admin only)
   const handleDeleteTicket = async (ticket: any) => {
     Swal.fire({
@@ -933,6 +1090,39 @@ const SupportTickets = () => {
   };
 
   const isAdmin = userRole === 'admin';
+
+  // Fetch admin users on mount if admin
+  useEffect(() => {
+    if (isAdmin) {
+      fetchAdminUsers();
+    }
+  }, [isAdmin, fetchAdminUsers]);
+
+  const openAssignModal = (ticket: any) => {
+    // Find the latest ticket from the tickets list to ensure we have fresh data
+    const ticketId = ticket?.id || ticket?._id;
+    const latestTicket = tickets.find((t: any) => {
+      const tId = t.id || t._id;
+      return tId === ticketId;
+    }) || ticket; // Fallback to passed ticket if not found in list
+
+    // Support both populated object and plain string for assignedTo
+    const currentAssigned =
+      typeof latestTicket?.assignedTo === 'string'
+        ? latestTicket.assignedTo
+        : latestTicket?.assignedTo?.id || latestTicket?.assignedTo?._id || '';
+
+    setAssignTicket(latestTicket);
+    setAssignSelectedUserId(currentAssigned);
+    setShowAssignModal(true);
+    if (isAdmin) fetchAdminUsers();
+  };
+
+  const closeAssignModal = () => {
+    setShowAssignModal(false);
+    setAssignTicket(null);
+    setAssignSelectedUserId('');
+  };
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -1159,6 +1349,29 @@ const SupportTickets = () => {
                               title="View Details"
                             >
                               <i className="ri-eye-line"></i>
+                            </button>
+                          )}
+                          {isAdmin && userSubRole === 'Admin' && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openAssignModal(ticket);
+                              }}
+                              disabled={assigningTicket && assigningTicketId === (ticket.id || ticket._id)}
+                              className={`ti-btn ti-btn-icon ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] ${
+                                ticket.assignedTo 
+                                  ? 'bg-primary/10 text-primary hover:bg-primary hover:text-white hover:border-primary' 
+                                  : 'bg-info/10 text-info hover:bg-info hover:text-white hover:border-info'
+                              }`}
+                              title={ticket.assignedTo ? `Assigned to: ${ticket.assignedTo.name || ticket.assignedTo.email}` : 'Assign Ticket'}
+                            >
+                              {assigningTicket && assigningTicketId === (ticket.id || ticket._id) ? (
+                                <i className="ri-loader-4-line animate-spin"></i>
+                              ) : ticket.assignedTo ? (
+                                <i className="ri-user-fill"></i>
+                              ) : (
+                                <i className="ri-user-add-line"></i>
+                              )}
                             </button>
                           )}
                           {isAdmin && canAccessButton(ButtonPermissions.TICKETS_DELETE, navigation) && (
@@ -1626,6 +1839,19 @@ const SupportTickets = () => {
                     {formatDate(selectedTicket.createdAt)}
                   </p>
                 </div>
+                {selectedTicket.assignedTo && (
+                  <div className="md:col-span-4">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Assigned To</p>
+                    <p className="text-sm font-medium text-gray-900 dark:text-white mt-1">
+                      {selectedTicket.assignedTo.name || selectedTicket.assignedTo.email || 'N/A'}
+                      {selectedTicket.assignedTo.subRole && (
+                        <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+                          ({selectedTicket.assignedTo.subRole})
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Description */}
@@ -2016,6 +2242,135 @@ const SupportTickets = () => {
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Assign Ticket Modal (Admin with subRole Admin only) */}
+      {isAdmin && userSubRole === 'Admin' && showAssignModal && assignTicket && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={closeAssignModal}
+        >
+          <div
+            className="bg-white dark:bg-bodydark rounded-lg shadow-xl max-w-lg w-full max-h-[85vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Assign Ticket</h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  {assignTicket.ticketId || (assignTicket.id || assignTicket._id).slice(-8).toUpperCase()} — {assignTicket.title}
+                </p>
+              </div>
+              <button
+                onClick={closeAssignModal}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                title="Close"
+              >
+                <i className="ri-close-line text-xl"></i>
+              </button>
+            </div>
+
+            <div className="p-6">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Select user
+              </label>
+
+              {loadingAdminUsers ? (
+                <div className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-bodydark flex items-center">
+                  <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-primary mr-2"></div>
+                  <span className="text-sm text-gray-500 dark:text-gray-400">Loading users...</span>
+                </div>
+              ) : (
+                <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setAssignSelectedUserId('')}
+                    className={`w-full flex items-center justify-between px-4 py-3 text-sm ${
+                      assignSelectedUserId === ''
+                        ? 'bg-primary/10 text-primary'
+                        : 'bg-white dark:bg-bodydark text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <i className="ri-user-unfollow-line"></i>
+                      Unassigned
+                    </span>
+                    {assignSelectedUserId === '' && <i className="ri-check-line"></i>}
+                  </button>
+                  <div className="max-h-72 overflow-y-auto divide-y divide-gray-200 dark:divide-gray-700">
+                    {adminUsersList.map((u: any) => {
+                      const uid = u.id || u._id;
+                      const selected = assignSelectedUserId === uid;
+                      return (
+                        <button
+                          key={uid}
+                          type="button"
+                          onClick={() => setAssignSelectedUserId(uid)}
+                          className={`w-full flex items-center justify-between px-4 py-3 text-sm ${
+                            selected
+                              ? 'bg-primary/10 text-primary'
+                              : 'bg-white dark:bg-bodydark text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+                          }`}
+                        >
+                          <span className="flex items-center gap-2 min-w-0">
+                            <i className="ri-user-line"></i>
+                            <span className="truncate">
+                              {u.name || u.email}
+                              {u.subRole ? ` (${u.subRole})` : ''}
+                            </span>
+                          </span>
+                          {selected && <i className="ri-check-line"></i>}
+                        </button>
+                      );
+                    })}
+                    {adminUsersList.length === 0 && (
+                      <div className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+                        No users available.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {(() => {
+                // Support both populated object and plain string for assignedTo
+                const currentAssigned =
+                  typeof assignTicket?.assignedTo === 'string'
+                    ? assignTicket.assignedTo
+                    : assignTicket?.assignedTo?.id || assignTicket?.assignedTo?._id || '';
+
+                const hasChange = currentAssigned !== assignSelectedUserId;
+                const primaryLabel = !hasChange
+                  ? 'No changes'
+                  : assignSelectedUserId
+                    ? (currentAssigned ? 'Update assignment' : 'Assign')
+                    : 'Unassign';
+
+                return (
+                  <div className="mt-6 flex justify-end gap-3">
+                    <button
+                      onClick={closeAssignModal}
+                      className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={async () => {
+                        await handleQuickAssign(assignTicket, assignSelectedUserId);
+                        closeAssignModal();
+                      }}
+                      disabled={assigningTicket || loadingAdminUsers || !hasChange}
+                      className="px-4 py-2 bg-primary text-white rounded-lg hover:opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      title={!hasChange ? 'Select a different user to update' : undefined}
+                    >
+                      {assigningTicket ? 'Updating...' : primaryLabel}
+                    </button>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>
