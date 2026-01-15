@@ -951,18 +951,48 @@ const Candidates = () => {
         
         // Get effective joining date and resign date
         const joiningDate = getEffectiveJoiningDate();
-        const joiningDateUTC = joiningDate ? new Date(Date.UTC(
-            joiningDate.getUTCFullYear(),
-            joiningDate.getUTCMonth(),
-            joiningDate.getUTCDate()
-        )) : null;
+        // Create UTC date at midnight for proper comparison
+        // Parse the date string directly to avoid timezone issues
+        const joiningDateUTC = joiningDate ? (() => {
+            // If joiningDate is from an ISO string, parse it directly
+            const dateStr = selectedCandidateForAttendance?.joiningDate;
+            if (dateStr && typeof dateStr === 'string') {
+                // Parse ISO string and extract date components
+                const isoDate = new Date(dateStr);
+                return new Date(Date.UTC(
+                    isoDate.getUTCFullYear(),
+                    isoDate.getUTCMonth(),
+                    isoDate.getUTCDate()
+                ));
+            }
+            // Fallback to using the date object
+            return new Date(Date.UTC(
+                joiningDate.getUTCFullYear(),
+                joiningDate.getUTCMonth(),
+                joiningDate.getUTCDate()
+            ));
+        })() : null;
         
         const resignDate = getResignDate();
-        const resignDateUTC = resignDate ? new Date(Date.UTC(
-            resignDate.getUTCFullYear(),
-            resignDate.getUTCMonth(),
-            resignDate.getUTCDate()
-        )) : null;
+        const resignDateUTC = resignDate ? (() => {
+            // If resignDate is from an ISO string, parse it directly
+            const dateStr = selectedCandidateForAttendance?.resignDate;
+            if (dateStr && typeof dateStr === 'string') {
+                // Parse ISO string and extract date components
+                const isoDate = new Date(dateStr);
+                return new Date(Date.UTC(
+                    isoDate.getUTCFullYear(),
+                    isoDate.getUTCMonth(),
+                    isoDate.getUTCDate()
+                ));
+            }
+            // Fallback to using the date object
+            return new Date(Date.UTC(
+                resignDate.getUTCFullYear(),
+                resignDate.getUTCMonth(),
+                resignDate.getUTCDate()
+            ));
+        })() : null;
         
         // Map attendance records by punchIn date (not date field)
         // Extract date using UTC to avoid timezone shifts
@@ -1010,10 +1040,24 @@ const Candidates = () => {
             // Use Date.UTC to create date at midnight UTC, then extract date parts
             const utcDate = new Date(Date.UTC(year, month, day));
             
-            // Skip dates before joining date
-            if (joiningDateUTC && utcDate < joiningDateUTC) {
-                calendarDays.push({ day: 0, date, attendance: null, holiday: null, leave: null });
-                continue;
+            // Skip dates before joining date - compare date components directly
+            if (joiningDateUTC) {
+                const currentYear = year;
+                const currentMonth = month;
+                const currentDay = day;
+                
+                const joiningYear = joiningDateUTC.getUTCFullYear();
+                const joiningMonth = joiningDateUTC.getUTCMonth();
+                const joiningDay = joiningDateUTC.getUTCDate();
+                
+                // Compare dates: if current date is before joining date, skip it
+                const currentDateValue = currentYear * 10000 + currentMonth * 100 + currentDay;
+                const joiningDateValue = joiningYear * 10000 + joiningMonth * 100 + joiningDay;
+                
+                if (currentDateValue < joiningDateValue) {
+                    calendarDays.push({ day: 0, date, attendance: null, holiday: null, leave: null });
+                    continue;
+                }
             }
             
             // Skip dates after resign date
