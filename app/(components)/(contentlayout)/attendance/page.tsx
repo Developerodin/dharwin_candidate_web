@@ -253,6 +253,17 @@ export default function AttendancePage() {
     }
   };
 
+  const getDayName = (dateString?: string | null) => {
+    if (!dateString) return 'N/A';
+    try {
+      const date = new Date(dateString);
+      // Use the same date parsing as formatDate to ensure consistency
+      return date.toLocaleDateString('en-US', { weekday: 'long' });
+    } catch {
+      return 'N/A';
+    }
+  };
+
   const formatTime = (timeString?: string | null) => {
     if (!timeString) return 'N/A';
     try {
@@ -788,7 +799,7 @@ export default function AttendancePage() {
                                 {formatDate(record.date)}
                               </td>
                               <td className="px-4 py-2 text-gray-700">
-                                {record.day || 'N/A'}
+                                {getDayName(record.date)}
                               </td>
                               <td className="px-4 py-2 text-gray-700">
                                 {formatTime(record.punchIn)}

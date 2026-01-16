@@ -1096,6 +1096,15 @@ const profile = () => {
                                         </span>
                                         {profileData?.phoneNumber}
                                     </p>
+                                    {profileData?.employeeId && (
+                                        <p className="mb-2">
+                                            <span className="avatar avatar-sm avatar-rounded me-2 bg-light text-[#8c9097] dark:text-white/50 inline-flex items-center justify-center">
+                                                <i className="ri-fingerprint-line text-[.875rem] text-[#8c9097] dark:text-white/50"></i>
+                                            </span>
+                                            <span className="font-medium">Employee ID: </span>
+                                            {profileData.employeeId}
+                                        </p>
+                                    )}
                                     <p className="mb-2">
                                         <span className="avatar avatar-sm avatar-rounded me-2 bg-light text-[#8c9097] dark:text-white/50">
                                             <i className="ri-map-pin-line align-middle text-[.875rem] text-[#8c9097] dark:text-white/50"></i>

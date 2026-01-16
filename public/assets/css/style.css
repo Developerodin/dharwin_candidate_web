@@ -9129,10 +9129,34 @@ input.gridjs-input {
 .app-sidebar .main-sidebar-header .header-logo .desktop-dark {
   @apply block;
 }
-.app-sidebar .main-sidebar-header .header-logo .desktop-logo,
+.app-sidebar .main-sidebar-header .header-logo .desktop-logo {
+  @apply block;
+}
 .app-sidebar .main-sidebar-header .header-logo .toggle-logo,
 .app-sidebar .main-sidebar-header .header-logo .toggle-dark, .app-sidebar .main-sidebar-header .header-logo .toggle-white {
   @apply hidden;
+}
+/* Fix logo when sidebar is minimized */
+[data-nav-style=icon-click][data-toggled=icon-click-closed] .app-sidebar .main-sidebar-header .header-logo .desktop-logo,
+[data-vertical-style=overlay][data-toggled=icon-overlay-close]:not([data-icon-overlay=open]) .app-sidebar .main-sidebar-header .header-logo .desktop-logo,
+[data-nav-style=icon-hover][data-toggled=icon-hover-closed] .app-sidebar .main-sidebar-header .header-logo .desktop-logo,
+[data-nav-style=menu-click][data-toggled=menu-click-closed] .app-sidebar .main-sidebar-header .header-logo .desktop-logo,
+[data-nav-style=menu-hover][data-toggled=menu-hover-closed] .app-sidebar .main-sidebar-header .header-logo .desktop-logo {
+  @apply hidden;
+}
+[data-nav-style=icon-click][data-toggled=icon-click-closed] .app-sidebar .main-sidebar-header .header-logo .toggle-logo,
+[data-vertical-style=overlay][data-toggled=icon-overlay-close]:not([data-icon-overlay=open]) .app-sidebar .main-sidebar-header .header-logo .toggle-logo,
+[data-nav-style=icon-hover][data-toggled=icon-hover-closed] .app-sidebar .main-sidebar-header .header-logo .toggle-logo,
+[data-nav-style=menu-click][data-toggled=menu-click-closed] .app-sidebar .main-sidebar-header .header-logo .toggle-logo,
+[data-nav-style=menu-hover][data-toggled=menu-hover-closed] .app-sidebar .main-sidebar-header .header-logo .toggle-logo {
+  @apply block mx-auto max-w-[3rem] max-h-[3rem] object-contain;
+}
+[data-nav-style=icon-click][data-toggled=icon-click-closed] .app-sidebar .main-sidebar-header .header-logo,
+[data-vertical-style=overlay][data-toggled=icon-overlay-close]:not([data-icon-overlay=open]) .app-sidebar .main-sidebar-header .header-logo,
+[data-nav-style=icon-hover][data-toggled=icon-hover-closed] .app-sidebar .main-sidebar-header .header-logo,
+[data-nav-style=menu-click][data-toggled=menu-click-closed] .app-sidebar .main-sidebar-header .header-logo,
+[data-nav-style=menu-hover][data-toggled=menu-hover-closed] .app-sidebar .main-sidebar-header .header-logo {
+  @apply flex items-center justify-center w-full;
 }
 .app-sidebar .slide__category {
   @apply text-[0.6rem] font-semibold tracking-[0.065rem] uppercase py-3 px-[1.65rem] whitespace-nowrap opacity-50 relative text-[#a3aed1] dark:text-[#8f9bb3];

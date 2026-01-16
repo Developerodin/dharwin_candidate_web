@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { fetchAllCandidates, createBackdatedAttendanceRequest, getBackdatedAttendanceRequestsByCandidate, cancelBackdatedAttendanceRequest } from '@/shared/lib/candidates';
+import { fetchAllCandidates, fetchCandidateById, createBackdatedAttendanceRequest, getBackdatedAttendanceRequestsByCandidate, cancelBackdatedAttendanceRequest } from '@/shared/lib/candidates';
+import { getShiftById } from '@/shared/lib/shifts';
 import Pageheader from '@/shared/layout-components/page-header/pageheader';
 import Seo from '@/shared/layout-components/seo/seo';
 import Swal from 'sweetalert2';
@@ -49,6 +50,8 @@ const BackdatedAttendancePage = () => {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [profileData, setProfileData] = useState<any>(null);
   const [candidateId, setCandidateId] = useState<string>('');
+  const [shift, setShift] = useState<any>(null);
+  const [shiftTimezone, setShiftTimezone] = useState<string>('Asia/Kolkata');
   const [loading, setLoading] = useState<boolean>(true);
   const [loadingRequests, setLoadingRequests] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState<boolean>(false);
@@ -100,6 +103,42 @@ const BackdatedAttendancePage = () => {
         setProfileData(chosen);
         if (chosen?._id || chosen?.id) {
           setCandidateId(chosen._id || chosen.id);
+          
+          // Load full candidate data to get shift details
+          try {
+            const fullCandidateData = await fetchCandidateById(chosen._id || chosen.id);
+            if (fullCandidateData?.shift) {
+              // Check if shift is already a populated object
+              if (typeof fullCandidateData.shift === 'object' && fullCandidateData.shift.name) {
+                setShift(fullCandidateData.shift);
+                if (fullCandidateData.shift.timezone) {
+                  setShiftTimezone(fullCandidateData.shift.timezone);
+                }
+              } else {
+                // Shift is an ID, fetch it
+                const shiftId = typeof fullCandidateData.shift === 'string'
+                  ? fullCandidateData.shift
+                  : (fullCandidateData.shift?._id || fullCandidateData.shift?.id);
+                
+                if (shiftId) {
+                  try {
+                    const shiftResponse = await getShiftById(shiftId);
+                    const shiftData = shiftResponse?.data || shiftResponse;
+                    if (shiftData && (shiftData.name || shiftData._id || shiftData.id)) {
+                      setShift(shiftData);
+                      if (shiftData.timezone) {
+                        setShiftTimezone(shiftData.timezone);
+                      }
+                    }
+                  } catch (e) {
+                    console.warn('Failed to load shift:', e);
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            console.warn('Failed to load full candidate data:', e);
+          }
         }
       } catch (e: any) {
         console.error('Failed to load profile:', e);
@@ -194,6 +233,105 @@ const BackdatedAttendancePage = () => {
     }
   }, [candidateId, filterStatus, fetchRequests]);
 
+  // Get GMT offset for a timezone
+  const getGMTOffset = (timezone: string): string => {
+    try {
+      const now = new Date();
+      
+      // Method 1: Try using Intl.DateTimeFormat with timeZoneName
+      try {
+        const formatter = new Intl.DateTimeFormat('en', {
+          timeZone: timezone,
+          timeZoneName: 'shortOffset'
+        });
+        const parts = formatter.formatToParts(now);
+        const offsetPart = parts.find(part => part.type === 'timeZoneName');
+        
+        if (offsetPart && offsetPart.value && offsetPart.value.includes('GMT')) {
+          let offsetStr = offsetPart.value;
+          offsetStr = offsetStr.replace(/[()]/g, '');
+          if (!offsetStr.startsWith('GMT')) {
+            offsetStr = 'GMT' + offsetStr;
+          }
+          const match = offsetStr.match(/GMT([+-])(\d{1,2}):?(\d{2})?/);
+          if (match) {
+            const sign = match[1];
+            const hours = parseInt(match[2], 10);
+            const minutes = parseInt(match[3] || '0', 10);
+            const hoursStr = hours.toString().padStart(2, '0');
+            const minutesStr = minutes.toString().padStart(2, '0');
+            return `(GMT${sign}${hoursStr}:${minutesStr})`;
+          }
+          return `(${offsetStr})`;
+        }
+      } catch (e) {
+        // Continue to fallback
+      }
+      
+      // Method 2: Calculate offset
+      const utcFormatter = new Intl.DateTimeFormat('en', {
+        timeZone: 'UTC',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      });
+      
+      const tzFormatter = new Intl.DateTimeFormat('en', {
+        timeZone: timezone,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      });
+      
+      const utcParts = utcFormatter.formatToParts(now);
+      const tzParts = tzFormatter.formatToParts(now);
+      
+      const utcH = parseInt(utcParts.find(p => p.type === 'hour')?.value || '0', 10);
+      const utcM = parseInt(utcParts.find(p => p.type === 'minute')?.value || '0', 10);
+      const tzH = parseInt(tzParts.find(p => p.type === 'hour')?.value || '0', 10);
+      const tzM = parseInt(tzParts.find(p => p.type === 'minute')?.value || '0', 10);
+      
+      const utcMinutes = utcH * 60 + utcM;
+      const tzMinutes = tzH * 60 + tzM;
+      let diffMinutes = tzMinutes - utcMinutes;
+      
+      // Handle day rollover
+      if (diffMinutes > 720) diffMinutes -= 1440;
+      if (diffMinutes < -720) diffMinutes += 1440;
+      
+      const sign = diffMinutes >= 0 ? '+' : '-';
+      const absMinutes = Math.abs(diffMinutes);
+      const hours = Math.floor(absMinutes / 60);
+      const minutes = absMinutes % 60;
+      const hoursStr = hours.toString().padStart(2, '0');
+      const minutesStr = minutes.toString().padStart(2, '0');
+      
+      return `(GMT${sign}${hoursStr}:${minutesStr})`;
+    } catch {
+      return '';
+    }
+  };
+
+  // Timezone options with GMT offsets (matching assign-shift page)
+  const timezones = [
+    { value: 'UTC', label: `${getGMTOffset('UTC')} UTC` },
+    { value: 'Asia/Kolkata', label: `${getGMTOffset('Asia/Kolkata')} IST (India)` },
+    { value: 'America/New_York', label: `${getGMTOffset('America/New_York')} Eastern Time (US & Canada)` },
+    { value: 'America/Chicago', label: `${getGMTOffset('America/Chicago')} Central Time (US & Canada)` },
+    { value: 'America/Denver', label: `${getGMTOffset('America/Denver')} Mountain Time (US & Canada)` },
+    { value: 'America/Los_Angeles', label: `${getGMTOffset('America/Los_Angeles')} Pacific Time (US & Canada)` },
+    { value: 'Europe/London', label: `${getGMTOffset('Europe/London')} UK Time` },
+    { value: 'Europe/Paris', label: `${getGMTOffset('Europe/Paris')} Central European Time` },
+    { value: 'Asia/Dubai', label: `${getGMTOffset('Asia/Dubai')} Gulf Standard Time` },
+    { value: 'Asia/Singapore', label: `${getGMTOffset('Asia/Singapore')} Singapore Time` },
+  ];
+
+  // Get formatted timezone label
+  const getTimezoneLabel = (timezone: string): string => {
+    const timezoneOption = timezones.find(tz => tz.value === timezone);
+    return timezoneOption?.label || timezone;
+  };
+
   // Format date/time for display
   const formatDateTime = (dateString: string): string => {
     try {
@@ -223,13 +361,23 @@ const BackdatedAttendancePage = () => {
     }
   };
 
+  // Update timezone in all entries when shift timezone changes
+  useEffect(() => {
+    if (shiftTimezone) {
+      setAttendanceEntries(prev => prev.map(entry => ({
+        ...entry,
+        timezone: shiftTimezone
+      })));
+    }
+  }, [shiftTimezone]);
+
   // Add new entry
   const addEntry = () => {
     setAttendanceEntries([...attendanceEntries, {
       date: '',
       punchInTime: '',
       punchOutTime: '',
-      timezone: 'Asia/Kolkata'
+      timezone: shiftTimezone
     }]);
   };
 
@@ -380,7 +528,7 @@ const BackdatedAttendancePage = () => {
           date: dateISO,
           punchIn: punchInISO,
           punchOut: punchOutISO,
-          timezone: entry.timezone || 'Asia/Kolkata'
+          timezone: entry.timezone || shiftTimezone
         };
       });
 
@@ -401,7 +549,7 @@ const BackdatedAttendancePage = () => {
         date: '',
         punchInTime: '',
         punchOutTime: '',
-        timezone: 'Asia/Kolkata'
+        timezone: shiftTimezone
       }]);
       setNotes('');
 
@@ -573,7 +721,7 @@ const BackdatedAttendancePage = () => {
         const date = row['Date (YYYY-MM-DD)'] || row['Date'] || row['date'] || row['DATE'];
         const punchInTime = row['Punch In Time (HH:MM)'] || row['Punch In Time'] || row['Punch In'] || row['punchInTime'] || row['PunchInTime'] || row['PUNCH_IN_TIME'];
         const punchOutTime = row['Punch Out Time (HH:MM)'] || row['Punch Out Time'] || row['Punch Out'] || row['punchOutTime'] || row['PunchOutTime'] || row['PUNCH_OUT_TIME'] || '';
-        const timezone = row['Timezone'] || row['timezone'] || row['TIMEZONE'] || 'Asia/Kolkata';
+        const timezone = row['Timezone'] || row['timezone'] || row['TIMEZONE'] || shiftTimezone;
         const notes = row['Notes (Optional)'] || row['Notes'] || row['notes'] || row['NOTES'] || '';
 
         // Validate required fields
@@ -701,7 +849,7 @@ const BackdatedAttendancePage = () => {
           punchInTime: formattedPunchIn,
           punchOutTime: formattedPunchOut,
           notes: notes || '',
-          timezone: timezone || 'Asia/Kolkata'
+          timezone: timezone || shiftTimezone
         });
       });
 
@@ -748,7 +896,7 @@ const BackdatedAttendancePage = () => {
             date: dateISO,
             punchIn: punchInISO,
             punchOut: punchOutISO,
-            timezone: entry.timezone || 'Asia/Kolkata'
+            timezone: entry.timezone || shiftTimezone
           };
         });
 
@@ -944,17 +1092,14 @@ const BackdatedAttendancePage = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Timezone
                     </label>
-                    <select
-                      value={entry.timezone}
-                      onChange={(e) => updateEntry(index, 'timezone', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-                    >
-                      <option value="Asia/Kolkata">Asia/Kolkata (IST)</option>
-                      <option value="UTC">UTC</option>
-                      <option value="America/New_York">America/New_York (EST)</option>
-                      <option value="America/Los_Angeles">America/Los_Angeles (PST)</option>
-                      <option value="Europe/London">Europe/London (GMT)</option>
-                    </select>
+                    <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-700">
+                      {getTimezoneLabel(entry.timezone)}
+                    </div>
+                    {shift?.timezone && (
+                      <p className="mt-1 text-xs text-gray-500">
+                        Timezone from shift: {getTimezoneLabel(shift.timezone)}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -1044,7 +1189,7 @@ const BackdatedAttendancePage = () => {
                     date: '',
                     punchInTime: '',
                     punchOutTime: '',
-                    timezone: 'Asia/Kolkata'
+                    timezone: shiftTimezone
                   }]);
                   setNotes('');
                 }}

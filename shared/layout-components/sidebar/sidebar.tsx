@@ -642,7 +642,8 @@ const Sidebar = ({ local_varaiable, ThemeChanger }: any) => {
 				onMouseLeave={() => Outhover()}>
 				<div className="main-sidebar-header">
 					<Link href="/candidates" className="header-logo">
-						<img src='/assets/images/company-logos/logo.jpeg' alt="logo" className="" />
+						<img src='/assets/images/company-logos/logo.jpeg' alt="logo" className="desktop-logo max-w-full h-auto" />
+						<img src='/assets/images/company-logos/logo.jpeg' alt="logo" className="toggle-logo max-w-full h-auto object-contain" />
 					</Link>
 				</div>
 

@@ -1293,7 +1293,17 @@ const Candidates = () => {
         { value: 'America/Chicago', label: `${getGMTOffset('America/Chicago')} Central Time (US & Canada)` },
         { value: 'America/Denver', label: `${getGMTOffset('America/Denver')} Mountain Time (US & Canada)` },
         { value: 'America/Los_Angeles', label: `${getGMTOffset('America/Los_Angeles')} Pacific Time (US & Canada)` },
+        { value: 'Europe/London', label: `${getGMTOffset('Europe/London')} UK Time` },
+        { value: 'Europe/Paris', label: `${getGMTOffset('Europe/Paris')} Central European Time` },
+        { value: 'Asia/Dubai', label: `${getGMTOffset('Asia/Dubai')} Gulf Standard Time` },
+        { value: 'Asia/Singapore', label: `${getGMTOffset('Asia/Singapore')} Singapore Time` },
     ];
+
+    // Get formatted timezone label
+    const getTimezoneLabel = (timezone: string): string => {
+        const timezoneOption = timezones.find(tz => tz.value === timezone);
+        return timezoneOption?.label || timezone;
+    };
 
     // Generate and download Excel template
     const downloadExcelTemplate = () => {
@@ -1367,7 +1377,7 @@ const Candidates = () => {
                 const date = row['Date (YYYY-MM-DD)'] || row['Date'] || row['date'] || row['DATE'];
                 const punchInTime = row['Punch In Time (HH:MM)'] || row['Punch In Time'] || row['Punch In'] || row['punchInTime'] || row['PunchInTime'] || row['PUNCH_IN_TIME'];
                 const punchOutTime = row['Punch Out Time (HH:MM)'] || row['Punch Out Time'] || row['Punch Out'] || row['punchOutTime'] || row['PunchOutTime'] || row['PUNCH_OUT_TIME'];
-                const timezone = row['Timezone'] || row['timezone'] || row['TIMEZONE'] || 'UTC';
+                const timezone = row['Timezone'] || row['timezone'] || row['TIMEZONE'] || getShiftTimezone();
                 const notes = row['Notes (Optional)'] || row['Notes'] || row['notes'] || row['NOTES'] || '';
 
                 // Validate required fields
@@ -1482,7 +1492,7 @@ const Candidates = () => {
                     punchInTime: formattedPunchIn,
                     punchOutTime: formattedPunchOut,
                     notes: notes || '',
-                    timezone: timezone || 'UTC'
+                    timezone: timezone || getShiftTimezone()
                 });
             });
 
@@ -1527,9 +1537,24 @@ const Candidates = () => {
         }
     };
 
+    // Get shift timezone or fallback to UTC
+    const getShiftTimezone = (): string => {
+        return shiftData?.timezone || 'UTC';
+    };
+
+    // Update all entries timezone when shift timezone changes
+    useEffect(() => {
+        if (shiftData?.timezone && backDateEntries.length > 0) {
+            setBackDateEntries(prev => prev.map(entry => ({
+                ...entry,
+                timezone: shiftData.timezone
+            })));
+        }
+    }, [shiftData?.timezone]);
+
     // Back-date attendance handlers
     const addBackDateEntry = () => {
-        setBackDateEntries([...backDateEntries, { date: '', punchInTime: '', punchOutTime: '', notes: '', timezone: 'UTC' }]);
+        setBackDateEntries([...backDateEntries, { date: '', punchInTime: '', punchOutTime: '', notes: '', timezone: getShiftTimezone() }]);
     };
 
     const removeBackDateEntry = (index: number) => {
@@ -1675,7 +1700,8 @@ const Candidates = () => {
             
             // Close modal and reset form
             setShowBackDateAttendanceModal(false);
-            setBackDateEntries([{ date: '', punchInTime: '', punchOutTime: '', notes: '', timezone: 'UTC' }]);
+            const shiftTimezone = getShiftTimezone();
+            setBackDateEntries([{ date: '', punchInTime: '', punchOutTime: '', notes: '', timezone: shiftTimezone }]);
         } catch (error: any) {
             console.error('Error adding back-dated attendance:', error);
             await Swal.fire({
@@ -4198,7 +4224,8 @@ const Candidates = () => {
                                         {userRole === 'admin' && (
                                             <button
                                                 onClick={() => {
-                                                    setBackDateEntries([{ date: '', punchInTime: '', punchOutTime: '', notes: '', timezone: 'UTC' }]);
+                                                    const shiftTimezone = shiftData?.timezone || 'UTC';
+                                                    setBackDateEntries([{ date: '', punchInTime: '', punchOutTime: '', notes: '', timezone: shiftTimezone }]);
                                                     setShowBackDateAttendanceModal(true);
                                                 }}
                                                 className="px-4 py-2 bg-primary text-white rounded-lg hover:opacity-90 transition-colors text-sm font-medium flex items-center gap-2"
@@ -4814,17 +4841,14 @@ const Candidates = () => {
                                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                                         Timezone
                                                     </label>
-                                                    <select
-                                                        value={entry.timezone}
-                                                        onChange={(e) => updateBackDateEntry(index, 'timezone', e.target.value)}
-                                                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent dark:bg-bodydark dark:text-white"
-                                                    >
-                                                        {timezones.map((tz) => (
-                                                            <option key={tz.value} value={tz.value}>
-                                                                {tz.label}
-                                                            </option>
-                                                        ))}
-                                                    </select>
+                                                    <div className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                                                        {getTimezoneLabel(entry.timezone)}
+                                                    </div>
+                                                    {shiftData?.timezone && (
+                                                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                                            Timezone from shift: {getTimezoneLabel(shiftData.timezone)}
+                                                        </p>
+                                                    )}
                                                 </div>
 
                                                 {/* Punch In Time */}
@@ -4888,7 +4912,8 @@ const Candidates = () => {
                                 <button
                                     onClick={() => {
                                         setShowBackDateAttendanceModal(false);
-                                        setBackDateEntries([{ date: '', punchInTime: '', punchOutTime: '', notes: '', timezone: 'UTC' }]);
+                                        const shiftTimezone = shiftData?.timezone || 'UTC';
+                                        setBackDateEntries([{ date: '', punchInTime: '', punchOutTime: '', notes: '', timezone: shiftTimezone }]);
                                         if (excelFileInputRef.current) {
                                             excelFileInputRef.current.value = '';
                                         }

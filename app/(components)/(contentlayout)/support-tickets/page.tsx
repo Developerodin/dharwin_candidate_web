@@ -1134,7 +1134,7 @@ const SupportTickets = () => {
             {totalResults} {totalResults === 1 ? 'ticket' : 'tickets'} found
           </p>
         </div>
-        {canAccessButton(ButtonPermissions.TICKETS_CREATE, navigation) && (
+        {(canAccessButton(ButtonPermissions.TICKETS_CREATE, navigation) || userRole === 'user') && (
           <button
             onClick={openCreateModal}
             className="inline-flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:opacity-90 transition-colors"
@@ -1342,7 +1342,7 @@ const SupportTickets = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <div className="flex items-center justify-center gap-1">
-                          {canView && canAccessButton(ButtonPermissions.TICKETS_VIEW_DETAILS, navigation) && (
+                          {canView && (canAccessButton(ButtonPermissions.TICKETS_VIEW_DETAILS, navigation) || userRole === 'user') && (
                             <button
                               onClick={() => openTicketModal(ticket)}
                               className="ti-btn ti-btn-icon ti-btn-wave !gap-0 !m-0 !h-[1.75rem] !w-[1.75rem] text-[0.8rem] bg-success/10 text-success hover:bg-success hover:text-white hover:border-success"
