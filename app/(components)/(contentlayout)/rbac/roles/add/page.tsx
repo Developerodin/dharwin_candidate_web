@@ -87,6 +87,7 @@ const defaultNavigationStructure: NavigationPermissions = {
         "Manage Week Off": false,
         "Holidays List": false,
         "Assign Holidays": false,
+        "Candidate Groups": false,
         "Manage Shifts": false,
         "Assign Shift": false,
         "Assign Leave": false,

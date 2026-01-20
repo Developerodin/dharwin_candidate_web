@@ -25,6 +25,7 @@ const routeToNavigationMap: { [route: string]: string[] } = {
   "/master/attendance/week-off": ["Settings", "Master", "Attendance", "Manage Week Off"],
   "/master/attendance/holidays": ["Settings", "Master", "Attendance", "Holidays List"],
   "/master/attendance/assign-holidays": ["Settings", "Master", "Attendance", "Assign Holidays"],
+  "/master/attendance/candidate-groups": ["Settings", "Master", "Attendance", "Candidate Groups"],
   "/master/attendance/manage-shift": ["Settings", "Master", "Attendance", "Manage Shifts"],
   "/master/attendance/assign-shift": ["Settings", "Master", "Attendance", "Assign Shift"],
   "/master/attendance/assign-leave": ["Settings", "Master", "Attendance", "Assign Leave"],
@@ -204,6 +205,9 @@ export const isRouteAllowed = (
     }
     if (normalizedRoute.includes('/assign-holidays')) {
       return checkNavigationPermission(navigation, ["Settings", "Master", "Attendance", "Assign Holidays"]);
+    }
+    if (normalizedRoute.includes('/candidate-groups')) {
+      return checkNavigationPermission(navigation, ["Settings", "Master", "Attendance", "Candidate Groups"]);
     }
     if (normalizedRoute.includes('/manage-shift')) {
       return checkNavigationPermission(navigation, ["Settings", "Master", "Attendance", "Manage Shifts"]);

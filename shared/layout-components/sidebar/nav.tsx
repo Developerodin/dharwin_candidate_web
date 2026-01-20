@@ -220,6 +220,7 @@ export const useMenuItems = () => {
           "/master/attendance/week-off",
           "/master/attendance/holidays",
           "/master/attendance/assign-holidays",
+          "/master/attendance/candidate-groups",
           "/master/attendance/manage-shift",
           "/master/attendance/assign-shift",
           "/master/attendance/assign-leave",
@@ -490,6 +491,17 @@ export const useMenuItems = () => {
                 type: "link",
                 active: true,
                 selected: isRouteMatch("/master/attendance/assign-holidays", pathname ?? ""),
+                dirchange: false,
+              });
+            }
+            
+            if (!navigation || checkNavigationPermission(navigation, ["Settings", "Master", "Attendance", "Candidate Groups"])) {
+              attendanceChildren.push({
+                path: "/master/attendance/candidate-groups",
+                title: "Candidate Groups",
+                type: "link",
+                active: true,
+                selected: isRouteMatch("/master/attendance/candidate-groups", pathname ?? ""),
                 dirchange: false,
               });
             }

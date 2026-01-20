@@ -364,6 +364,22 @@ export const assignHolidaysToCandidates = async (candidateIds: string[], holiday
 };
 
 /**
+ * Remove holidays from multiple candidates
+ * @param candidateIds - Array of candidate MongoDB ObjectIds
+ * @param holidayIds - Array of holiday MongoDB ObjectIds
+ * @returns Promise with removal results
+ */
+export const removeHolidaysFromCandidates = async (candidateIds: string[], holidayIds: string[]): Promise<any> => {
+  const response = await api.delete(`${Attendance_API}/holidays`, {
+    data: {
+      candidateIds,
+      holidayIds
+    }
+  });
+  return response.data;
+};
+
+/**
  * Assign shift to multiple candidates
  * @param candidateIds - Array of candidate MongoDB ObjectIds
  * @param shiftId - Shift ObjectId from the shifts API

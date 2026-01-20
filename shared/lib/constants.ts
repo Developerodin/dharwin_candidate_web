@@ -105,3 +105,6 @@ export const Leave_Requests_API = `${BASE_API_URL}/leave-requests`;
 
 // Backdated Attendance Requests API
 export const Backdated_Attendance_Requests_API = `${BASE_API_URL}/backdated-attendance-requests`;
+
+// Candidate Groups API
+export const Candidate_Groups_API = `${BASE_API_URL}/candidate-groups`;
