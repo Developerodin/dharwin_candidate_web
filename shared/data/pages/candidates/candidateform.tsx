@@ -169,6 +169,11 @@ const getFileThumbnail = (file: File) => {
 
 // Function to get clickable document thumbnail for existing files (JPG, JPEG, PNG, PDF only)
 const getExistingFileThumbnail = (url: string, label: string) => {
+  // Append token to API endpoint URLs for direct browser access
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const isApiEndpoint = url && (url.includes('/candidates/documents/') || url.includes('/download'));
+  const finalUrl = isApiEndpoint && token && !url.includes('?token=') ? `${url}?token=${token}` : url;
+  
   const fileName = url.toLowerCase();
   const docLabel = (label || '').toLowerCase();
   
@@ -176,14 +181,14 @@ const getExistingFileThumbnail = (url: string, label: string) => {
   if (fileName.includes('.pdf') || docLabel.includes('pdf')) {
     return (
       <a
-        href={url}
+        href={finalUrl}
         target="_blank"
         rel="noopener noreferrer"
         className="w-12 h-16 rounded overflow-hidden border bg-white shadow-sm block hover:shadow-md transition-shadow cursor-pointer relative"
         title="Click to view PDF"
       >
         <iframe
-          src={url + '#toolbar=0&navpanes=0&scrollbar=0&view=FitH'}
+          src={finalUrl + '#toolbar=0&navpanes=0&scrollbar=0&view=FitH'}
           className="w-full h-full border-0 pointer-events-none"
           title="PDF Preview"
           onError={(e) => {
@@ -207,14 +212,14 @@ const getExistingFileThumbnail = (url: string, label: string) => {
   if (fileName.includes('.jpg') || fileName.includes('.jpeg') || fileName.includes('.png')) {
     return (
       <a
-        href={url}
+        href={finalUrl}
         target="_blank"
         rel="noopener noreferrer"
         className="w-12 h-16 rounded overflow-hidden border bg-white shadow-sm block hover:shadow-md transition-shadow cursor-pointer relative"
         title="Click to view image"
       >
         <img 
-          src={url} 
+          src={finalUrl} 
           alt="Document Preview" 
           className="w-full h-full object-cover"
           onError={(e) => {

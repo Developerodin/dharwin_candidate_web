@@ -6,7 +6,7 @@ const Select = dynamic(() => import("react-select"), {ssr : false});
 import dynamic from 'next/dynamic';
 import Swal from "sweetalert2";
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { fetchAllCandidates, deleteCandidate, addCandidateSalarySlips, uploadDocuments, fetchCandidateDocuments, verifyDocument, shareCandidate, getAttendanceByCandidate, resendEmailVerification, addNoteToCandidate, addFeedbackToCandidate, fetchCandidateById, fetchUserById, punchInAttendance, punchOutAttendance, updateCandidateJoiningDate, updateCandidateResignDate } from '@/shared/lib/candidates';
+import { fetchAllCandidates, deleteCandidate, addCandidateSalarySlips, uploadDocuments, fetchCandidateDocuments, verifyDocument, shareCandidate, getAttendanceByCandidate, resendEmailVerification, addNoteToCandidate, addFeedbackToCandidate, fetchCandidateById, fetchUserById, punchInAttendance, punchOutAttendance, updateCandidateJoiningDate, updateCandidateResignDate, getDocumentDownloadUrl } from '@/shared/lib/candidates';
 import { getAllHolidays } from '@/shared/lib/holidays';
 import { getShiftById } from '@/shared/lib/shifts';
 import * as XLSX from 'xlsx';
@@ -1838,6 +1838,25 @@ const Candidates = () => {
     }, [showAttendanceModal, selectedCandidateForAttendance?.shift]);
 
     // Function to handle document verification
+    // Handle document view/download using new API endpoint
+    const handleDocumentView = async (candidateId: string, documentIndex: number, e?: React.MouseEvent) => {
+        if (e) {
+            e.preventDefault();
+        }
+        
+        try {
+            const documentData = await getDocumentDownloadUrl(candidateId, documentIndex);
+            window.open(documentData.url, '_blank');
+        } catch (error: any) {
+            console.error('Failed to get document URL:', error);
+            await Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: error?.response?.data?.message || 'Failed to open document. Please try again.',
+            });
+        }
+    };
+
     const handleDocumentVerification = async (doc: any, index: number, status: number) => {
         try {
             const candidateId = selectedCandidateForDocuments?.id || selectedCandidateForDocuments?._id;
@@ -3113,65 +3132,70 @@ const Candidates = () => {
                                             <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Documents</h4>
                                             {Array.isArray(selectedCandidate?.documents) && selectedCandidate.documents.length > 0 ? (
                                                 <div className="space-y-3">
-                                                    {selectedCandidate.documents.map((doc: any, index: number) => (
-                                                        <div key={index} className="flex items-center justify-between p-3 border border-gray-200 dark:border-gray-700 rounded-lg">
-                                                            <div className="flex items-center flex-1 min-w-0">
-                                                                <div className="flex-shrink-0 me-3">
-                                                                    {doc?.mimeType?.includes('image') ? (
-                                                                        <div className="w-10 h-10 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
-                                                                            <img 
-                                                                                src={doc?.url || doc?.documentUrl} 
-                                                                                alt={doc?.label || doc?.originalName}
-                                                                                className="w-full h-full object-cover"
-                                                                                onError={(e) => {
-                                                                                    const target = e.target as HTMLImageElement;
-                                                                                    target.style.display = 'none';
-                                                                                    target.nextElementSibling?.classList.remove('hidden');
-                                                                                }}
-                                                                            />
-                                                                            <div className="w-full h-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center hidden">
-                                                                                <i className="ri-image-line text-xl text-gray-500"></i>
+                                                    {selectedCandidate.documents.map((doc: any, index: number) => {
+                                                        const candidateId = selectedCandidate?.id || selectedCandidate?._id;
+                                                        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+                                                        const baseApiUrl = candidateId ? `${process.env.NEXT_PUBLIC_API_URL || 'https://crm-apis.dharwinbusinesssolutions.com/v1'}/candidates/documents/${candidateId}/${index}/download` : null;
+                                                        const documentApiUrl = baseApiUrl && token ? `${baseApiUrl}?token=${token}` : baseApiUrl;
+                                                        
+                                                        return (
+                                                            <div key={index} className="flex items-center justify-between p-3 border border-gray-200 dark:border-gray-700 rounded-lg">
+                                                                <div className="flex items-center flex-1 min-w-0">
+                                                                    <div className="flex-shrink-0 me-3">
+                                                                        {doc?.mimeType?.includes('image') ? (
+                                                                            <div className="w-10 h-10 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
+                                                                                <img 
+                                                                                    src={documentApiUrl || doc?.url || doc?.documentUrl} 
+                                                                                    alt={doc?.label || doc?.originalName}
+                                                                                    className="w-full h-full object-cover"
+                                                                                    onError={(e) => {
+                                                                                        const target = e.target as HTMLImageElement;
+                                                                                        target.style.display = 'none';
+                                                                                        target.nextElementSibling?.classList.remove('hidden');
+                                                                                    }}
+                                                                                />
+                                                                                <div className="w-full h-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center hidden">
+                                                                                    <i className="ri-image-line text-xl text-gray-500"></i>
+                                                                                </div>
                                                                             </div>
-                                                                        </div>
-                                                                    ) : (
-                                                                        <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center border border-gray-200 dark:border-gray-600">
-                                                                            {doc?.mimeType?.includes('pdf') ? (
-                                                                                <i className="ri-file-pdf-line text-xl text-red-500"></i>
-                                                                            ) : doc?.mimeType?.includes('word') || doc?.mimeType?.includes('document') ? (
-                                                                                <i className="ri-file-word-line text-xl text-blue-600"></i>
-                                                                            ) : doc?.mimeType?.includes('excel') || doc?.mimeType?.includes('spreadsheet') ? (
-                                                                                <i className="ri-file-excel-line text-xl text-green-600"></i>
-                                                                            ) : (
-                                                                                <i className="ri-file-line text-xl text-gray-500 dark:text-gray-400"></i>
-                                                                            )}
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                                <div className="flex-1 min-w-0">
-                                                                    <p className="font-medium text-gray-900 dark:text-white truncate">
-                                                                        {doc?.label || doc?.originalName || `Document ${index + 1}`}
-                                                                    </p>
-                                                                    <div className="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                                                        {doc?.size && (
-                                                                            <span>{(doc.size / 1024 / 1024).toFixed(2)} MB</span>
-                                                                        )}
-                                                                        {doc?.mimeType && (
-                                                                            <span>• {doc.mimeType.split('/')[1]?.toUpperCase()}</span>
+                                                                        ) : (
+                                                                            <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center border border-gray-200 dark:border-gray-600">
+                                                                                {doc?.mimeType?.includes('pdf') ? (
+                                                                                    <i className="ri-file-pdf-line text-xl text-red-500"></i>
+                                                                                ) : doc?.mimeType?.includes('word') || doc?.mimeType?.includes('document') ? (
+                                                                                    <i className="ri-file-word-line text-xl text-blue-600"></i>
+                                                                                ) : doc?.mimeType?.includes('excel') || doc?.mimeType?.includes('spreadsheet') ? (
+                                                                                    <i className="ri-file-excel-line text-xl text-green-600"></i>
+                                                                                ) : (
+                                                                                    <i className="ri-file-line text-xl text-gray-500 dark:text-gray-400"></i>
+                                                                                )}
+                                                                            </div>
                                                                         )}
                                                                     </div>
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <p className="font-medium text-gray-900 dark:text-white truncate">
+                                                                            {doc?.label || doc?.originalName || `Document ${index + 1}`}
+                                                                        </p>
+                                                                        <div className="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                                                            {doc?.size && (
+                                                                                <span>{(doc.size / 1024 / 1024).toFixed(2)} MB</span>
+                                                                            )}
+                                                                            {doc?.mimeType && (
+                                                                                <span>• {doc.mimeType.split('/')[1]?.toUpperCase()}</span>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
                                                                 </div>
+                                                                <button
+                                                                    onClick={() => candidateId && handleDocumentView(candidateId, index)}
+                                                                    className="ti-btn ti-btn-sm ti-btn-primary flex-shrink-0"
+                                                                >
+                                                                    <i className="ri-external-link-line me-1"></i>
+                                                                    View
+                                                                </button>
                                                             </div>
-                                                            <a
-                                                                href={doc?.url || doc?.documentUrl}
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                className="ti-btn ti-btn-sm ti-btn-primary flex-shrink-0"
-                                                            >
-                                                                <i className="ri-external-link-line me-1"></i>
-                                                                View
-                                                            </a>
-                                                        </div>
-                                                    ))}
+                                                        );
+                                                    })}
                                                 </div>
                                             ) : (
                                                 <div className="text-center py-8">
@@ -3190,40 +3214,50 @@ const Candidates = () => {
                                             <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Salary Slips</h4>
                                             {Array.isArray(selectedCandidate?.salarySlips) && selectedCandidate.salarySlips.length > 0 ? (
                                                 <div className="space-y-3">
-                                                    {selectedCandidate.salarySlips.map((slip: any, index: number) => (
-                                                        <div key={index} className="flex items-center justify-between p-3 border border-gray-200 dark:border-gray-700 rounded-lg">
-                                                            <div className="flex items-center flex-1 min-w-0">
-                                                                <div className="flex-shrink-0 me-3">
-                                                                    <div className="w-10 h-10 rounded-lg bg-green-100 dark:bg-green-900 flex items-center justify-center border border-green-200 dark:border-green-600">
-                                                                        <i className="ri-money-dollar-box-line text-xl text-green-600 dark:text-green-400"></i>
+                                                    {selectedCandidate.salarySlips.map((slip: any, index: number) => {
+                                                        const candidateId = selectedCandidate?.id || selectedCandidate?._id;
+                                                        const handleSalarySlipView = async (e?: React.MouseEvent) => {
+                                                            if (e) e.preventDefault();
+                                                            // Note: Salary slips may use a different API endpoint
+                                                            // For now, use direct URL as fallback
+                                                            if (slip?.documentUrl || slip?.url) {
+                                                                window.open(slip.documentUrl || slip.url, '_blank');
+                                                            }
+                                                        };
+                                                        
+                                                        return (
+                                                            <div key={index} className="flex items-center justify-between p-3 border border-gray-200 dark:border-gray-700 rounded-lg">
+                                                                <div className="flex items-center flex-1 min-w-0">
+                                                                    <div className="flex-shrink-0 me-3">
+                                                                        <div className="w-10 h-10 rounded-lg bg-green-100 dark:bg-green-900 flex items-center justify-center border border-green-200 dark:border-green-600">
+                                                                            <i className="ri-money-dollar-box-line text-xl text-green-600 dark:text-green-400"></i>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <p className="font-medium text-gray-900 dark:text-white">
+                                                                            {slip?.month} {slip?.year}
+                                                                        </p>
+                                                                        <div className="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                                                            <span>Salary Slip</span>
+                                                                            {slip?.size && (
+                                                                                <span>• {(slip.size / 1024 / 1024).toFixed(2)} MB</span>
+                                                                            )}
+                                                                            {slip?.mimeType && (
+                                                                                <span>• {slip.mimeType.split('/')[1]?.toUpperCase()}</span>
+                                                                            )}
+                                                                        </div>
                                                                     </div>
                                                                 </div>
-                                                                <div className="flex-1 min-w-0">
-                                                                    <p className="font-medium text-gray-900 dark:text-white">
-                                                                        {slip?.month} {slip?.year}
-                                                                    </p>
-                                                                    <div className="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                                                        <span>Salary Slip</span>
-                                                                        {slip?.size && (
-                                                                            <span>• {(slip.size / 1024 / 1024).toFixed(2)} MB</span>
-                                                                        )}
-                                                                        {slip?.mimeType && (
-                                                                            <span>• {slip.mimeType.split('/')[1]?.toUpperCase()}</span>
-                                                                        )}
-                                                                    </div>
-                                                                </div>
+                                                                <button
+                                                                    onClick={handleSalarySlipView}
+                                                                    className="ti-btn ti-btn-sm ti-btn-primary flex-shrink-0"
+                                                                >
+                                                                    <i className="ri-external-link-line me-1"></i>
+                                                                    View
+                                                                </button>
                                                             </div>
-                                                            <a
-                                                                href={slip?.documentUrl || slip?.url}
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                className="ti-btn ti-btn-sm ti-btn-primary flex-shrink-0"
-                                                            >
-                                                                <i className="ri-external-link-line me-1"></i>
-                                                                View
-                                                            </a>
-                                                        </div>
-                                                    ))}
+                                                        );
+                                                    })}
                                                 </div>
                                             ) : (
                                                 <div className="text-center py-8">
@@ -3979,62 +4013,75 @@ const Candidates = () => {
                                     <div className="space-y-3 sm:space-y-4">
                                         <h4 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-3 sm:mb-4">Candidate Documents ({candidateDocuments.length})</h4>
                                         <div className="space-y-2 sm:space-y-3">
-                                            {candidateDocuments.map((doc: any, index: number) => (
-                                                <div key={index} className="flex items-center justify-between p-2 sm:p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                                                    <div className="flex items-center flex-1 min-w-0">
-                                                        <div className="flex-shrink-0 me-2 sm:me-3">
-                                                            {doc?.mimeType?.includes('image') ? (
-                                                                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
-                                                                    <img 
-                                                                        src={doc?.url || doc?.documentUrl} 
-                                                                        alt={doc?.label || doc?.originalName}
-                                                                        className="w-full h-full object-cover"
-                                                                        onError={(e) => {
-                                                                            const target = e.target as HTMLImageElement;
-                                                                            target.style.display = 'none';
-                                                                            target.nextElementSibling?.classList.remove('hidden');
-                                                                        }}
-                                                                    />
-                                                                    <div className="w-full h-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center hidden">
-                                                                        <i className="ri-image-line text-xl text-gray-500"></i>
+                                            {candidateDocuments.map((doc: any, index: number) => {
+                                                const candidateId = selectedCandidateForDocuments?.id || selectedCandidateForDocuments?._id;
+                                                const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+                                                const baseApiUrl = candidateId ? `${process.env.NEXT_PUBLIC_API_URL || 'https://crm-apis.dharwinbusinesssolutions.com/v1'}/candidates/documents/${candidateId}/${index}/download` : null;
+                                                const documentApiUrl = baseApiUrl && token ? `${baseApiUrl}?token=${token}` : baseApiUrl;
+                                                
+                                                return (
+                                                    <div key={index} className="flex items-center justify-between p-2 sm:p-3 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                                                        <div className="flex items-center flex-1 min-w-0">
+                                                            <div className="flex-shrink-0 me-2 sm:me-3">
+                                                                {doc?.mimeType?.includes('image') ? (
+                                                                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
+                                                                        <img 
+                                                                            src={documentApiUrl || doc?.url || doc?.documentUrl} 
+                                                                            alt={doc?.label || doc?.originalName}
+                                                                            className="w-full h-full object-cover"
+                                                                            onError={(e) => {
+                                                                                const target = e.target as HTMLImageElement;
+                                                                                target.style.display = 'none';
+                                                                                target.nextElementSibling?.classList.remove('hidden');
+                                                                            }}
+                                                                        />
+                                                                        <div className="w-full h-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center hidden">
+                                                                            <i className="ri-image-line text-xl text-gray-500"></i>
+                                                                        </div>
                                                                     </div>
-                                                                </div>
-                                                            ) : (
-                                                                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center border border-gray-200 dark:border-gray-600">
-                                                                    {doc?.mimeType?.includes('pdf') ? (
-                                                                        <i className="ri-file-pdf-line text-xl sm:text-2xl text-red-500"></i>
-                                                                    ) : doc?.mimeType?.includes('word') || doc?.mimeType?.includes('document') ? (
-                                                                        <i className="ri-file-word-line text-xl sm:text-2xl text-blue-600"></i>
-                                                                    ) : doc?.mimeType?.includes('excel') || doc?.mimeType?.includes('spreadsheet') ? (
-                                                                        <i className="ri-file-excel-line text-xl sm:text-2xl text-green-600"></i>
-                                                                    ) : (
-                                                                        <i className="ri-file-line text-xl sm:text-2xl text-gray-500 dark:text-gray-400"></i>
-                                                                    )}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                        <div className="flex-1 min-w-0">
-                                                            <p className="font-medium text-gray-900 dark:text-white truncate text-xs sm:text-sm">
-                                                                {doc?.label || doc?.originalName || `Document ${index + 1}`}
-                                                            </p>
-                                                            <div className="flex items-center space-x-1 sm:space-x-2 text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                                                {doc?.status !== undefined && (
-                                                                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs ${
-                                                                        doc.status === 0 ? 'bg-yellow-100 text-yellow-800' : 
-                                                                        doc.status === 1 ? 'bg-green-100 text-green-800' : 
-                                                                        'bg-red-100 text-red-800'
-                                                                    }`}>
-                                                                        {doc.status === 0 ? 'Pending' : doc.status === 1 ? 'Verified' : 'Rejected'}
-                                                                    </span>
+                                                                ) : (
+                                                                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center border border-gray-200 dark:border-gray-600">
+                                                                        {doc?.mimeType?.includes('pdf') ? (
+                                                                            <i className="ri-file-pdf-line text-xl sm:text-2xl text-red-500"></i>
+                                                                        ) : doc?.mimeType?.includes('word') || doc?.mimeType?.includes('document') ? (
+                                                                            <i className="ri-file-word-line text-xl sm:text-2xl text-blue-600"></i>
+                                                                        ) : doc?.mimeType?.includes('excel') || doc?.mimeType?.includes('spreadsheet') ? (
+                                                                            <i className="ri-file-excel-line text-xl sm:text-2xl text-green-600"></i>
+                                                                        ) : (
+                                                                            <i className="ri-file-line text-xl sm:text-2xl text-gray-500 dark:text-gray-400"></i>
+                                                                        )}
+                                                                    </div>
                                                                 )}
                                                             </div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="font-medium text-gray-900 dark:text-white truncate text-xs sm:text-sm">
+                                                                    {doc?.label || doc?.originalName || `Document ${index + 1}`}
+                                                                </p>
+                                                                <div className="flex items-center space-x-1 sm:space-x-2 text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                                                    {doc?.status !== undefined && (
+                                                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs ${
+                                                                            doc.status === 0 ? 'bg-yellow-100 text-yellow-800' : 
+                                                                            doc.status === 1 ? 'bg-green-100 text-green-800' : 
+                                                                            'bg-red-100 text-red-800'
+                                                                        }`}>
+                                                                            {doc.status === 0 ? 'Pending' : doc.status === 1 ? 'Verified' : 'Rejected'}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                    <div className="flex items-center space-x-1 sm:space-x-2 flex-shrink-0">
-                                                        <button
-                                                            onClick={() => handleDocumentVerification(doc, index, 1)}
-                                                            className="ti-btn ti-btn-icon ti-btn-sm ti-btn-success !w-7 !h-7 sm:!w-8 sm:!h-8 !p-0"
-                                                            title="Verify document"
+                                                        <div className="flex items-center space-x-1 sm:space-x-2 flex-shrink-0">
+                                                            <button
+                                                                onClick={() => candidateId && handleDocumentView(candidateId, index)}
+                                                                className="ti-btn ti-btn-icon ti-btn-sm ti-btn-primary !w-7 !h-7 sm:!w-8 sm:!h-8 !p-0"
+                                                                title="View document"
+                                                            >
+                                                                <i className="ri-eye-line"></i>
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDocumentVerification(doc, index, 1)}
+                                                                className="ti-btn ti-btn-icon ti-btn-sm ti-btn-success !w-7 !h-7 sm:!w-8 sm:!h-8 !p-0"
+                                                                title="Verify document"
                                                         >
                                                             <i className="ri-check-line text-sm sm:text-base"></i>
                                                         </button>
@@ -4045,18 +4092,10 @@ const Candidates = () => {
                                                         >
                                                             <i className="ri-close-line text-sm sm:text-base"></i>
                                                         </button>
-                                                        <a
-                                                            href={doc?.url || doc?.documentUrl}
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                            className="ti-btn ti-btn-icon ti-btn-sm ti-btn-primary !w-7 !h-7 sm:!w-8 sm:!h-8 !p-0"
-                                                            title="View document"
-                                                        >
-                                                            <i className="ri-external-link-line text-sm sm:text-base"></i>
-                                                        </a>
                                                     </div>
                                                 </div>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
                                     </div>
                                 ) : (

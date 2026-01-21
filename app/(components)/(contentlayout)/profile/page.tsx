@@ -4,7 +4,7 @@ import Pageheader from '@/shared/layout-components/page-header/pageheader'
 import Seo from '@/shared/layout-components/seo/seo'
 import Link from 'next/link'
 import React, { Fragment, useEffect, useState, useCallback } from 'react'
-import { fetchAllCandidates, shareCandidate, punchInAttendance, punchOutAttendance, getPunchInOutStatus } from '@/shared/lib/candidates'
+import { fetchAllCandidates, shareCandidate, punchInAttendance, punchOutAttendance, getPunchInOutStatus, getDocumentDownloadUrl } from '@/shared/lib/candidates'
 import { getShiftById } from '@/shared/lib/shifts'
 import PerfectScrollbar from 'react-perfect-scrollbar';
 import 'react-perfect-scrollbar/dist/css/styles.css';
@@ -140,8 +140,8 @@ const profile = () => {
 
     console.log(profileData);
 
-    // Download function for documents
-    const handleDownload = async (url: string, filename: string) => {
+    // Download function for documents using new API
+    const handleDownload = async (candidateId: string, documentIndex: number, filename: string) => {
         try {
             // Show loading indicator
             const loadingToast = Swal.fire({
@@ -154,6 +154,10 @@ const profile = () => {
                 }
             });
 
+            // Get fresh presigned URL from API
+            const documentData = await getDocumentDownloadUrl(candidateId, documentIndex);
+            const url = documentData.url;
+            
             const response = await fetch(url);
             
             if (!response.ok) {
@@ -166,7 +170,7 @@ const profile = () => {
             // Create download link
             const link = document.createElement('a');
             link.href = downloadUrl;
-            link.download = filename || 'document';
+            link.download = filename || documentData.fileName || 'document';
             link.style.display = 'none';
             
             // Trigger download
@@ -186,7 +190,7 @@ const profile = () => {
                 showConfirmButton: false
             });
             
-        } catch (error) {
+        } catch (error: any) {
             console.error('Download failed:', error);
             
             // Close loading if still open
@@ -196,7 +200,7 @@ const profile = () => {
             await Swal.fire({
                 icon: 'error',
                 title: 'Download Failed',
-                text: 'Unable to download the file. Please try again or contact support if the problem persists.',
+                text: error?.response?.data?.message || 'Unable to download the file. Please try again or contact support if the problem persists.',
                 confirmButtonText: 'OK'
             });
         }
@@ -250,6 +254,11 @@ const profile = () => {
 
     // Function to get document thumbnail for profile documents (JPG, JPEG, PNG, PDF only)
     const getDocumentThumbnail = (url: string, label: string) => {
+        // Append token to API endpoint URLs for direct browser access
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+        const isApiEndpoint = url && (url.includes('/candidates/documents/') || url.includes('/download'));
+        const finalUrl = isApiEndpoint && token && !url.includes('?token=') ? `${url}?token=${token}` : url;
+        
         const fileName = url.toLowerCase();
         const docLabel = (label || '').toLowerCase();
         
@@ -257,14 +266,14 @@ const profile = () => {
         if (fileName.includes('.pdf') || docLabel.includes('pdf')) {
             return (
                 <a
-                    href={url}
+                    href={finalUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="w-12 h-16 rounded overflow-hidden border bg-white shadow-sm block hover:shadow-md transition-shadow cursor-pointer relative"
                     title="Click to view PDF"
                 >
                     <iframe
-                        src={url + '#toolbar=0&navpanes=0&scrollbar=0&view=FitH'}
+                        src={finalUrl + '#toolbar=0&navpanes=0&scrollbar=0&view=FitH'}
                         className="w-full h-full border-0 pointer-events-none"
                         title="PDF Preview"
                         onError={(e) => {
@@ -288,14 +297,14 @@ const profile = () => {
         if (fileName.includes('.jpg') || fileName.includes('.jpeg') || fileName.includes('.png')) {
             return (
                 <a
-                    href={url}
+                    href={finalUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="w-12 h-16 rounded overflow-hidden border bg-white shadow-sm block hover:shadow-md transition-shadow cursor-pointer relative"
                     title="Click to view image"
                 >
                     <img 
-                        src={url} 
+                        src={finalUrl} 
                         alt="Document Preview" 
                         className="w-full h-full object-cover"
                         onError={(e) => {
@@ -1426,43 +1435,50 @@ const profile = () => {
                                                             </thead>
                                                             <tbody>
                                                                 {Array.isArray(profileData?.documents) && profileData.documents.length ? (
-                                                                    profileData.documents.map((d: any, idx: number) => (
-                                                                        <tr key={idx} className="border border-defaultborder dark:border-defaultborder/10">
-                                                                            <td className="text-gray-600">
-                                                                                {d?.url || d?.documentUrl ? getDocumentThumbnail(d.url || d.documentUrl, d.label) : '-'}
-                                                                            </td>
-                                                                            <th scope="row" className="!font-semibold text-start">
-                                                                                {d?.label || 'Document'}
-                                                                            </th>
-                                                                            <td className="text-gray-600">
-                                                                                {d?.status !== undefined ? (
-                                                                                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                                                                                        d.status === 0 ? 'bg-yellow-100 text-yellow-800' : 
-                                                                                        d.status === 1 ? 'bg-green-100 text-green-800' : 
-                                                                                        'bg-red-100 text-red-800'
-                                                                                    }`}>
-                                                                                        {d.status === 0 ? 'Pending' : d.status === 1 ? 'Approved' : 'Rejected'}
-                                                                                    </span>
-                                                                                ) : (
-                                                                                    <span className="text-gray-400">-</span>
-                                                                                )}
-                                                                            </td>
-                                                                            <td className="text-gray-600">
-                                                                                {d?.url || d?.documentUrl ? (
-                                                                                    <div className="flex gap-2">
-                                                                                        <button 
-                                                                                            onClick={() => handleDownload(d.url || d.documentUrl, d.label || 'document')}
-                                                                                            className="text-green-600 inline-flex items-center hover:underline"
-                                                                                        >
-                                                                                            <i className="ri-download-line me-1 align-middle inline-block"></i>
-                                                                                        </button>
-                                                                                    </div>
-                                                                                ) : (
-                                                                                    '-'
-                                                                                )}
-                                                                            </td>
-                                                                        </tr>
-                                                                    ))
+                                                                    profileData.documents.map((d: any, idx: number) => {
+                                                                        const candidateId = profileData?.id || profileData?._id;
+                                                                        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+                                                                        const baseApiUrl = candidateId ? `${process.env.NEXT_PUBLIC_API_URL || 'https://crm-apis.dharwinbusinesssolutions.com/v1'}/candidates/documents/${candidateId}/${idx}/download` : null;
+                                                                        const documentApiUrl = baseApiUrl && token ? `${baseApiUrl}?token=${token}` : (baseApiUrl || d?.url || d?.documentUrl);
+                                                                        
+                                                                        return (
+                                                                            <tr key={idx} className="border border-defaultborder dark:border-defaultborder/10">
+                                                                                <td className="text-gray-600">
+                                                                                    {documentApiUrl ? getDocumentThumbnail(documentApiUrl, d.label) : '-'}
+                                                                                </td>
+                                                                                <th scope="row" className="!font-semibold text-start">
+                                                                                    {d?.label || 'Document'}
+                                                                                </th>
+                                                                                <td className="text-gray-600">
+                                                                                    {d?.status !== undefined ? (
+                                                                                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                                                                            d.status === 0 ? 'bg-yellow-100 text-yellow-800' : 
+                                                                                            d.status === 1 ? 'bg-green-100 text-green-800' : 
+                                                                                            'bg-red-100 text-red-800'
+                                                                                        }`}>
+                                                                                            {d.status === 0 ? 'Pending' : d.status === 1 ? 'Approved' : 'Rejected'}
+                                                                                        </span>
+                                                                                    ) : (
+                                                                                        <span className="text-gray-400">-</span>
+                                                                                    )}
+                                                                                </td>
+                                                                                <td className="text-gray-600">
+                                                                                    {candidateId ? (
+                                                                                        <div className="flex gap-2">
+                                                                                            <button 
+                                                                                                onClick={() => handleDownload(candidateId, idx, d.label || 'document')}
+                                                                                                className="text-green-600 inline-flex items-center hover:underline"
+                                                                                            >
+                                                                                                <i className="ri-download-line me-1 align-middle inline-block"></i>
+                                                                                            </button>
+                                                                                        </div>
+                                                                                    ) : (
+                                                                                        '-'
+                                                                                    )}
+                                                                                </td>
+                                                                            </tr>
+                                                                        );
+                                                                    })
                                                                 ) : (
                                                                     <tr className="border border-defaultborder dark:border-defaultborder/10">
                                                                         <td colSpan={4} className="text-[#8c9097] dark:text-white/50 text-center">No documents found.</td>
@@ -1488,33 +1504,42 @@ const profile = () => {
                                                             </thead>
                                                             <tbody>
                                                                 {Array.isArray(profileData?.salarySlips) && profileData.salarySlips.length ? (
-                                                                    profileData.salarySlips.map((slip: any, idx: number) => (
-                                                                        <tr key={idx} className="border border-defaultborder dark:border-defaultborder/10">
-                                                                            <td className="text-gray-600">
-                                                                                {slip?.documentUrl || slip?.url ? getDocumentThumbnail(slip.documentUrl || slip.url, `${slip.month} ${slip.year}`) : '-'}
-                                                                            </td>
-                                                                            <th scope="row" className="!font-semibold text-start">
-                                                                                {slip?.month || '-'}
-                                                                            </th>
-                                                                            <td className="text-gray-600">
-                                                                                {slip?.year || '-'}
-                                                                            </td>
-                                                                            <td className="text-gray-600">
-                                                                                {slip?.documentUrl || slip?.url ? (
-                                                                                    <div className="flex gap-2">
-                                                                                        <button 
-                                                                                            onClick={() => handleDownload(slip.documentUrl || slip.url, `${slip.month}_${slip.year}_salary_slip`)}
-                                                                                            className="text-green-600 inline-flex items-center hover:underline"
-                                                                                        >
-                                                                                            <i className="ri-download-line me-1 align-middle inline-block"></i>
-                                                                                        </button>
-                                                                                    </div>
-                                                                                ) : (
-                                                                                    '-'
-                                                                                )}
-                                                                            </td>
-                                                                        </tr>
-                                                                    ))
+                                                                    profileData.salarySlips.map((slip: any, idx: number) => {
+                                                                        const slipUrl = slip?.documentUrl || slip?.url;
+                                                                        
+                                                                        return (
+                                                                            <tr key={idx} className="border border-defaultborder dark:border-defaultborder/10">
+                                                                                <td className="text-gray-600">
+                                                                                    {slipUrl ? getDocumentThumbnail(slipUrl, `${slip.month} ${slip.year}`) : '-'}
+                                                                                </td>
+                                                                                <th scope="row" className="!font-semibold text-start">
+                                                                                    {slip?.month || '-'}
+                                                                                </th>
+                                                                                <td className="text-gray-600">
+                                                                                    {slip?.year || '-'}
+                                                                                </td>
+                                                                                <td className="text-gray-600">
+                                                                                    {slipUrl ? (
+                                                                                        <div className="flex gap-2">
+                                                                                            <button 
+                                                                                                onClick={() => {
+                                                                                                    // For salary slips, use direct URL for now
+                                                                                                    if (slipUrl) {
+                                                                                                        window.open(slipUrl, '_blank');
+                                                                                                    }
+                                                                                                }}
+                                                                                                className="text-green-600 inline-flex items-center hover:underline"
+                                                                                            >
+                                                                                                <i className="ri-download-line me-1 align-middle inline-block"></i>
+                                                                                            </button>
+                                                                                        </div>
+                                                                                    ) : (
+                                                                                        '-'
+                                                                                    )}
+                                                                                </td>
+                                                                            </tr>
+                                                                        );
+                                                                    })
                                                                 ) : (
                                                                     <tr className="border border-defaultborder dark:border-defaultborder/10">
                                                                         <td colSpan={4} className="text-[#8c9097] dark:text-white/50 text-center">No salary slips found.</td>

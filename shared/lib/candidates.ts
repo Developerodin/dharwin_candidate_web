@@ -908,3 +908,19 @@ export const cancelBackdatedAttendanceRequest = async (requestId: string): Promi
   const response = await api.post(`${Backdated_Attendance_Requests_API}/${requestId}/cancel`, {});
   return response.data;
 };
+
+/**
+ * Get document download URL using the new API endpoint
+ * This endpoint generates fresh presigned URLs on-demand
+ * @param candidateId - MongoDB ObjectId of the candidate
+ * @param documentIndex - Index of the document in the candidate's documents array (0-based)
+ * @returns Promise with document URL data: { url: string, fileName: string, mimeType: string, size: number }
+ */
+export const getDocumentDownloadUrl = async (candidateId: string, documentIndex: number): Promise<{ url: string; fileName: string; mimeType: string; size: number }> => {
+  const response = await api.get(`${Candidates_API}/documents/${candidateId}/${documentIndex}/download`, {
+    headers: {
+      'Accept': 'application/json'
+    }
+  });
+  return response.data.data;
+};
