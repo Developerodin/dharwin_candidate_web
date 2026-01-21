@@ -1383,26 +1383,104 @@ const profile = () => {
                                                         <div className="box-body">
                                                         <div>
                                                             {Array.isArray(profileData?.experiences) && profileData.experiences.length ? (
-                                                                profileData.experiences.map((e: any, idx: number) => (
-                                                                    <div key={idx} className="flex gap-x-3 relative group rounded-lg hover:bg-gray-100 dark:hover:bg-white/10">
-                                                                        <a className="absolute inset-0 z-[1]" href="#!"></a>
-                                                                        <div className="relative last:after:hidden after:absolute after:top-0 after:bottom-0 after:start-3.5 after:w-px after:-translate-x-[0.5px] after:bg-gray-200 dark:after:dark:bg-bodybg2 dark:group-hover:after:bg-bodybg/70">
-                                                                            <div className="relative z-10 size-7 flex justify-center items-center">
-                                                                                <div className="size-2 rounded-full bg-white border-2 border-gray-300 group-hover:border-gray-600 dark:group-hover:border-white dark:bg-bgdark dark:border-white/10"></div>
+                                                                profileData.experiences.map((e: any, idx: number) => {
+                                                                    // Helper function to parse date string as local date and format as DD/MM/YYYY
+                                                                    const formatDateLocal = (dateString: string): string => {
+                                                                        try {
+                                                                            if (!dateString || typeof dateString !== 'string') {
+                                                                                return '-';
+                                                                            }
+                                                                            
+                                                                            let year: number, month: number, day: number;
+                                                                            
+                                                                            // Handle ISO format with time (e.g., "2026-01-02T00:00:00.000Z")
+                                                                            if (dateString.includes('T')) {
+                                                                                const datePart = dateString.split('T')[0];
+                                                                                const parts = datePart.split('-').map(Number);
+                                                                                if (parts.length >= 3) {
+                                                                                    [year, month, day] = parts;
+                                                                                } else {
+                                                                                    return '-';
+                                                                                }
+                                                                            }
+                                                                            // Handle YYYY-MM-DD format (full date)
+                                                                            else if (dateString.match(/^\d{4}-\d{2}-\d{2}/)) {
+                                                                                const parts = dateString.split('-').map(Number);
+                                                                                [year, month, day] = parts;
+                                                                            }
+                                                                            // Handle YYYY-MM format (year-month only) - use first day of month
+                                                                            else if (dateString.match(/^\d{4}-\d{2}$/)) {
+                                                                                const parts = dateString.split('-').map(Number);
+                                                                                year = parts[0];
+                                                                                month = parts[1];
+                                                                                day = 1;
+                                                                            }
+                                                                            // Try standard Date parsing for other formats
+                                                                            else {
+                                                                                // First, try to extract date part if it looks like an ISO string
+                                                                                if (dateString.match(/\d{4}-\d{2}-\d{2}/)) {
+                                                                                    const dateMatch = dateString.match(/(\d{4})-(\d{2})-(\d{2})/);
+                                                                                    if (dateMatch) {
+                                                                                        year = parseInt(dateMatch[1], 10);
+                                                                                        month = parseInt(dateMatch[2], 10);
+                                                                                        day = parseInt(dateMatch[3], 10);
+                                                                                    } else {
+                                                                                        return '-';
+                                                                                    }
+                                                                                } else {
+                                                                                    // For other formats, parse as Date but extract UTC components to avoid timezone shift
+                                                                                    const date = new Date(dateString);
+                                                                                    if (isNaN(date.getTime())) {
+                                                                                        return '-';
+                                                                                    }
+                                                                                    // Use UTC methods to avoid timezone conversion issues
+                                                                                    day = date.getUTCDate();
+                                                                                    month = date.getUTCMonth() + 1; // getUTCMonth() returns 0-11
+                                                                                    year = date.getUTCFullYear();
+                                                                                }
+                                                                            }
+                                                                            
+                                                                            // Validate date components
+                                                                            if (!year || !month || !day || isNaN(year) || isNaN(month) || isNaN(day)) {
+                                                                                return '-';
+                                                                            }
+                                                                            
+                                                                            // Format as DD/MM/YYYY
+                                                                            const formattedDay = String(day).padStart(2, '0');
+                                                                            const formattedMonth = String(month).padStart(2, '0');
+                                                                            return `${formattedDay}/${formattedMonth}/${year}`;
+                                                                        } catch (error) {
+                                                                            // If all parsing fails, return '-'
+                                                                            return '-';
+                                                                        }
+                                                                    };
+                                                                    
+                                                                    return (
+                                                                        <div key={idx} className="flex gap-x-3 relative group rounded-lg hover:bg-gray-100 dark:hover:bg-white/10">
+                                                                            <a className="absolute inset-0 z-[1]" href="#!"></a>
+                                                                            <div className="relative last:after:hidden after:absolute after:top-0 after:bottom-0 after:start-3.5 after:w-px after:-translate-x-[0.5px] after:bg-gray-200 dark:after:dark:bg-bodybg2 dark:group-hover:after:bg-bodybg/70">
+                                                                                <div className="relative z-10 size-7 flex justify-center items-center">
+                                                                                    <div className="size-2 rounded-full bg-white border-2 border-gray-300 group-hover:border-gray-600 dark:group-hover:border-white dark:bg-bgdark dark:border-white/10"></div>
+                                                                                </div>
                                                                             </div>
-                                                                        </div>
-                                                                        <div className="grow pt-2 pb-8">
-                                                                            <p className="flex gap-x-1.5 font-semibold text-gray-800 dark:text-white">
-                                                                                {e?.company || '-'}
-                                                                            </p>
-                                                                            <p className="mt-1 text-sm text-gray-600 dark:text-white/70">
-                                                                                {e?.role || '-'}
-                                                                            </p>
-                                                                            <p className="mt-1 text-sm text-gray-600 dark:text-white/70">
-                                                                                {e?.startDate ? new Date(e.startDate).toLocaleDateString() : '-'}
-                                                                                {' '}-{' '}
-                                                                                {e?.endDate ? new Date(e.endDate).toLocaleDateString() : 'Present'}
-                                                                            </p>
+                                                                            <div className="grow pt-2 pb-8">
+                                                                                <p className="flex gap-x-1.5 font-semibold text-gray-800 dark:text-white">
+                                                                                    {e?.company || '-'}
+                                                                                </p>
+                                                                                <p className="mt-1 text-sm text-gray-600 dark:text-white/70">
+                                                                                    {e?.role || '-'}
+                                                                                </p>
+                                                                                <p className="mt-1 text-sm text-gray-600 dark:text-white/70">
+                                                                                    {e?.startDate ? (() => {
+                                                                                        const formatted = formatDateLocal(e.startDate);
+                                                                                        return formatted && formatted !== 'Invalid Date' ? formatted : '-';
+                                                                                    })() : '-'}
+                                                                                    {' '}-{' '}
+                                                                                    {e?.endDate ? (() => {
+                                                                                        const formatted = formatDateLocal(e.endDate);
+                                                                                        return formatted && formatted !== 'Invalid Date' ? formatted : 'Present';
+                                                                                    })() : 'Present'}
+                                                                                </p>
                                                                             {e?.description && (
                                                                                 <button type="button" className="mt-1 -ms-1 p-1 relative z-10 inline-flex items-center gap-x-2 text-xs rounded-lg border border-transparent text-gray-500 hover:bg-white hover:shadow-sm disabled:opacity-50 disabled:pointer-events-none dark:text-white/70 dark:hover:bg-bodybg dark:focus:outline-none dark:focus:ring-1 dark:focus:ring-white/10">
                                                                                     <img className="flex-shrink-0 size-4 rounded-full" src="/assets/images/faces/1.jpg" alt="Image Description"/>
@@ -1411,7 +1489,8 @@ const profile = () => {
                                                                             )}
                                                                         </div>
                                                                     </div>
-                                                                ))
+                                                                    );
+                                                                })
                                                             ) : (
                                                                 <div className="text-[#8c9097] dark:text-white/50">No experiences found.</div>
                                                             )}

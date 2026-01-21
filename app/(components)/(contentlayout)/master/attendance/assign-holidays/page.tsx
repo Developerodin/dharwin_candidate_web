@@ -839,87 +839,87 @@ const AssignHolidaysPage = () => {
               {/* Individual Assignment Tab */}
               {activeTab === 'individual' && (
                 <>
-                  {/* Candidate Selection */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Select Candidates <span className="text-red-500">*</span>
-                    </label>
-                    {loadingCandidates ? (
-                      <div className="flex items-center gap-2 text-gray-600">
-                        <i className="ri-loader-4-line animate-spin"></i>
-                        <span>Loading candidates...</span>
-                      </div>
-                    ) : (
-                      <Select
-                        isMulti
-                        options={candidateOptionsWithSelectAll}
-                        value={selectedCandidates}
-                        onChange={(selected: any) => {
-                          if (!selected || selected.length === 0) {
-                            setSelectedCandidates([]);
-                            return;
-                          }
-
-                          const hasSelectAll = selected.some(
-                            (opt: any) => opt.value === SELECT_ALL_CANDIDATES_VALUE
-                          );
-
-                          if (hasSelectAll) {
-                            // Toggle all candidates selection
-                            if (selectedCandidates.length === candidates.length) {
-                              setSelectedCandidates([]);
-                            } else {
-                              setSelectedCandidates(candidates);
-                            }
-                          } else {
-                            setSelectedCandidates(selected);
-                          }
-                        }}
-                        placeholder="Select one or more candidates..."
-                        closeMenuOnSelect={false}
-                        hideSelectedOptions={false}
-                        formatOptionLabel={(option: any, { context }: any) => {
-                          if (context === "menu") {
-                            const isAllOption = option.value === SELECT_ALL_CANDIDATES_VALUE;
-                            const isAllSelected =
-                              isAllOption &&
-                              candidates.length > 0 &&
-                              selectedCandidates.length === candidates.length;
-
-                            const isSelected =
-                              isAllOption
-                                ? isAllSelected
-                                : selectedCandidates.some(
-                                    (c: any) => c.value === option.value
-                                  );
-
-                            return (
-                              <div className="flex items-center gap-2">
-                                <input
-                                  type="checkbox"
-                                  readOnly
-                                  checked={isSelected}
-                                  className="w-4 h-4 text-primary border-gray-300 rounded"
-                                />
-                                <span>{option.label}</span>
-                              </div>
-                            );
-                          }
-
-                          return option.label;
-                        }}
-                        className="react-select-container"
-                        classNamePrefix="react-select"
-                        isClearable
-                        isSearchable
-                      />
-                    )}
-                    {selectedCandidates.length > 0 && (
-                      <p className="mt-2 text-sm text-gray-500">
-                        {selectedCandidates.length} candidate(s) selected
-                      </p>
-                    )}
+              {/* Candidate Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select Candidates <span className="text-red-500">*</span>
+                </label>
+                {loadingCandidates ? (
+                  <div className="flex items-center gap-2 text-gray-600">
+                    <i className="ri-loader-4-line animate-spin"></i>
+                    <span>Loading candidates...</span>
                   </div>
+                ) : (
+                  <Select
+                    isMulti
+                    options={candidateOptionsWithSelectAll}
+                    value={selectedCandidates}
+                    onChange={(selected: any) => {
+                      if (!selected || selected.length === 0) {
+                        setSelectedCandidates([]);
+                        return;
+                      }
+
+                      const hasSelectAll = selected.some(
+                        (opt: any) => opt.value === SELECT_ALL_CANDIDATES_VALUE
+                      );
+
+                      if (hasSelectAll) {
+                        // Toggle all candidates selection
+                        if (selectedCandidates.length === candidates.length) {
+                          setSelectedCandidates([]);
+                        } else {
+                          setSelectedCandidates(candidates);
+                        }
+                      } else {
+                        setSelectedCandidates(selected);
+                      }
+                    }}
+                    placeholder="Select one or more candidates..."
+                    closeMenuOnSelect={false}
+                    hideSelectedOptions={false}
+                    formatOptionLabel={(option: any, { context }: any) => {
+                      if (context === "menu") {
+                        const isAllOption = option.value === SELECT_ALL_CANDIDATES_VALUE;
+                        const isAllSelected =
+                          isAllOption &&
+                          candidates.length > 0 &&
+                          selectedCandidates.length === candidates.length;
+
+                        const isSelected =
+                          isAllOption
+                            ? isAllSelected
+                            : selectedCandidates.some(
+                                (c: any) => c.value === option.value
+                              );
+
+                        return (
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              readOnly
+                              checked={isSelected}
+                              className="w-4 h-4 text-primary border-gray-300 rounded"
+                            />
+                            <span>{option.label}</span>
+                          </div>
+                        );
+                      }
+
+                      return option.label;
+                    }}
+                    className="react-select-container"
+                    classNamePrefix="react-select"
+                    isClearable
+                    isSearchable
+                  />
+                )}
+                {selectedCandidates.length > 0 && (
+                  <p className="mt-2 text-sm text-gray-500">
+                    {selectedCandidates.length} candidate(s) selected
+                  </p>
+                )}
+              </div>
                 </>
               )}
 
@@ -1082,14 +1082,14 @@ const AssignHolidaysPage = () => {
                   <div className="flex-1">
                     <h4 className="font-medium text-blue-900 mb-1">How it works</h4>
                     {activeTab === 'individual' ? (
-                      <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
+                    <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
                         <li><strong>Assign:</strong> Select candidates and holidays, then click "Assign Holidays" to add them</li>
                         <li><strong>Remove:</strong> Select candidates and holidays, then click "Remove Holidays" to remove them</li>
                         <li>Holidays will be added/removed from each candidate's calendar</li>
                         <li>Attendance records with status "Holiday" will be created/deleted for each holiday date</li>
-                        <li>If attendance already exists for a date, it will be skipped (no duplicate records)</li>
+                      <li>If attendance already exists for a date, it will be skipped (no duplicate records)</li>
                         <li>Holiday IDs will be added/removed from each candidate's holidays array</li>
-                      </ul>
+                    </ul>
                     ) : (
                       <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
                         <li><strong>Assign:</strong> Select a group and holidays, then click "Assign Holidays to Group" to add them</li>
@@ -1243,8 +1243,8 @@ const AssignHolidaysPage = () => {
                             </div>
                           ))}
                         </div>
-                      </div>
-                    )}
+            </div>
+          )}
 
                     {removalResult.deletedRecords && removalResult.deletedRecords.length > 0 && (
                       <div className="mt-4 pt-4 border-t border-red-200">
