@@ -293,6 +293,7 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
   });
   const [profilePicture, setProfilePicture] = useState<File | null>(null);
   const [profilePicturePreview, setProfilePicturePreview] = useState<string>("");
+  const [profilePictureRemoved, setProfilePictureRemoved] = useState<boolean>(false);
 
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -330,6 +331,7 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
       }
       
       setProfilePicture(file);
+      setProfilePictureRemoved(false); // Reset removed flag when new picture is selected
       
       // Create preview URL
       const reader = new FileReader();
@@ -1681,6 +1683,7 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
           ? initialData.profilePicture 
           : initialData.profilePicture.url;
         setProfilePicturePreview(profilePictureUrl);
+        setProfilePictureRemoved(false); // Reset removed flag when loading existing data
       }
       if (Array.isArray(initialData.qualifications) && initialData.qualifications.length) {
         setEducations(initialData.qualifications.map((q: any) => ({
@@ -1879,6 +1882,26 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
         }
       }
       
+      // Preserve existing profile picture if editing and no new picture is selected
+      let finalProfilePicture: any = profilePictureData || null;
+      if (isEdit && !profilePictureData) {
+        if (profilePictureRemoved) {
+          // User explicitly removed the picture, send empty object to clear it
+          finalProfilePicture = {};
+        } else if (initialData?.profilePicture) {
+          // Preserve existing profile picture when updating without selecting a new one
+          finalProfilePicture = typeof initialData.profilePicture === 'string' 
+            ? { url: initialData.profilePicture }
+            : initialData.profilePicture;
+        } else {
+          // No existing picture, use empty object
+          finalProfilePicture = {};
+        }
+      } else if (!isEdit && !profilePictureData) {
+        // For new candidates, use empty object if no picture
+        finalProfilePicture = {};
+      }
+      
       const payload = {
         ...(isEdit ? {} : { role: "user" }), // Only include role for new candidates
         fullName: formData.fullName,
@@ -1886,7 +1909,7 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
         phoneNumber: formData.phoneNumber,
         countryCode: formData.countryCode,
         shortBio: formData.shortBio,
-        profilePicture: profilePictureData || {},
+        profilePicture: finalProfilePicture || {},
         sevisId: formData.sevisId,
         ead: formData.ead,
         degree: formData.degree,
@@ -2191,6 +2214,7 @@ export const Basicwizard = ({ initialData }: { initialData?: any }) => {
                     onClick={() => {
                       setProfilePicture(null);
                       setProfilePicturePreview("");
+                      setProfilePictureRemoved(true);
                     }}
                     className="ti-btn ti-btn-danger ti-btn-sm"
                   >
