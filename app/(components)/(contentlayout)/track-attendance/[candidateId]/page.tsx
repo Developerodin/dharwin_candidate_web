@@ -535,7 +535,8 @@ export default function CandidateAttendancePage() {
         }
       }
 
-      if (item.attendance && item.attendance.duration) {
+      // Only count duration for non-holiday, non-week-off days
+      if (item.attendance && item.attendance.duration && !isHoliday && !isWeekOff) {
         totalDuration += item.attendance.duration;
       }
     });
@@ -1091,7 +1092,7 @@ export default function CandidateAttendancePage() {
                                   {leaveType === 'sick' ? 'Sick Leave' : 'Casual Leave'}
                                 </span>
                               )}
-                              {isPresent && !isLeave && (
+                              {isPresent && !isLeave && !isHoliday && (
                                 <>
                                   <span className="text-xs font-semibold text-green-600 dark:text-green-400 mt-1">
                                     Present
@@ -1101,7 +1102,7 @@ export default function CandidateAttendancePage() {
                                   </span>
                                 </>
                               )}
-                              {hasAttendance && !isPresent && !isLeave && (
+                              {hasAttendance && !isPresent && !isLeave && !isHoliday && (
                                 <span className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
                                   Incomplete
                                 </span>

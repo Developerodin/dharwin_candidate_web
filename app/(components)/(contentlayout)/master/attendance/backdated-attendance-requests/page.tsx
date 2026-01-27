@@ -691,14 +691,21 @@ const BackdatedAttendanceRequestsPage = () => {
                               timezone: request.timezone
                             }] : []);
 
+                            // Safely resolve candidate name & email (handle null or ID-only cases)
+                            const candidateObj = typeof request.candidate === 'object' && request.candidate !== null
+                              ? request.candidate
+                              : null;
+                            const candidateName = candidateObj?.fullName || 'Unknown';
+                            const candidateEmail = candidateObj?.email || 'N/A';
+
                             return (
                               <>
                                 <div className="mb-3">
                                   <p className="text-sm text-gray-600 mb-1">
-                                    <strong>Candidate:</strong> {request.candidate.fullName}
+                                    <strong>Candidate:</strong> {candidateName}
                                   </p>
                                   <p className="text-sm text-gray-600 mb-1">
-                                    <strong>Email:</strong> {request.candidate.email}
+                                    <strong>Email:</strong> {candidateEmail}
                                   </p>
                                   {entries.length > 1 && (
                                     <p className="text-sm text-gray-600 mb-1">
