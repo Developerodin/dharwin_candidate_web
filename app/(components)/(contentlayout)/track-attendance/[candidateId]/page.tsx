@@ -1047,14 +1047,14 @@ export default function CandidateAttendancePage() {
                                   ? leaveType === 'sick' 
                                       ? 'bg-purple-50 dark:bg-purple-900/20'
                                       : 'bg-orange-50 dark:bg-orange-900/20'
-                                  : isPresent 
-                                      ? 'bg-green-50 dark:bg-green-900/20' 
-                                      : hasAttendance && !isPresent
-                                          ? 'bg-yellow-50 dark:bg-yellow-900/20'
-                                          : isHoliday
-                                              ? 'bg-emerald-50 dark:bg-emerald-900/20'
-                                              : isWeekOff
-                                                  ? 'bg-blue-50 dark:bg-blue-900/20'
+                                  : isWeekOff
+                                      ? 'bg-blue-50 dark:bg-blue-900/20'
+                                      : isHoliday
+                                          ? 'bg-emerald-50 dark:bg-emerald-900/20'
+                                          : isPresent 
+                                              ? 'bg-green-50 dark:bg-green-900/20' 
+                                              : hasAttendance && !isPresent
+                                                  ? 'bg-yellow-50 dark:bg-yellow-900/20'
                                                   : isPastDate
                                                       ? 'bg-red-50 dark:bg-red-900/20'
                                                       : 'bg-white dark:bg-gray-800'
@@ -1092,7 +1092,12 @@ export default function CandidateAttendancePage() {
                                   {leaveType === 'sick' ? 'Sick Leave' : 'Casual Leave'}
                                 </span>
                               )}
-                              {isPresent && !isLeave && !isHoliday && (
+                              {isWeekOff && !isHoliday && !isLeave && (
+                                <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 mt-1">
+                                  Week-Off
+                                </span>
+                              )}
+                              {!isWeekOff && isPresent && !isLeave && !isHoliday && (
                                 <>
                                   <span className="text-xs font-semibold text-green-600 dark:text-green-400 mt-1">
                                     Present
@@ -1102,19 +1107,14 @@ export default function CandidateAttendancePage() {
                                   </span>
                                 </>
                               )}
-                              {hasAttendance && !isPresent && !isLeave && !isHoliday && (
+                              {!isWeekOff && hasAttendance && !isPresent && !isLeave && !isHoliday && (
                                 <span className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
                                   Incomplete
                                 </span>
                               )}
-                              {isHoliday && !isLeave && (
+                              {!isWeekOff && isHoliday && !isLeave && (
                                 <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-1">
                                   {item.holiday?.title ? `${item.holiday.title} (Holiday)` : 'Holiday'}
-                                </span>
-                              )}
-                              {isWeekOff && !hasAttendance && !isHoliday && !isLeave && (
-                                <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 mt-1">
-                                  Week-Off
                                 </span>
                               )}
                               {!hasAttendance && !isWeekOff && !isHoliday && !isLeave && isPastDate && (
