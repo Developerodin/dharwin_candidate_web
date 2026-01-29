@@ -667,11 +667,13 @@ const Candidates = () => {
                 params.startDate = startDate;
                 params.endDate = endDate;
             } else {
-                // Otherwise, use year/month to calculate date range
+                // Otherwise, use year/month to calculate date range (full month including last day)
+                // Use local date components so timezone doesn't shift the calendar date (e.g. Dec 31 stays 2025-12-31)
                 const firstDay = new Date(attendanceYear, attendanceMonth, 1);
                 const lastDay = new Date(attendanceYear, attendanceMonth + 1, 0);
-                params.startDate = firstDay.toISOString().split('T')[0];
-                params.endDate = lastDay.toISOString().split('T')[0];
+                const pad = (n: number) => String(n).padStart(2, '0');
+                params.startDate = `${firstDay.getFullYear()}-${pad(firstDay.getMonth() + 1)}-${pad(firstDay.getDate())}`;
+                params.endDate = `${lastDay.getFullYear()}-${pad(lastDay.getMonth() + 1)}-${pad(lastDay.getDate())}`;
             }
             
             params.limit = 1000; // Get all records for the period
