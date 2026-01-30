@@ -1955,22 +1955,50 @@ const Candidates = () => {
         }
     };
 
-    // Export candidates function
+    // Export candidates function - fetches ALL candidates (respecting current filters), not just current page
     const exportCandidates = async () => {
         try {
+            // Fetch ALL candidates for export: same filters as list, single request with full count
+            const exportParams = {
+                ...buildFilterParams(),
+                page: 1,
+                limit: Math.max(totalResults || 1, 10000)
+            };
+            const data = await fetchAllCandidates(exportParams);
+            const exportData: any[] = data?.results ?? (Array.isArray(data) ? data : []);
+            if (exportData.length === 0) {
+                await Swal.fire({
+                    icon: 'info',
+                    title: 'No Data to Export',
+                    text: 'No candidates match the current filters.',
+                    confirmButtonText: 'OK'
+                });
+                return;
+            }
+
             // Dynamic import of xlsx library
             const XLSX = await import('xlsx');
             
             // Create workbook
             const workbook = XLSX.utils.book_new();
             
-            // 1. Personal Info Sheet
+            // Helper to format date for export (YYYY-MM-DD)
+            const formatExportDate = (val: any) => {
+                if (!val) return '';
+                const d = new Date(val);
+                return isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0];
+            };
+            
+            // 1. Personal Info Sheet (includes Employee ID, Joining Date, Resignation Date)
             const personalInfoData = [
-                ['FullName', 'Email', 'PhoneNumber', 'CountryCode', 'ShortBio', 'SevisId', 'Ead', 'Degree', 'VisaType', 'CustomVisaType', 'SalaryRange', 'SupervisorName', 'SupervisorContact', 'SupervisorCountryCode', 'StreetAddress', 'StreetAddress2', 'City', 'State', 'ZipCode', 'Country']
+                ['Employee ID', 'Joining Date', 'Resignation Date', 'FullName', 'Email', 'PhoneNumber', 'CountryCode', 'ShortBio', 'SevisId', 'Ead', 'Degree', 'VisaType', 'CustomVisaType', 'SalaryRange', 'SupervisorName', 'SupervisorContact', 'SupervisorCountryCode', 'StreetAddress', 'StreetAddress2', 'City', 'State', 'ZipCode', 'Country']
             ];
             
-            canData.forEach((candidate: any) => {
+            exportData.forEach((candidate: any) => {
                 personalInfoData.push([
+                    candidate?.employeeId || '',
+                    formatExportDate(candidate?.joiningDate),
+                    formatExportDate(candidate?.resignDate),
                     candidate?.fullName || '',
                     candidate?.email || '',
                     candidate?.phoneNumber || '',
@@ -1997,15 +2025,16 @@ const Candidates = () => {
             const personalInfoSheet = XLSX.utils.aoa_to_sheet(personalInfoData);
             XLSX.utils.book_append_sheet(workbook, personalInfoSheet, 'Personal Info');
             
-            // 2. Social Links Sheet
+            // 2. Social Links Sheet (linked by Employee ID)
             const socialLinksData = [
-                ['FullName', 'Platform', 'URL']
+                ['Employee ID', 'FullName', 'Platform', 'URL']
             ];
             
-            canData.forEach((candidate: any) => {
+            exportData.forEach((candidate: any) => {
                 if (Array.isArray(candidate?.socialLinks) && candidate.socialLinks.length > 0) {
                     candidate.socialLinks.forEach((link: any) => {
                         socialLinksData.push([
+                            candidate?.employeeId || '',
                             candidate?.fullName || '',
                             link?.platform || '',
                             link?.url || ''
@@ -2017,15 +2046,16 @@ const Candidates = () => {
             const socialLinksSheet = XLSX.utils.aoa_to_sheet(socialLinksData);
             XLSX.utils.book_append_sheet(workbook, socialLinksSheet, 'Social Links');
             
-            // 3. Skills Sheet
+            // 3. Skills Sheet (linked by Employee ID)
             const skillsData = [
-                ['FullName', 'SkillName', 'Level', 'Category']
+                ['Employee ID', 'FullName', 'SkillName', 'Level', 'Category']
             ];
             
-            canData.forEach((candidate: any) => {
+            exportData.forEach((candidate: any) => {
                 if (Array.isArray(candidate?.skills) && candidate.skills.length > 0) {
                     candidate.skills.forEach((skill: any) => {
                         skillsData.push([
+                            candidate?.employeeId || '',
                             candidate?.fullName || '',
                             skill?.name || '',
                             skill?.level || '',
@@ -2038,15 +2068,16 @@ const Candidates = () => {
             const skillsSheet = XLSX.utils.aoa_to_sheet(skillsData);
             XLSX.utils.book_append_sheet(workbook, skillsSheet, 'Skills');
             
-            // 4. Qualification Sheet
+            // 4. Qualification Sheet (linked by Employee ID)
             const qualificationData = [
-                ['FullName', 'Degree', 'Institute', 'Location', 'StartYear', 'EndYear', 'Description']
+                ['Employee ID', 'FullName', 'Degree', 'Institute', 'Location', 'StartYear', 'EndYear', 'Description']
             ];
             
-            canData.forEach((candidate: any) => {
+            exportData.forEach((candidate: any) => {
                 if (Array.isArray(candidate?.qualifications) && candidate.qualifications.length > 0) {
                     candidate.qualifications.forEach((qual: any) => {
                         qualificationData.push([
+                            candidate?.employeeId || '',
                             candidate?.fullName || '',
                             qual?.degree || '',
                             qual?.institute || '',
@@ -2062,15 +2093,16 @@ const Candidates = () => {
             const qualificationSheet = XLSX.utils.aoa_to_sheet(qualificationData);
             XLSX.utils.book_append_sheet(workbook, qualificationSheet, 'Qualification');
             
-            // 5. Work Experience Sheet
+            // 5. Work Experience Sheet (linked by Employee ID)
             const workExperienceData = [
-                ['FullName', 'Company', 'Role', 'StartDate', 'EndDate', 'CurrentlyWorking', 'Description']
+                ['Employee ID', 'FullName', 'Company', 'Role', 'StartDate', 'EndDate', 'CurrentlyWorking', 'Description']
             ];
             
-            canData.forEach((candidate: any) => {
+            exportData.forEach((candidate: any) => {
                 if (Array.isArray(candidate?.experiences) && candidate.experiences.length > 0) {
                     candidate.experiences.forEach((exp: any) => {
                         workExperienceData.push([
+                            candidate?.employeeId || '',
                             candidate?.fullName || '',
                             exp?.company || '',
                             exp?.role || '',
@@ -2086,15 +2118,16 @@ const Candidates = () => {
             const workExperienceSheet = XLSX.utils.aoa_to_sheet(workExperienceData);
             XLSX.utils.book_append_sheet(workbook, workExperienceSheet, 'Work Experience');
             
-            // 6. Documents Sheet
+            // 6. Documents Sheet (linked by Employee ID)
             const documentsData = [
-                ['FullName', 'DocumentLabel', 'DocumentURL', 'DocumentType']
+                ['Employee ID', 'FullName', 'DocumentLabel', 'DocumentURL', 'DocumentType']
             ];
             
-            canData.forEach((candidate: any) => {
+            exportData.forEach((candidate: any) => {
                 if (Array.isArray(candidate?.documents) && candidate.documents.length > 0) {
                     candidate.documents.forEach((doc: any) => {
                         documentsData.push([
+                            candidate?.employeeId || '',
                             candidate?.fullName || '',
                             doc?.label || 'Document',
                             doc?.url || doc?.documentUrl || '',
@@ -2107,15 +2140,16 @@ const Candidates = () => {
             const documentsSheet = XLSX.utils.aoa_to_sheet(documentsData);
             XLSX.utils.book_append_sheet(workbook, documentsSheet, 'Documents');
             
-            // 7. Salary Slips Sheet
+            // 7. Salary Slips Sheet (linked by Employee ID)
             const salarySlipsData = [
-                ['FullName', 'Month', 'Year', 'DocumentURL', 'DocumentType']
+                ['Employee ID', 'FullName', 'Month', 'Year', 'DocumentURL', 'DocumentType']
             ];
             
-            canData.forEach((candidate: any) => {
+            exportData.forEach((candidate: any) => {
                 if (Array.isArray(candidate?.salarySlips) && candidate.salarySlips.length > 0) {
                     candidate.salarySlips.forEach((slip: any) => {
                         salarySlipsData.push([
+                            candidate?.employeeId || '',
                             candidate?.fullName || '',
                             slip?.month || '',
                             slip?.year || '',
@@ -2136,7 +2170,7 @@ const Candidates = () => {
             await Swal.fire({
                 icon: 'success',
                 title: 'Export Successful!',
-                text: `Successfully exported ${canData.length} candidates to Excel file.`,
+                text: `Successfully exported ${exportData.length} candidates to Excel file.`,
                 confirmButtonText: 'OK'
             });
         } catch (error) {
